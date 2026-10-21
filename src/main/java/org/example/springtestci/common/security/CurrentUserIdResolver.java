@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class CurrentUserIdResolver {
 
+  /** JWT subject를 검증하고 양수 사용자 ID로 변환한다. */
   public long resolve(Jwt jwt) {
     if (jwt == null || jwt.getSubject() == null) {
       throw new CommonException(ErrorCode.UNAUTHORIZED);

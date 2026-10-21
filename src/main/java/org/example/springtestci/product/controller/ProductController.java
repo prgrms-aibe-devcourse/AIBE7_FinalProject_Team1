@@ -35,14 +35,17 @@ import org.springframework.web.multipart.MultipartFile;
 @Validated
 @RestController
 @RequestMapping("/api/v1/products")
+/** 인증된 사용자의 제품과 제품 이미지를 관리하는 HTTP API를 제공한다. */
 public class ProductController {
 
   private final ProductService productService;
 
+  /** 제품 유스케이스를 처리할 서비스로 컨트롤러를 구성한다. */
   public ProductController(ProductService productService) {
     this.productService = productService;
   }
 
+  /** 인증된 사용자의 새 제품을 등록한다. */
   @PostMapping
   public ResponseEntity<ApiResponse<ProductResponse>> create(
       @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody CreateProductRequest request) {
@@ -51,17 +54,20 @@ public class ProductController {
         .body(ApiResponse.success(productService.create(userId(jwt), request)));
   }
 
+  /** 인증된 사용자가 소유한 제품 목록을 조회한다. */
   @GetMapping
   public ApiResponse<List<ProductResponse>> listMine(@AuthenticationPrincipal Jwt jwt) {
     return ApiResponse.success(productService.listMine(userId(jwt)));
   }
 
+  /** 인증된 사용자가 소유한 단일 제품을 조회한다. */
   @GetMapping("/{productId}")
   public ApiResponse<ProductResponse> get(
       @AuthenticationPrincipal Jwt jwt, @PathVariable @Positive long productId) {
     return ApiResponse.success(productService.get(userId(jwt), productId));
   }
 
+  /** 소유 제품의 수정 가능한 기본 정보를 갱신한다. */
   @PatchMapping("/{productId}")
   public ApiResponse<ProductResponse> update(
       @AuthenticationPrincipal Jwt jwt,
@@ -70,6 +76,7 @@ public class ProductController {
     return ApiResponse.success(productService.update(userId(jwt), productId, request));
   }
 
+  /** 소유 제품에 검증된 이미지 한 장을 추가한다. */
   @PostMapping(path = "/{productId}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<ApiResponse<ProductResponse>> addImage(
       @AuthenticationPrincipal Jwt jwt,
@@ -87,6 +94,7 @@ public class ProductController {
     return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(product));
   }
 
+  /** 소유 제품 이미지의 전체 순서와 대표 이미지를 변경한다. */
   @PutMapping("/{productId}/images")
   public ApiResponse<ProductResponse> updateImages(
       @AuthenticationPrincipal Jwt jwt,
@@ -95,6 +103,7 @@ public class ProductController {
     return ApiResponse.success(productService.updateImages(userId(jwt), productId, request));
   }
 
+  /** 소유 제품에서 지정한 이미지를 삭제한다. */
   @DeleteMapping("/{productId}/images/{imageId}")
   public ApiResponse<ProductResponse> deleteImage(
       @AuthenticationPrincipal Jwt jwt,
@@ -103,6 +112,7 @@ public class ProductController {
     return ApiResponse.success(productService.deleteImage(userId(jwt), productId, imageId));
   }
 
+  /** 소유권을 확인한 뒤 제품 이미지 리소스를 반환한다. */
   @GetMapping("/{productId}/images/{imageId}")
   public ResponseEntity<Resource> image(
       @AuthenticationPrincipal Jwt jwt,
@@ -116,6 +126,7 @@ public class ProductController {
         .body(image.resource());
   }
 
+  /** JWT subject를 제품 서비스가 사용하는 사용자 ID로 변환한다. */
   private long userId(Jwt jwt) {
     try {
       return Long.parseLong(jwt.getSubject());

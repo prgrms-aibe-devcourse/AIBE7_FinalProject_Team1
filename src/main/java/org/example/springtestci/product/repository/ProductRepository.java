@@ -30,10 +30,12 @@ public class ProductRepository {
 
   private final JdbcTemplate jdbc;
 
+  /** 제품 데이터 접근에 사용할 JDBC 템플릿으로 저장소를 구성한다. */
   public ProductRepository(JdbcTemplate jdbc) {
     this.jdbc = jdbc;
   }
 
+  /** 정규화된 제조사와 일련번호 지문 조합이 이미 등록됐는지 확인한다. */
   public boolean existsByManufacturerAndSerial(String manufacturerNormalized, String fingerprint) {
     Integer count =
         jdbc.queryForObject(
@@ -47,6 +49,7 @@ public class ProductRepository {
     return count != null && count > 0;
   }
 
+  /** 암호화된 일련번호와 기본 제품 정보를 저장하고 생성된 제품 ID를 반환한다. */
   public long insertProduct(
       long ownerId,
       CreateProductRequest request,
@@ -81,6 +84,7 @@ public class ProductRepository {
     return keys.getKey().longValue();
   }
 
+  /** 등록 요청에서 값이 제공된 수정 가능 필드의 최초 작성자를 기록한다. */
   public void insertFieldAuthors(long productId, long ownerId, CreateProductRequest request) {
     insertFieldAuthor(productId, "TITLE", ownerId);
     if (request.purchaseDate() != null) insertFieldAuthor(productId, "PURCHASE_DATE", ownerId);
@@ -90,6 +94,7 @@ public class ProductRepository {
       insertFieldAuthor(productId, "WARRANTY_TERMS", ownerId);
   }
 
+  /** 아직 작성자가 없는 제품 필드에 최초 작성자를 기록한다. */
   public void insertFieldAuthor(long productId, String fieldName, long authorId) {
     jdbc.update(
         """
@@ -104,6 +109,7 @@ public class ProductRepository {
         fieldName);
   }
 
+  /** 지정한 제품 필드의 최초 작성자 ID를 조회한다. */
   public Optional<Long> findFieldAuthor(long productId, String fieldName) {
     return jdbc
         .queryForList(
@@ -115,6 +121,7 @@ public class ProductRepository {
         .findFirst();
   }
 
+  /** 제품에 연결된 노트북 상세 사양을 저장한다. */
   public void insertLaptopDetails(long productId, CreateProductRequest.Specifications specs) {
     jdbc.update(
         """
@@ -133,6 +140,7 @@ public class ProductRepository {
         specs == null ? null : specs.batteryHealthPercent());
   }
 
+  /** 보관되지 않은 제품을 소유자 범위에서 단건 조회한다. */
   public Optional<ProductResponse> findOwned(long productId, long ownerId) {
     return jdbc
         .query(
@@ -144,6 +152,7 @@ public class ProductRepository {
         .findFirst();
   }
 
+  /** 소유자의 보관되지 않은 제품을 최신 등록 순서로 조회한다. */
   public List<ProductResponse> findAllOwned(long ownerId) {
     return jdbc.query(
         PRODUCT_SELECT
@@ -153,6 +162,7 @@ public class ProductRepository {
         ownerId);
   }
 
+  /** 소유자 확인을 거쳐 제품의 암호화된 일련번호를 조회한다. */
   public Optional<String> findSerialCiphertextOwned(long productId, long ownerId) {
     return jdbc
         .queryForList(
@@ -177,6 +187,7 @@ public class ProductRepository {
         .isEmpty();
   }
 
+  /** 허용된 제품 기본 정보를 갱신하고 사실 버전을 증가시킨다. */
   public void updateProduct(long productId, UpdateProductRequest request) {
     jdbc.update(
         """
@@ -191,6 +202,7 @@ public class ProductRepository {
         productId);
   }
 
+  /** 제품 수정 전후 사실과 변경 사유를 감사 로그에 기록한다. */
   public void insertProductAudit(
       long productId, long actorId, String beforeFacts, String afterFacts, String reason) {
     jdbc.update(
@@ -207,6 +219,7 @@ public class ProductRepository {
         reason.trim());
   }
 
+  /** 삭제되지 않은 제품 이미지 수를 반환한다. */
   public int countImages(long productId) {
     Integer count =
         jdbc.queryForObject(
@@ -216,6 +229,7 @@ public class ProductRepository {
     return count == null ? 0 : count;
   }
 
+  /** 제품 이미지 메타데이터를 다음 정렬 순서에 저장하고 이미지 ID를 반환한다. */
   public long insertImage(long productId, String storageKey, String contentType, long byteSize) {
     KeyHolder keys = new GeneratedKeyHolder();
     jdbc.update(
@@ -244,6 +258,7 @@ public class ProductRepository {
     return keys.getKey().longValue();
   }
 
+  /** 삭제되지 않은 제품 이미지를 표시 순서대로 조회한다. */
   public List<ProductImageRecord> findImages(long productId) {
     return jdbc.query(
         """
@@ -263,10 +278,12 @@ public class ProductRepository {
         productId);
   }
 
+  /** 제품의 삭제되지 않은 이미지 한 장을 조회한다. */
   public Optional<ProductImageRecord> findImage(long productId, long imageId) {
     return findImages(productId).stream().filter(image -> image.imageId() == imageId).findFirst();
   }
 
+  /** 이미지 정렬 순서와 대표 이미지 지정을 원자적으로 교체한다. */
   public void replaceImageOrder(long productId, List<Long> imageIds, long primaryImageId) {
     jdbc.update(
         "UPDATE product_images SET sort_order = sort_order + 1000, is_primary = FALSE"
@@ -282,6 +299,7 @@ public class ProductRepository {
     }
   }
 
+  /** 이미지 참조를 정리하고 이미지를 소프트 삭제한 뒤 남은 순서를 정규화한다. */
   public void softDeleteImage(long productId, long imageId) {
     jdbc.update("DELETE FROM listing_draft_images WHERE image_id = ?", imageId);
     jdbc.update(
@@ -305,6 +323,7 @@ public class ProductRepository {
     }
   }
 
+  /** JDBC 결과 행을 제품 응답 모델로 변환한다. */
   private ProductResponse product(ResultSet row, int index) throws SQLException {
     return new ProductResponse(
         row.getLong("id"),
@@ -330,6 +349,7 @@ public class ProductRepository {
         row.getObject("created_at", java.time.OffsetDateTime.class));
   }
 
+  /** 저장소 내부에서 사용하는 제품 이미지 메타데이터를 나타낸다. */
   public record ProductImageRecord(
       long imageId,
       String storageKey,

@@ -33,6 +33,7 @@ public class SerialNumberProtector {
   private final SecretKeySpec encryptionKey;
   private final SecureRandom secureRandom = new SecureRandom();
 
+  /** 마스터 시크릿에서 지문 키와 암호화 키를 분리해 생성한다. */
   public SerialNumberProtector(@Value("${app.product.serial-secret}") String secret) {
     if (secret == null || secret.length() < 32) {
       throw new IllegalStateException("app.product.serial-secret must be at least 32 characters");
@@ -52,10 +53,12 @@ public class SerialNumberProtector {
     return manufacturer.replaceAll("[\\s-]+", "").toUpperCase(Locale.ROOT);
   }
 
+  /** 정규화된 일련번호의 결정적 HMAC 지문을 반환한다. */
   public String fingerprint(String serialNumber) {
     return HexFormat.of().formatHex(hmac(fingerprintKey, normalize(serialNumber)));
   }
 
+  /** 정규화된 일련번호를 임의 IV가 포함된 AES-GCM 암호문으로 변환한다. */
   public String encrypt(String serialNumber) {
     try {
       byte[] iv = new byte[IV_BYTES];
@@ -72,6 +75,7 @@ public class SerialNumberProtector {
     }
   }
 
+  /** 저장된 AES-GCM 암호문을 검증하고 정규화된 일련번호를 복원한다. */
   public String decrypt(String ciphertext) {
     try {
       byte[] combined = Base64.getDecoder().decode(ciphertext);
@@ -87,10 +91,12 @@ public class SerialNumberProtector {
     }
   }
 
+  /** 마스터 키와 용도 문자열로부터 용도별 키 재료를 유도한다. */
   private static byte[] derive(byte[] master, String purpose) {
     return hmac(new SecretKeySpec(master, "HmacSHA256"), purpose);
   }
 
+  /** 지정한 키로 메시지의 HMAC-SHA256 값을 계산한다. */
   private static byte[] hmac(SecretKeySpec key, String message) {
     try {
       Mac mac = Mac.getInstance("HmacSHA256");

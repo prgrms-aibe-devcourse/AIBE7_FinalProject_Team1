@@ -3,16 +3,24 @@
   const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
   const state = { products: [], current: null, selectedId: null, loading: null, imageUrls: [] };
 
+  /** 사용자 제공 값을 HTML 텍스트로 안전하게 이스케이프한다. */
   const escapeHtml = (value) => String(value ?? '')
     .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+  /** 빈 값을 대체 문구로 바꾸고 나머지는 안전한 텍스트로 반환한다. */
   const text = (value, fallback = '미입력') => value == null || value === '' ? fallback : escapeHtml(value);
+  /** 날짜 값을 한국어 날짜 문자열로 표시한다. */
   const date = (value) => value ? new Intl.DateTimeFormat('ko-KR').format(new Date(`${value}T00:00:00`)) : '미입력';
+  /** 날짜·시간 값을 간결한 한국어 날짜 문자열로 표시한다. */
   const dateTime = (value) => value ? new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(new Date(value)) : '–';
+  /** 폼의 빈 숫자 입력은 null로, 나머지는 숫자로 변환한다. */
   const numberOrNull = (value) => value === '' ? null : Number(value);
+  /** 공백만 있는 폼 입력은 null로 변환한다. */
   const valueOrNull = (value) => value.trim() || null;
+  /** 지정한 단일 페이지 화면으로 이동한다. */
   const navigate = (page) => document.querySelector(`[data-page="${page}"]`)?.click();
 
+  /** 사용자에게 작업 결과 토스트 메시지를 표시한다. */
   const toast = (message, kind = '') => {
     document.querySelector('.product-toast')?.remove();
     const box = document.createElement('div');
@@ -22,6 +30,7 @@
     window.setTimeout(() => box.remove(), 3600);
   };
 
+  /** 인증 API를 호출하고 성공 응답의 data 또는 구조화된 오류를 반환한다. */
   const api = async (path, options = {}) => {
     const response = await window.PastportApi.fetch(path, options);
     const payload = await response.json().catch(() => null);
@@ -34,11 +43,13 @@
     return payload?.data;
   };
 
+  /** 인증이 필요한 영역에 로그인 안내를 표시한다. */
   const authenticationMessage = (target) => {
     target.hidden = false;
     target.innerHTML = '<strong class="product-empty-title">로그인이 필요합니다.</strong>내 제품을 확인하려면 먼저 로그인해 주세요.<br><button class="button primary" type="button" data-page="auth">로그인하기</button>';
   };
 
+  /** 필요할 때 현재 사용자의 제품 목록을 서버에서 불러온다. */
   const loadProducts = async (force = false) => {
     if (state.loading && !force) return state.loading;
     state.loading = api(API)
@@ -47,12 +58,14 @@
     return state.loading;
   };
 
+  /** 목록 카드에 표시할 주요 노트북 사양 요약을 생성한다. */
   const productChip = (product) => {
     const specs = product.specifications || {};
     const values = [specs.cpu, specs.ramGb && `${specs.ramGb}GB RAM`, specs.storageGb && `${specs.storageGb}GB ${specs.storageType || ''}`].filter(Boolean);
     return values.length ? values.map(escapeHtml).join(' · ') : '상세 사양 미입력';
   };
 
+  /** 검색어를 적용해 제품 목록 카드를 렌더링한다. */
   const renderProducts = () => {
     const root = document.querySelector('#home');
     const list = root?.querySelector('[data-product-list]');
@@ -84,6 +97,7 @@
       </article>`).join('');
   };
 
+  /** 제품 목록 영역에 인증 또는 조회 오류를 표시한다. */
   const showListError = (error) => {
     const status = document.querySelector('#home [data-product-list-status]');
     if (!status) return;
@@ -92,6 +106,7 @@
     status.innerHTML = `<strong class="product-empty-title">제품을 불러오지 못했습니다.</strong>${escapeHtml(error.message)}<br><button class="button" type="button" data-product-retry>다시 시도</button>`;
   };
 
+  /** 홈 화면을 열 때 제품 목록을 불러와 렌더링한다. */
   const openHome = async (force = false) => {
     const status = document.querySelector('#home [data-product-list-status]');
     if (!status) return;
@@ -100,11 +115,13 @@
     try { await loadProducts(force); renderProducts(); } catch (error) { showListError(error); }
   };
 
+  /** 상세 화면에서 생성한 임시 이미지 객체 URL을 해제한다. */
   const revokeImages = () => {
     state.imageUrls.forEach((url) => URL.revokeObjectURL(url));
     state.imageUrls = [];
   };
 
+  /** 보호된 이미지 URL을 인증 요청으로 가져와 객체 URL로 교체한다. */
   const hydrateImages = async (container) => {
     revokeImages();
     await Promise.all([...container.querySelectorAll('[data-protected-image]')].map(async (image) => {
@@ -118,7 +135,9 @@
     }));
   };
 
+  /** 제품 사양 한 항목의 안전한 HTML을 생성한다. */
   const specItem = (label, value, suffix = '') => `<div class="product-spec-item"><span>${label}</span><b>${text(value)}${value == null || value === '' ? '' : escapeHtml(suffix)}</b></div>`;
+  /** 제품 수정 폼을 현재 값으로 채운 HTML로 생성한다. */
   const editForm = (product) => {
     return `<form class="product-edit-form" data-product-edit-form hidden novalidate>
       <div class="product-edit-heading"><div><h2>제품 정보 수정</h2><p>제품명과 구매·보증 정보를 수정하면 변경 기록이 남습니다.</p></div><button type="button" data-product-edit-cancel aria-label="수정 닫기">×</button></div>
@@ -132,6 +151,7 @@
       <div class="product-form-actions"><button class="button" type="button" data-product-edit-cancel>취소</button><button class="button primary" type="submit" data-product-edit-submit>변경 사항 저장</button></div>
     </form>`;
   };
+  /** 제품 상세, 사양, 이미지 관리 UI를 렌더링한다. */
   const renderDetail = (product) => {
     const container = document.querySelector('#passport [data-product-detail]');
     const status = document.querySelector('#passport [data-product-detail-status]');
@@ -172,6 +192,7 @@
     hydrateImages(container);
   };
 
+  /** 선택된 제품의 최신 상세 정보를 조회하고 표시한다. */
   const openDetail = async () => {
     const status = document.querySelector('#passport [data-product-detail-status]');
     const container = document.querySelector('#passport [data-product-detail]');
@@ -195,6 +216,7 @@
     }
   };
 
+  /** 업로드할 이미지의 개수, 형식, 크기를 사전 검증한다. */
   const validateImages = (files, existing = 0) => {
     if (files.length + existing > 10) return '제품 이미지는 최대 10장까지 등록할 수 있습니다.';
     for (const file of files) {
@@ -204,6 +226,7 @@
     return null;
   };
 
+  /** 선택한 이미지 파일을 지정 제품에 순차적으로 업로드한다. */
   const uploadImages = async (productId, files) => {
     let latest = null;
     for (const file of files) {
@@ -214,17 +237,20 @@
     return latest;
   };
 
+  /** 등록 폼에서 노트북 사양 요청 객체를 만든다. */
   const specificationsPayload = (form) => ({
     cpu: valueOrNull(form.elements.cpu.value), gpu: valueOrNull(form.elements.gpu.value),
     ramGb: numberOrNull(form.elements.ramGb.value), storageGb: numberOrNull(form.elements.storageGb.value),
     storageType: form.elements.storageType.value || null, display: valueOrNull(form.elements.display.value),
     batteryHealthPercent: numberOrNull(form.elements.batteryHealthPercent.value), os: valueOrNull(form.elements.os.value),
   });
+  /** 수정 폼에서 변경 가능한 제품 정보 요청 객체를 만든다. */
   const editablePayload = (form) => ({
     title: form.elements.title.value.trim(), purchaseDate: form.elements.purchaseDate.value || null,
     warrantyExpiresAt: form.elements.warrantyExpiresAt.value || null,
     reason: form.elements.reason.value.trim(),
   });
+  /** 등록 폼 전체를 제품 생성 요청 객체로 변환한다. */
   const formPayload = (form) => ({
     title: form.elements.title.value.trim(), manufacturer: form.elements.manufacturer.value.trim(),
     modelName: form.elements.modelName.value.trim(), purchaseDate: form.elements.purchaseDate.value || null,
@@ -235,6 +261,7 @@
     },
   });
 
+  /** 제품 폼 내부에 검증 또는 처리 결과 메시지를 표시한다. */
   const showFormMessage = (form, message, kind = 'error') => {
     const box = form.querySelector('[data-product-form-message]');
     box.hidden = !message;
@@ -242,6 +269,7 @@
     box.dataset.kind = kind;
   };
 
+  /** 제품 등록 폼을 검증하고 제품과 선택 이미지를 저장한다. */
   const submitProduct = async (form) => {
     showFormMessage(form, '');
     if (!form.checkValidity()) { form.reportValidity(); return; }
@@ -275,6 +303,7 @@
     }
   };
 
+  /** 제품 수정 폼을 검증하고 변경 가능한 정보를 저장한다. */
   const submitProductEdit = async (form) => {
     showFormMessage(form, '');
     if (!form.checkValidity()) { form.reportValidity(); return; }
@@ -297,6 +326,7 @@
     }
   };
 
+  /** 제품 이미지 순서와 대표 이미지 변경을 저장한다. */
   const updateImageArrangement = async (imageIds, primaryImageId) => {
     const product = await api(`${API}/${state.selectedId}/images`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },

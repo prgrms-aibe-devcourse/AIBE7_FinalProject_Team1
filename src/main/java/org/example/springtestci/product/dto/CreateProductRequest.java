@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 
+/** 제품 등록에 필요한 기본 정보와 노트북 사양을 전달한다. */
 public record CreateProductRequest(
     @NotBlank @Size(max = 200) String title,
     @NotBlank @Size(max = 100) String manufacturer,
@@ -19,6 +20,7 @@ public record CreateProductRequest(
     @NotBlank @Size(min = 4, max = 64) String serialNumber,
     @Valid Specifications specifications) {
 
+  /** 등록할 노트북의 선택적 하드웨어 사양을 전달한다. */
   public record Specifications(
       @Size(max = 100) String cpu,
       @Size(max = 100) String gpu,

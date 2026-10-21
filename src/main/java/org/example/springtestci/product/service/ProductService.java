@@ -39,6 +39,7 @@ public class ProductService {
   private final ObjectProvider<FileStorage> fileStorage;
   private final ObjectMapper objectMapper;
 
+  /** 제품 저장소, 보안, 파일 저장소 의존성으로 서비스를 구성한다. */
   public ProductService(
       ProductRepository productRepository,
       SerialNumberProtector serialNumberProtector,
@@ -52,6 +53,7 @@ public class ProductService {
     this.objectMapper = objectMapper;
   }
 
+  /** 제품과 노트북 사양, 필드 작성자 정보를 등록한다. */
   @Transactional
   public ProductResponse create(long ownerId, CreateProductRequest request) {
     validateDates(request.purchaseDate(), request.warrantyExpiresAt());
@@ -78,11 +80,13 @@ public class ProductService {
     return get(ownerId, productId);
   }
 
+  /** 현재 소유자의 제품 목록에 이미지 정보를 결합해 반환한다. */
   @Transactional(readOnly = true)
   public List<ProductResponse> listMine(long ownerId) {
     return productRepository.findAllOwned(ownerId).stream().map(this::withImages).toList();
   }
 
+  /** 소유권을 확인하고 제품 상세, 이미지, 복호화된 일련번호를 반환한다. */
   @Transactional(readOnly = true)
   public ProductResponse get(long ownerId, long productId) {
     ProductResponse product =
@@ -130,6 +134,7 @@ public class ProductService {
                 productRepository.findSerialCiphertextOwned(productId, ownerId).orElseThrow()));
   }
 
+  /** 검증된 이미지를 저장하고 제품 이미지 메타데이터에 추가한다. */
   @Transactional
   public ProductResponse addImage(
       long ownerId, long productId, String filename, String contentType, byte[] content) {
@@ -149,6 +154,7 @@ public class ProductService {
     return get(ownerId, productId);
   }
 
+  /** 전체 이미지 집합을 검증한 뒤 순서와 대표 이미지를 갱신한다. */
   @Transactional
   public ProductResponse updateImages(
       long ownerId, long productId, UpdateProductImagesRequest request) {
@@ -165,6 +171,7 @@ public class ProductService {
     return get(ownerId, productId);
   }
 
+  /** 소유 제품의 이미지를 삭제하고 저장 파일 정리를 시도한다. */
   @Transactional
   public ProductResponse deleteImage(long ownerId, long productId, long imageId) {
     requireOwnedLock(ownerId, productId);
@@ -177,6 +184,7 @@ public class ProductService {
     return get(ownerId, productId);
   }
 
+  /** 소유권과 파일 상태를 확인한 뒤 이미지 리소스를 반환한다. */
   @Transactional(readOnly = true)
   public ProductImageContent image(long ownerId, long productId, long imageId) {
     if (productRepository.findOwned(productId, ownerId).isEmpty()) {
@@ -197,12 +205,14 @@ public class ProductService {
     }
   }
 
+  /** 제품 소유권을 검증하면서 변경용 행 잠금을 획득한다. */
   private void requireOwnedLock(long ownerId, long productId) {
     if (!productRepository.lockOwned(productId, ownerId)) {
       throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
     }
   }
 
+  /** 변경된 필드의 최초 작성자가 현재 소유자인지 확인한다. */
   private void requireFieldAuthor(
       long productId, long ownerId, String fieldName, Object before, Object after) {
     if (Objects.equals(before, after)) return;
@@ -217,6 +227,7 @@ public class ProductService {
     if (!author.known()) productRepository.insertFieldAuthor(productId, fieldName, ownerId);
   }
 
+  /** 감사 로그에 저장할 제품 사실 스냅샷을 JSON으로 직렬화한다. */
   private String auditJson(ProductResponse product) {
     try {
       return objectMapper.writeValueAsString(
@@ -231,6 +242,7 @@ public class ProductService {
     }
   }
 
+  /** 구매일이 보증 만료일보다 늦지 않은지 검증한다. */
   private static void validateDates(
       java.time.LocalDate purchaseDate, java.time.LocalDate warrantyExpiresAt) {
     if (purchaseDate != null
@@ -240,6 +252,7 @@ public class ProductService {
     }
   }
 
+  /** 저장된 이미지 메타데이터를 API 이미지 응답으로 변환해 제품에 결합한다. */
   private ProductResponse withImages(ProductResponse product) {
     List<ProductResponse.Image> images =
         productRepository.findImages(product.productId()).stream()
@@ -255,16 +268,19 @@ public class ProductService {
     return product.withImages(images);
   }
 
+  /** 인증된 제품 이미지 조회 URL을 생성한다. */
   private static String imageUrl(long productId, long imageId) {
     return "/api/v1/products/" + productId + "/images/" + imageId;
   }
 
+  /** 구성된 파일 저장소를 반환하거나 사용 불가 오류를 발생시킨다. */
   private FileStorage storage() {
     FileStorage storage = fileStorage.getIfAvailable();
     if (storage == null) throw new CommonException(ErrorCode.DOCUMENT_STORAGE_UNAVAILABLE);
     return storage;
   }
 
+  /** 제품별 경로에 이미지 바이트를 저장하고 저장 키를 반환한다. */
   private String store(long productId, String extension, byte[] content) {
     try {
       return storage()
@@ -275,6 +291,7 @@ public class ProductService {
     }
   }
 
+  /** 저장 파일을 삭제하고 정책에 따라 정리 실패를 억제한다. */
   private void deleteStoredFile(String storageKey, boolean suppressFailure) {
     try {
       storage().delete(storageKey);
@@ -288,15 +305,18 @@ public class ProductService {
   }
 
   private record OptionalLongAuthor(boolean known, long authorId) {
+    /** 조회된 작성자 ID를 포함한 값을 만든다. */
     static OptionalLongAuthor known(long authorId) {
       return new OptionalLongAuthor(true, authorId);
     }
 
+    /** 작성자가 기록되지 않았음을 나타내는 값을 만든다. */
     static OptionalLongAuthor missing() {
       return new OptionalLongAuthor(false, 0);
     }
   }
 
+  /** 제품 수정 감사 로그에 직렬화할 사실만 보관한다. */
   private record AuditFacts(
       String title,
       java.time.LocalDate purchaseDate,
@@ -304,5 +324,6 @@ public class ProductService {
       String warrantyTerms,
       long factsVersion) {}
 
+  /** 이미지 리소스와 신뢰할 수 있는 콘텐츠 타입을 함께 반환한다. */
   public record ProductImageContent(Resource resource, String contentType) {}
 }

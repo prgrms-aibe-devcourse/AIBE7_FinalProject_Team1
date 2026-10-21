@@ -40,20 +40,24 @@ public enum ErrorCode {
   private final String code;
   private final String message;
 
+  /** HTTP 상태, 애플리케이션 오류 코드, 사용자 메시지로 오류 항목을 구성한다. */
   ErrorCode(HttpStatus status, String code, String message) {
     this.status = status;
     this.code = code;
     this.message = message;
   }
 
+  /** 오류에 대응하는 HTTP 상태를 반환한다. */
   public HttpStatus status() {
     return status;
   }
 
+  /** 클라이언트가 식별할 수 있는 애플리케이션 오류 코드를 반환한다. */
   public String code() {
     return code;
   }
 
+  /** 클라이언트에 표시할 기본 오류 메시지를 반환한다. */
   public String message() {
     return message;
   }
