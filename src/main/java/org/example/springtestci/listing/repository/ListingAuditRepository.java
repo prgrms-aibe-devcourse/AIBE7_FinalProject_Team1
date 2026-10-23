@@ -18,4 +18,23 @@ public class ListingAuditRepository {
         userId,
         listingId);
   }
+
+  public void changed(
+      long productId,
+      long userId,
+      long listingId,
+      String action,
+      String before,
+      String after,
+      String reason) {
+    jdbc.update(
+        "INSERT INTO audit_logs(product_id, actor_id, target_id, action, before_facts, after_facts, reason) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        productId,
+        userId,
+        listingId,
+        action,
+        before,
+        after,
+        reason);
+  }
 }

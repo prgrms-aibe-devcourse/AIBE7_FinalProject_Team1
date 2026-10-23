@@ -16,7 +16,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import org.example.springtestci.common.error.CommonException;
+import org.example.springtestci.common.error.ErrorCode;
 import org.example.springtestci.listing.dto.ListingDraftResponse;
+import org.example.springtestci.listing.dto.UpdateListingRequest;
 
 @Entity
 @Table(name = "listings")
@@ -130,5 +133,25 @@ public class Listing {
 
   public List<Long> getImageIds() {
     return images.stream().map(ListingImage::getProductImageId).toList();
+  }
+
+  /** 제품·게시자·게시 시각은 유지하고 판매 조건 버전만 증가시킨다. 호출자는 행 잠금과 버전을 검사한다. */
+  public void revise(UpdateListingRequest request) {
+    if (status != ListingStatus.ACTIVE) throw new CommonException(ErrorCode.LISTING_STATE_CONFLICT);
+    title = request.title();
+    price = request.price();
+    conditionGrade = request.conditionGrade();
+    description = request.description();
+    images.clear();
+    for (int i = 0; i < request.selectedImageIds().size(); i++)
+      images.add(new ListingImage(request.selectedImageIds().get(i), i));
+    contentVersion++;
+  }
+
+  /** 거래 기록과 사진 선택을 보존하고 열린 판매글의 고유 슬롯만 해제한다. */
+  public void cancel() {
+    if (!status.isPubliclyReadable()) throw new CommonException(ErrorCode.LISTING_STATE_CONFLICT);
+    status = ListingStatus.CANCELLED;
+    activeSlot = null;
   }
 }

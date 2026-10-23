@@ -9,13 +9,18 @@ import java.net.URI;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
 import org.example.springtestci.common.response.ApiResponse;
+import org.example.springtestci.listing.dto.CancelListingRequest;
 import org.example.springtestci.listing.dto.ListingDetailResponse;
+import org.example.springtestci.listing.dto.ListingManagementResponse;
 import org.example.springtestci.listing.dto.ListingPageResponse;
 import org.example.springtestci.listing.dto.ListingSearchRequest;
+import org.example.springtestci.listing.dto.ListingStateResponse;
 import org.example.springtestci.listing.dto.PublishListingRequest;
 import org.example.springtestci.listing.dto.PublishedListingResponse;
+import org.example.springtestci.listing.dto.UpdateListingRequest;
 import org.example.springtestci.listing.service.ListingBrowseService;
 import org.example.springtestci.listing.service.ListingDetailService;
+import org.example.springtestci.listing.service.ListingManagementService;
 import org.example.springtestci.listing.service.ListingPublishService;
 import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
@@ -27,6 +32,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -39,12 +45,17 @@ public class ListingController {
   private final ListingPublishService publisher;
   private final ListingDetailService details;
   private final ListingBrowseService browse;
+  private final ListingManagementService management;
 
   public ListingController(
-      ListingPublishService publisher, ListingDetailService details, ListingBrowseService browse) {
+      ListingPublishService publisher,
+      ListingDetailService details,
+      ListingBrowseService browse,
+      ListingManagementService management) {
     this.publisher = publisher;
     this.details = details;
     this.browse = browse;
+    this.management = management;
   }
 
   @GetMapping("/listings")
@@ -84,10 +95,37 @@ public class ListingController {
       Authentication authentication,
       @RequestParam(defaultValue = "0") @PositiveOrZero int page,
       @RequestParam(defaultValue = "20") @Positive @Max(100) int size) {
-    userId(authentication);
     return ResponseEntity.ok()
         .cacheControl(CacheControl.noStore())
-        .body(ApiResponse.success(details.get(listingId, page, size)));
+        .body(ApiResponse.success(details.get(listingId, userId(authentication), page, size)));
+  }
+
+  @GetMapping("/listings/{listingId}/management")
+  public ResponseEntity<ApiResponse<ListingManagementResponse>> management(
+      @PathVariable @Positive long listingId, Authentication authentication) {
+    return ResponseEntity.ok()
+        .cacheControl(CacheControl.noStore())
+        .body(ApiResponse.success(management.get(listingId, userId(authentication))));
+  }
+
+  @PutMapping("/listings/{listingId}")
+  public ResponseEntity<ApiResponse<ListingManagementResponse>> update(
+      @PathVariable @Positive long listingId,
+      Authentication authentication,
+      @Valid @RequestBody UpdateListingRequest request) {
+    return ResponseEntity.ok()
+        .cacheControl(CacheControl.noStore())
+        .body(ApiResponse.success(management.update(listingId, userId(authentication), request)));
+  }
+
+  @PostMapping("/listings/{listingId}/cancel")
+  public ResponseEntity<ApiResponse<ListingStateResponse>> cancel(
+      @PathVariable @Positive long listingId,
+      Authentication authentication,
+      @Valid @RequestBody CancelListingRequest request) {
+    return ResponseEntity.ok()
+        .cacheControl(CacheControl.noStore())
+        .body(ApiResponse.success(management.cancel(listingId, userId(authentication), request)));
   }
 
   @GetMapping("/listings/{listingId}/images/{imageId}")

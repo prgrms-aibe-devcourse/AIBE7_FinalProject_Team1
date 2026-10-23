@@ -8,6 +8,7 @@
 
   async function load(append = false) {
     if (!find('[data-listing-content]')) return;
+    window.PastportListingManagement?.reset();
     find('[data-listing-login]').hidden = true;
     const id = currentId();
     if (!id || !/^[1-9]\d*$/.test(id)) {
@@ -34,6 +35,7 @@
       const next = payload.data;
       if (append && data) next.history.items = [...new Map([...data.history.items, ...next.history.items].map(item => [item.eventId,item])).values()];
       data = next; window.PastportListingDetail.render(find('[data-listing-content]'), data);
+      window.PastportListingManagement?.bind(data);
       find('[data-listing-status]').textContent = '게시된 판매글이에요. 판매 중·예약 중인 글은 로그인한 회원이 확인할 수 있어요.';
       find('[data-listing-more]').hidden = !data.history.page.hasNext;
     } catch (error) {

@@ -28,6 +28,15 @@ public enum ErrorCode {
   LISTING_PUBLISH_BLOCKED(HttpStatus.CONFLICT, "SALE_003", "진행 중인 거래나 소유권 이전 요청이 있어 게시할 수 없습니다."),
   LISTING_PUBLISH_UNAVAILABLE(
       HttpStatus.SERVICE_UNAVAILABLE, "SALE_004", "게시 조건·이력 공개 기능의 연동이 준비되지 않았습니다. 임시저장본은 유지됩니다."),
+  LISTING_EDIT_CONFLICT(HttpStatus.CONFLICT, "SALE_005", "판매글이 변경되었습니다. 최신 내용을 불러온 뒤 다시 시도해 주세요."),
+  LISTING_STATE_CONFLICT(
+      HttpStatus.CONFLICT,
+      "SALE_006",
+      "현재 판매 상태에서는 처리할 수 없습니다. 판매 중인 글만 수정할 수 있고 종료된 글은 다시 공개할 수 없습니다."),
+  LISTING_CANCEL_UNAVAILABLE(
+      HttpStatus.SERVICE_UNAVAILABLE,
+      "SALE_007",
+      "거래·이전 취소와 이력 비공개 연동이 준비되지 않았습니다. 판매글은 변경되지 않습니다."),
   PRODUCT_IMAGE_IN_USE(
       HttpStatus.CONFLICT, "PRODUCT_005", "판매 중이거나 예약 중인 판매글의 사진은 먼저 판매글에서 제외해 주세요."),
   INVALID_EXTRACTION_STATE(HttpStatus.CONFLICT, "DOC_001", "현재 상태에서는 처리할 수 없는 추출 요청입니다."),

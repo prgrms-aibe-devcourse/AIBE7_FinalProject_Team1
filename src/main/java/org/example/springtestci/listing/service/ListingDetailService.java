@@ -25,7 +25,7 @@ public class ListingDetailService {
   }
 
   @Transactional
-  public ListingDetailResponse get(long listingId, int page, int size) {
+  public ListingDetailResponse get(long listingId, long userId, int page, int size) {
     var listing = readable(listingId);
     var publication = publications.get(listing.getProductId(), listing.getSellerId(), page, size);
     if (publication.history().status() != ListingHistoryReader.State.READY)
@@ -47,7 +47,8 @@ public class ListingDetailService {
                         id, "/api/v1/listings/" + listingId + "/images/" + id))
             .toList(),
         publication.product(),
-        publication.history());
+        publication.history(),
+        listing.getSellerId() == userId);
   }
 
   @Transactional

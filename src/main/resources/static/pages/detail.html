@@ -2,5 +2,37 @@
 <p class="sub" role="status" aria-live="polite" data-listing-status>게시된 판매글을 선택해 주세요.</p>
 <button type="button" class="sc-btn" data-listing-retry>다시 불러오기</button>
 <button type="button" class="sc-btn primary" data-listing-login hidden>로그인하고 상세 보기</button>
+<button type="button" class="sc-btn" data-listing-manage hidden>내 판매글 관리</button>
 <div data-listing-content></div>
 <button type="button" class="sc-btn sl-drafts-more" data-listing-more hidden>공개 이력 더 보기</button>
+<section class="listing-management sc-card" data-listing-editor hidden aria-labelledby="listing-editor-heading">
+  <div class="sl-section-head"><h2 id="listing-editor-heading">내 판매글 관리</h2><button type="button" class="sc-btn" data-listing-edit-close>상세로 돌아가기</button></div>
+  <p class="sub" data-listing-edit-state></p>
+  <p class="sub" role="status" aria-live="polite" data-listing-edit-message></p>
+  <button type="button" class="sc-btn" data-listing-edit-reload>입력 버리고 최신 내용 불러오기</button>
+  <form data-listing-edit-form novalidate>
+    <fieldset data-listing-edit-fields>
+      <legend>판매 조건 수정</legend>
+      <label class="sc-field"><span>제목</span><input name="title" aria-label="수정할 판매글 제목" maxlength="60" required></label>
+      <label class="sc-field"><span>판매 가격</span><input name="price" aria-label="수정할 판매 가격" inputmode="numeric" maxlength="15" required></label>
+      <label class="sc-field"><span>제품 상태 등급</span><select name="conditionGrade" aria-label="수정할 상태 등급" required><option value="1">1등급 · 매우 나쁨</option><option value="2">2등급 · 나쁨</option><option value="3">3등급 · 보통</option><option value="4">4등급 · 좋음</option><option value="5">5등급 · 최상</option></select></label>
+      <label class="sc-field"><span>상세 설명</span><textarea name="description" aria-label="수정할 상세 설명" maxlength="2000" required></textarea></label>
+      <p class="sub">공개할 사진을 선택하세요. 첫 번째가 대표 사진이며 위·아래 버튼으로 순서를 바꿀 수 있어요.</p>
+      <div class="listing-edit-photos" data-listing-edit-photos role="group" aria-label="판매글 수정 사진 선택"></div>
+      <button type="submit" class="sc-btn primary">수정 저장</button>
+    </fieldset>
+  </form>
+  <form data-listing-cancel-form novalidate>
+    <fieldset data-listing-cancel-fields>
+      <legend>판매 중지</legend>
+      <p class="sub">목록과 상세 공개를 종료하고 연결된 거래·이전 요청도 취소해요. 제품·이력과 과거 판매글 기록은 보존하며, 재판매하려면 새 글을 작성해야 해요.</p>
+      <label class="sc-field"><span>판매 중지 사유</span><textarea name="reason" aria-label="판매 중지 사유" maxlength="500" required placeholder="판매를 중지하는 이유를 입력해 주세요."></textarea></label>
+      <button type="submit" class="sc-btn listing-cancel-button">판매 중지</button>
+    </fieldset>
+  </form>
+</section>
+<dialog class="sl-confirm" data-listing-cancel-dialog aria-labelledby="listing-cancel-heading" aria-describedby="listing-cancel-description">
+  <h2 id="listing-cancel-heading">판매를 중지할까요?</h2>
+  <p id="listing-cancel-description">공개를 종료하고 연결된 구매 요청·예약 거래·이전 요청도 함께 취소해요. 중지한 글은 다시 공개할 수 없어요.</p>
+  <div class="sl-confirm-actions"><button type="button" class="sc-btn" data-listing-cancel-back>돌아가기</button><button type="button" class="sc-btn primary" data-listing-cancel-confirm>판매 중지 확정</button></div>
+</dialog>

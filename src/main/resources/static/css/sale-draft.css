@@ -71,3 +71,17 @@
 @media(max-width:800px){#sell .sl-preview .listing-detail{grid-template-columns:1fr}.listing-detail-summary{grid-row:1}#sell .sl-preview{padding:18px}#sell .sl-preview-head{align-items:flex-start;flex-direction:column}}
 @media(max-width:600px){#sell .sl-draft-item{align-items:flex-start;flex-direction:column}#sell .sl-draft-actions{width:100%}#sell .sl-draft-actions .sc-btn{flex:1}#sell .sl-bar .sc-btn{flex:1 1 130px}}
 @media(max-width:480px){:is(#sell,.listing-detail) .sl-specs{grid-template-columns:1fr}#sell .sl-product{grid-template-columns:72px 1fr}#sell .sl-bar .sc-btn{flex:1;padding:0 10px}}
+/* 게시된 판매글 편집은 임시저장 화면과 구분한다. */
+#detail .listing-management[hidden]{display:none!important}
+#detail .listing-management{margin-top:20px;max-width:850px}
+#detail .listing-management fieldset{border:0;border-top:1px solid var(--line);margin:24px 0 0;padding:20px 0 0;min-width:0}
+#detail .listing-management legend{font-size:18px;font-weight:700;padding-right:12px}
+#detail .listing-management .sc-field{margin:16px 0}
+#detail .listing-management textarea{min-height:120px}
+#detail .listing-edit-photos{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0}
+#detail .listing-edit-photo{border:1px solid var(--line);border-radius:6px;padding:10px;max-width:260px}
+#detail .listing-edit-photo label{display:block;cursor:pointer}
+#detail .listing-edit-photo img{display:block;width:100%;height:120px;object-fit:contain;margin:8px 0}
+#detail .listing-edit-photo .sc-btn{margin:4px 4px 0 0;padding:6px 10px}
+#detail .listing-cancel-button{color:#b42318;border-color:#b42318}
+#detail .listing-management .is-error{color:#b42318}

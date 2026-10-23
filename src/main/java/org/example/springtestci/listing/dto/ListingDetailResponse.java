@@ -13,7 +13,8 @@ public record ListingDetailResponse(
     ListingPreviewResponse.Content content,
     List<ListingPreviewResponse.Image> images,
     ListingPublicationResponse.Product product,
-    ListingPublicationResponse.History history) {
+    ListingPublicationResponse.History history,
+    boolean canManage) {
   public ListingDetailResponse {
     images = List.copyOf(images);
   }
