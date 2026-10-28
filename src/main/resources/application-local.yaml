@@ -6,6 +6,7 @@ spring:
     password: ${DB_PASSWORD:}
   flyway:
     enabled: ${FLYWAY_ENABLED:false}
+    out-of-order: ${FLYWAY_OUT_OF_ORDER:false}
   jpa:
     hibernate:
       ddl-auto: ${DDL_AUTO:create-drop}
@@ -26,7 +27,9 @@ app:
     serial-secret: ${PRODUCT_SERIAL_SECRET:change-this-local-product-serial-secret-32-bytes}
   features:
     chat-api:
-      enabled: ${CHAT_API_ENABLED:false}
+      enabled: ${CHAT_API_ENABLED:true}
+    trade-purchase-requests:
+      enabled: ${TRADE_PURCHASE_REQUESTS_ENABLED:true}
   jwt:
     secret: ${JWT_SECRET:change-this-local-jwt-secret-at-least-32-bytes}
     refresh-cookie-secure: false

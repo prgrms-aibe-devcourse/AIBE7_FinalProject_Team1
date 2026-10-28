@@ -74,6 +74,20 @@ class LoginRateLimiterTest {
     assertEquals(Duration.ofMinutes(15), exception.retryAfter());
   }
 
+  /** 만료 없이 남은 잠금 키는 영구 잠금이 되지 않도록 제한 시간을 다시 건다. */
+  @Test
+  void restoresTheWindowWhenALockedKeyHasNoExpiry() {
+    when(valueOperations.get(EMAIL_KEY)).thenReturn("5");
+    when(redisTemplate.getExpire(EMAIL_KEY)).thenReturn(-1L);
+
+    RateLimitedException exception =
+        assertThrows(
+            RateLimitedException.class, () -> limiter.checkAllowed("user@example.com", "10.0.0.1"));
+
+    assertEquals(Duration.ofMinutes(15), exception.retryAfter());
+    verify(redisTemplate).expire(EMAIL_KEY, Duration.ofMinutes(15));
+  }
+
   /** 제한 시간은 첫 실패에서만 시작한다. */
   @Test
   void startsTheWindowOnTheFirstFailureOnly() {

@@ -40,6 +40,7 @@ document.addEventListener('click', (event) => {
   function fill() {
     fields.forEach(name => { form.elements[name].value = state[name]; });
     find('[data-market-sort]').value = state.sort;
+    if (['cpu', 'gpu', 'minRamGb', 'minStorageGb', 'storageType', 'os'].some(name => state[name])) find('.mk-spec-fields').open = true;
     const size = find('[data-market-size]');
     if (![...size.options].some(option => option.value === String(state.size))) size.add(new Option(state.size + '개', state.size));
     size.value = String(state.size);

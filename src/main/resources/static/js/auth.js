@@ -129,7 +129,7 @@ const auth = (() => {
     const password = form.elements.password.value;
     if (!email || !password) return message(form, '이메일과 비밀번호를 입력해 주세요.');
     const resend = form.querySelector('[data-email-resend]');
-    resend.hidden = true;
+    if (resend) resend.hidden = true;
     setBusy(form, true);
     try {
       const data = await request('/api/auth/login', { body: { email, password } });
@@ -145,7 +145,7 @@ const auth = (() => {
       form.elements.password.value = '';
       message(form, error.message);
       // 이메일 인증 전이면 인증 메일을 다시 받을 수 있게 한다.
-      resend.hidden = error.code !== 'AUTH_008';
+      if (resend) resend.hidden = error.code !== 'AUTH_008';
     } finally {
       setBusy(form, false);
     }
@@ -197,14 +197,14 @@ const auth = (() => {
     }
     setBusy(form, true);
     try {
-      await request('/api/auth/signup', { body: { email, password, nickname } });
+      const signup = await request('/api/auth/signup', { body: { email, password, nickname } });
       form.reset();
       showPasswordMatch(form);
       message(form, '');
       const loginForm = document.querySelector('[data-auth-form="login"]');
       if (loginForm) {
         loginForm.elements.email.value = email;
-        message(loginForm, '가입이 완료됐어요. 메일로 보낸 인증 링크를 누른 뒤 로그인해 주세요. 30분 안에 인증하지 않으면 가입이 취소돼요.', 'info');
+        message(loginForm, `가입이 완료됐어요. 메일로 보낸 인증 링크를 누른 뒤 로그인해 주세요. ${signup?.verificationTtlMinutes ?? 30}분 안에 인증하지 않으면 가입이 취소돼요.`, 'info');
       }
       goto('auth');
     } catch (error) {
@@ -249,8 +249,6 @@ const auth = (() => {
     if (!input.matches?.('[data-agree-all]')) return;
     input.closest('form').querySelectorAll('[data-agree-required]').forEach((box) => { box.checked = input.checked; });
   });
-
-
 
   document.addEventListener('click', async (event) => {
     if (!event.target.closest?.('[data-email-resend]')) return;

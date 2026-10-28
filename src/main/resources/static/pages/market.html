@@ -21,14 +21,14 @@
       <input name="minPrice" inputmode="numeric" placeholder="최소 가격" aria-label="최소 가격" maxlength="15"><span>~</span>
       <input name="maxPrice" inputmode="numeric" placeholder="최대 가격" aria-label="최대 가격" maxlength="15">
     </div></section>
-    <section class="mk-spec-fields"><h3>제품 사양</h3>
+    <details class="mk-spec-fields"><summary>제품 사양으로 찾기</summary><div class="mk-spec-grid">
       <label class="mk-field"><span>CPU 포함 문구</span><input name="cpu" maxlength="100" placeholder="예: M3, Core Ultra"></label>
       <label class="mk-field"><span>GPU 포함 문구</span><input name="gpu" maxlength="100" placeholder="예: RTX"></label>
       <label class="mk-field"><span>최소 메모리 (GB)</span><input name="minRamGb" type="number" min="1" step="1" placeholder="제한 없음"></label>
       <label class="mk-field"><span>최소 저장 용량 (GB)</span><input name="minStorageGb" type="number" min="1" step="1" placeholder="제한 없음"></label>
       <label class="mk-field"><span>저장장치 종류</span><select name="storageType"><option value="">전체</option><option value="SSD">SSD</option><option value="HDD">HDD</option><option value="MIXED">혼합</option></select></label>
       <label class="mk-field"><span>운영체제 포함 문구</span><input name="os" maxlength="50" placeholder="예: Windows, macOS"></label>
-    </section>
+    </div></details>
     <section><h3>상태 등급</h3>
       <label class="mk-field"><span>최소 등급</span><select name="minConditionGrade"><option value="">전체</option><option value="5">5등급</option><option value="4">4등급 이상</option><option value="3">3등급 이상</option><option value="2">2등급 이상</option><option value="1">1등급 이상</option></select></label>
     </section>

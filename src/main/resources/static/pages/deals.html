@@ -1,71 +1,82 @@
 <div class="sc-head">
-  <div><span class="eyebrow">기록상회 마켓</span><h1>내 거래</h1><p>문의 대화부터 예약, 소유권 이전까지 한곳에서 확인해요.</p></div>
+  <div><span class="eyebrow">기록상회 마켓</span><h1>내 거래 · 채팅</h1><p>문의 대화부터 예약, 거래까지 한곳에서 안전하게 진행해요.</p></div>
 </div>
 
 <div class="dl">
   <section class="dl-list" aria-label="대화 목록">
-    <div class="dl-tabs"><button class="chip-btn active" data-chip>전체</button><button class="chip-btn" data-chip>구매</button><button class="chip-btn" data-chip>판매</button></div>
-    <div class="dl-rows">
-      <button class="dl-row on"><span class="laptop"></span><span><b>책읽는곰 <time>14:20</time></b><span class="t">MacBook Pro 14″ M3 Pro</span><span class="m">구매 요청을 보냈어요</span><span class="tags"><span class="sc-badge warn">요청 대기</span></span></span><i class="dl-dot" aria-label="새 메시지"></i></button>
-      <button class="dl-row"><span class="laptop"></span><span><b>노트북러버 <time>어제</time></b><span class="t">MacBook Pro 14″ M3 Pro</span><span class="m">내일 저녁에 가능하세요?</span><span class="tags"><span class="sc-badge">문의 중</span></span></span></button>
-      <button class="dl-row"><span class="laptop"></span><span><b>달리는토끼 <time>10.04</time></b><span class="t">LG gram 16</span><span class="m">배터리 사이클이 궁금해요</span><span class="tags"><span class="sc-badge ok">예약 중</span><span class="sc-badge red">만료 임박</span></span></span><i class="dl-dot"></i></button>
-      <button class="dl-row"><span class="laptop"></span><span><b>새벽두시 <time>09.28</time></b><span class="t">ThinkPad X1 Carbon</span><span class="m">거래 잘 마쳤습니다</span><span class="tags"><span class="sc-badge dark">거래 완료</span></span></span></button>
-      <button class="dl-row"><span class="laptop"></span><span><b>금요일오후 <time>09.20</time></b><span class="t">Galaxy Book4 Pro</span><span class="m">판매가 종료된 상품이에요</span><span class="tags"><span class="sc-badge">판매 중지</span></span></span></button>
+    <div class="dl-tabs">
+      <button class="chip-btn active" data-deals-tab="ALL">전체</button>
+      <button class="chip-btn" data-deals-tab="BUY">구매 문의</button>
+      <button class="chip-btn" data-deals-tab="SELL">판매 문의</button>
+    </div>
+    <div class="dl-rows" data-deals-rooms>
+      <p class="sub" style="padding:20px;text-align:center;color:var(--muted)">대화방을 불러오는 중이에요…</p>
     </div>
   </section>
 
-  <section class="dl-chat" aria-label="대화">
-    <div class="dl-top">
+  <section class="dl-chat" aria-label="대화" data-deals-chat-section style="display:none">
+    <div class="dl-top" data-deals-chat-top>
       <span class="laptop"></span>
-      <div><b>MacBook Pro 14″ M3 Pro · 2,150,000원</b><span>책읽는곰님과의 대화 · 내 판매글</span></div>
-      <span class="sc-badge ok">판매 중</span>
+      <div data-deals-room-title><b>대화방</b><span>상대방과의 대화</span></div>
+      <span class="sc-badge ok" data-deals-listing-status>판매 중</span>
+      <button type="button" class="dl-request-btn" data-deals-request-buy style="margin-left:auto" hidden>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+        <span>예약 요청</span>
+      </button>
     </div>
     <div class="dl-flow" aria-label="거래 진행 단계">
-      <span class="done">문의</span><span class="now">구매 요청</span><span>예약</span><span>이전 링크</span><span>거래 완료</span>
+      <span class="now" data-flow-step="inquiry">문의</span>
+      <span data-flow-step="pending">구매 요청</span>
+      <span data-flow-step="reserved">예약 완료</span>
     </div>
-    <div class="dl-msgs">
-      <span class="dl-day">2026.10.07</span>
-      <div class="msg you"><p>안녕하세요! 배터리 교체 이력 보고 문의드려요. 직거래는 어디서 가능하세요?</p><time>13:41</time></div>
-      <div class="msg me"><p>안녕하세요. 강남역 근처에서 가능해요. 평일 저녁 7시 이후 괜찮으세요?</p><time>13:52</time></div>
-      <div class="msg you"><p>네 좋아요. 목요일 7시 어떠세요?</p><time>14:05</time></div>
-      <div class="dl-act">
-        <i>⇄</i>
-        <div><b>책읽는곰님이 구매 요청을 보냈어요</b><span>수락하면 예약되고, 3일(72시간) 안에 이전을 마쳐야 해요.</span></div>
-        <div class="btns"><button class="sc-btn sm">거절</button><button class="sc-btn primary sm">수락하기</button></div>
-      </div>
-      <div class="msg me"><p>확인했어요. 수락해 드릴게요.</p><time>14:20</time></div>
+    <div class="dl-msgs" data-deals-messages>
+      <!-- 메시지 목록이 동적으로 들어옵니다 -->
     </div>
-    <div class="dl-comp"><input placeholder="메시지를 입력하세요" aria-label="메시지 입력"><button class="sc-btn primary">보내기</button></div>
+    <div class="dl-comp">
+      <input data-deals-input placeholder="메시지를 입력하세요" aria-label="메시지 입력">
+      <button type="button" class="sc-btn primary" data-deals-send>보내기</button>
+    </div>
   </section>
 
-  <aside class="dl-info">
+  <aside class="dl-info" data-deals-info style="display:none">
     <section>
       <h3>거래 정보</h3>
-      <div class="dl-kv"><span>구매 요청</span><b>대기 중</b></div>
-      <div class="dl-kv"><span>판매글</span><b>판매 중</b></div>
-      <div class="dl-kv"><span>대기 요청</span><b>2건</b></div>
-      <div class="sc-note info" style="margin-top:8px"><i>i</i><span>합의 금액은 따로 관리하지 않아요. 판매글 표시 가격이 예약 사본에 기록돼요.</span></div>
-    </section>
-
-    <section>
-      <h3>예약 중일 때는 이렇게 보여요</h3>
-      <div class="dl-count">예약 만료까지<b>41시간 12분</b>만료 24시간 전에 다시 알려드려요.</div>
-      <div style="display:grid;gap:8px;margin-top:10px">
-        <button class="sc-btn sm block" data-page="trade">이전 링크·QR 발급</button>
-        <button class="sc-btn sm block">예약 당시 거래 사본 보기</button>
+      <div class="dl-kv"><span>판매글</span><b data-deals-info-title>–</b></div>
+      <div class="dl-kv"><span>판매 가격</span><b data-deals-info-price>–</b></div>
+      <div class="dl-kv"><span>예약 상태</span><b data-deals-info-trade-status>문의 진행 중</b></div>
+      <div style="margin-top:16px;display:grid;gap:8px" data-deals-transfer-area hidden>
+        <button type="button" class="sc-btn primary block" data-deals-btn-transfer>소유권 이전 링크/QR 발급</button>
+        <p class="sub" style="margin:0;font-size:12px;color:var(--muted)">구매자에게 제품을 건넬 때 링크나 QR을 보여주세요.</p>
       </div>
-    </section>
-
-    <section>
-      <h3>예약 취소</h3>
-      <p class="sub" style="margin:0 0 8px">취소 사유를 골라 주세요. 상대의 내 거래 화면에 표시돼요.</p>
-      <div class="reasons">
-        <label><input type="radio" name="rs"> 내 사정(일정·마음 변경)</label>
-        <label><input type="radio" name="rs" checked> 상대 요청으로 합의</label>
-        <label><input type="radio" name="rs"> 상대 연락 두절</label>
-        <label><input type="radio" name="rs"> 제품 상태가 설명과 다름</label>
-      </div>
-      <button class="sc-btn danger sm block" style="margin-top:10px">예약 취소하기</button>
+      <div class="sc-note info" style="margin-top:12px"><i>i</i><span>구매 요청을 판매자가 수락하면 다른 구매자의 추가 예약이 차단되고 안전하게 예약 상태가 됩니다.</span></div>
     </section>
   </aside>
 </div>
+
+<style>
+.dl-request-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 15px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--blue, #2563eb);
+  border: none;
+  border-radius: 9999px;
+  cursor: pointer;
+  white-space: nowrap;
+  letter-spacing: -0.2px;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.25);
+  transition: all 0.18s ease;
+}
+.dl-request-btn:hover {
+  background: #1d4ed8;
+  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.35);
+  transform: translateY(-1px);
+}
+.dl-request-btn svg {
+  flex-shrink: 0;
+}
+</style>

@@ -73,7 +73,7 @@ class AuthServiceTest {
   @Test
   void signupNormalizesEmailAndStoresOnlyTheHashedPassword() {
     when(userRepository.existsByEmail("user@example.com")).thenReturn(false);
-    when(userRepository.existsByNickname("기록왕")).thenReturn(false);
+    when(userRepository.existsByNicknameIgnoreCase("기록왕")).thenReturn(false);
     when(passwordEncoder.encode("Passw0rd!")).thenReturn("hashed");
     when(userRepository.saveAndFlush(any(User.class))).thenAnswer(call -> call.getArgument(0));
 
@@ -108,7 +108,7 @@ class AuthServiceTest {
   @Test
   void signupRejectsADuplicateNickname() {
     when(userRepository.existsByEmail("user@example.com")).thenReturn(false);
-    when(userRepository.existsByNickname("기록왕")).thenReturn(true);
+    when(userRepository.existsByNicknameIgnoreCase("기록왕")).thenReturn(true);
 
     CommonException exception =
         assertThrows(
@@ -122,12 +122,33 @@ class AuthServiceTest {
   @Test
   void signupFailsWhenTheVerificationMailCannotBeSent() {
     when(userRepository.existsByEmail("user@example.com")).thenReturn(false);
-    when(userRepository.existsByNickname("기록왕")).thenReturn(false);
+    when(userRepository.existsByNicknameIgnoreCase("기록왕")).thenReturn(false);
     when(passwordEncoder.encode("Passw0rd!")).thenReturn("hashed");
     when(userRepository.saveAndFlush(any(User.class))).thenAnswer(call -> call.getArgument(0));
     doThrow(new CommonException(ErrorCode.EMAIL_SEND_FAILED))
         .when(emailVerificationService)
         .sendLink("user@example.com");
+
+    CommonException exception =
+        assertThrows(
+            CommonException.class,
+            () -> authService.signup(new SignupRequest("user@example.com", "Passw0rd!", "기록왕")));
+
+    assertEquals(ErrorCode.EMAIL_SEND_FAILED, exception.errorCode());
+    verify(userRepository).delete(any(User.class));
+  }
+
+  /** 메일 발송 실패 후 계정 삭제까지 실패해도 원래 오류를 그대로 돌려준다. */
+  @Test
+  void signupKeepsTheMailErrorWhenTheCleanupAlsoFails() {
+    when(userRepository.existsByEmail("user@example.com")).thenReturn(false);
+    when(userRepository.existsByNicknameIgnoreCase("기록왕")).thenReturn(false);
+    when(passwordEncoder.encode("Passw0rd!")).thenReturn("hashed");
+    when(userRepository.saveAndFlush(any(User.class))).thenAnswer(call -> call.getArgument(0));
+    doThrow(new CommonException(ErrorCode.EMAIL_SEND_FAILED))
+        .when(emailVerificationService)
+        .sendLink("user@example.com");
+    doThrow(new IllegalStateException("db down")).when(userRepository).delete(any(User.class));
 
     CommonException exception =
         assertThrows(
@@ -141,7 +162,7 @@ class AuthServiceTest {
   @Test
   void signupMapsAConcurrentUniqueViolationToADuplicateError() {
     when(userRepository.existsByEmail("user@example.com")).thenReturn(false);
-    when(userRepository.existsByNickname("기록왕")).thenReturn(false);
+    when(userRepository.existsByNicknameIgnoreCase("기록왕")).thenReturn(false);
     when(passwordEncoder.encode("Passw0rd!")).thenReturn("hashed");
     when(userRepository.saveAndFlush(any(User.class)))
         .thenThrow(
@@ -223,6 +244,7 @@ class AuthServiceTest {
     AuthTokens tokens = authService.login(new LoginRequest("user@example.com", "Passw0rd!"), IP);
 
     assertTrue(user.isEmailVerified());
+    verify(userRepository).save(user);
     assertEquals("access", tokens.accessToken());
   }
 

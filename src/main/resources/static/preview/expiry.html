@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>만료·취소 안내 임시 화면</title>
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/screens.css">
+  <link rel="stylesheet" href="/css/main-design.css">
+  <style>
+    body{margin:0;background:var(--canvas)}
+    .pv{max-width:1040px;margin:0 auto;padding:28px 20px 60px}
+    .pv h1{margin:0 0 6px;font-size:22px}.pv>p{margin:0 0 22px;color:#62646b;font-size:13px}
+    .pv-tag{display:inline-block;margin-bottom:22px;padding:4px 9px;border-radius:4px;background:#fff7ed;color:#b36e25;font-size:12px;font-weight:700}
+    .pv-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+    .pv-case{display:grid;gap:10px;padding:20px;border:1px solid var(--line);border-radius:8px;background:#fff}
+    .pv-case>.lbl{color:#93969c;font-size:11px;font-weight:700;letter-spacing:.4px}
+    .pv-case h2{margin:0;font-size:17px}.pv-case p{margin:0;color:#62646b;font-size:13px;line-height:1.55}
+    .pv-time{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:8px;border:1px solid var(--line);background:var(--soft)}
+    .pv-time span{font-size:12px;color:#62646b}.pv-time b{font-size:20px;letter-spacing:-.3px;font-variant-numeric:tabular-nums}
+    .pv-time.warn{background:#fff7ed;border-color:#fac78f}.pv-time.warn b{color:#b36e25}
+    .pv-time.off{background:#f2f4f7}.pv-time.off b{color:#8c8f96}
+    .pv-badge{display:inline-block;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700}
+    .pv-badge.warn{background:#fff7ed;color:#b36e25}.pv-badge.danger{background:#fff1f1;color:#a94040}.pv-badge.off{background:#f2f4f7;color:#7b7e86}.pv-badge.ok{background:#eef7f4;color:var(--blue)}
+    .pv-btns{display:flex;flex-wrap:wrap;gap:8px}
+    .pv-btn{min-height:40px;padding:0 14px;border:1px solid var(--line);border-radius:6px;background:#fff;font:inherit;font-size:13px;font-weight:600}
+    .pv-btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}.pv-btn.danger{color:#a94040;border-color:#efcaca}
+    .pv-btn:disabled{cursor:not-allowed;opacity:.55}
+    .pv-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:8px}
+    .pv-row .t{min-width:0}.pv-row .t b{display:block;font-size:13px}.pv-row .t span{display:block;margin-top:3px;color:#93969c;font-size:11px}
+    .pv-wide{grid-column:1/-1}
+    .pv-modal{display:grid;gap:12px;max-width:420px;padding:20px;border:1px solid var(--line);border-radius:10px;background:#fff;box-shadow:0 8px 28px rgba(0,0,0,.12)}
+    .pv-modal h3{margin:0;font-size:16px}.pv-modal textarea{width:100%;min-height:72px;padding:10px;border:1px solid #d8dee5;border-radius:6px;font:inherit;font-size:13px}
+    .pv-modal .pv-btns{justify-content:flex-end}
+    @media(max-width:780px){.pv-grid{grid-template-columns:1fr}.pv-row{flex-direction:column;align-items:stretch}.pv-btn{width:100%;min-height:44px}.pv-btns{flex-direction:column-reverse}}
+  </style>
+</head>
+<body>
+<main class="pv">
+  <span class="pv-tag">임시 화면 · 서버와 연결되지 않은 고정 값입니다</span>
+  <h1>소유권 이전 · 구매 요청 만료/취소 안내</h1>
+  <p>기능이 완료되면 각 상태의 마크업을 실제 화면(<code>receive</code>, <code>deals</code>)에 옮기고, 값만 API 응답(<code>status</code>, <code>expiresAt</code>, <code>isExpired</code>, <code>canAccept</code>)으로 바꿉니다.</p>
+
+  <div class="pv-grid">
+    <section class="pv-case" aria-labelledby="c1">
+      <span class="lbl">이전 받기 · 만료 임박 (1시간 미만)</span>
+      <h2 id="c1">곧 만료돼요</h2>
+      <div class="pv-time warn" role="timer"><span>이전 요청 만료까지</span><b>00:12:34</b></div>
+      <p>만료되기 전에 제품을 받고 수락해 주세요. 만료되면 판매자에게 새 링크를 요청해야 해요.</p>
+      <div class="pv-btns"><button class="pv-btn primary" type="button">제품을 받았어요 · 소유권 이전 수락</button></div>
+    </section>
+
+    <section class="pv-case" aria-labelledby="c2">
+      <span class="lbl">이전 받기 · 만료됨</span>
+      <h2 id="c2">만료된 이전 요청이에요</h2>
+      <div class="pv-time off"><span>이전 요청 만료까지</span><b>만료됨</b></div>
+      <p>판매자에게 새 링크 또는 QR 코드를 요청해 주세요. 같은 QR은 한 번만 쓸 수 있어요.</p>
+      <div class="pv-btns"><button class="pv-btn" type="button" disabled>만료된 이전 요청입니다</button><button class="pv-btn" type="button">마켓으로 돌아가기</button></div>
+    </section>
+
+    <section class="pv-case" aria-labelledby="c3">
+      <span class="lbl">이전 받기 · 판매자가 취소함</span>
+      <h2 id="c3">판매자가 이전 요청을 취소했어요</h2>
+      <p>이 링크로는 더 이상 제품을 받을 수 없어요. 거래를 계속하려면 판매자에게 새 링크를 요청해 주세요.</p>
+      <div class="pv-btns"><button class="pv-btn" type="button">채팅으로 문의하기</button></div>
+    </section>
+
+    <section class="pv-case" aria-labelledby="c4">
+      <span class="lbl">이전 받기 · 이미 사용된 링크</span>
+      <h2 id="c4">이미 사용된 링크예요</h2>
+      <p>이 제품의 소유권 이전은 이미 완료됐어요. 내 제품 목록에서 확인해 보세요.</p>
+      <div class="pv-btns"><button class="pv-btn primary" type="button">내 제품 보기</button></div>
+    </section>
+
+    <section class="pv-case pv-wide" aria-labelledby="c5">
+      <span class="lbl">내 거래 · 판매자 화면 (취소/만료 표시)</span>
+      <h2 id="c5">진행 중인 거래 상태</h2>
+      <div class="pv-row">
+        <div class="t"><b>MacBook Pro 14″ · 구매 요청</b><span>구매자 민준님 · 예약 중</span></div>
+        <div class="pv-btns"><span class="pv-badge ok">예약 중</span><button class="pv-btn danger" type="button">예약 취소</button></div>
+      </div>
+      <div class="pv-row">
+        <div class="t"><b>소유권 이전 링크</b><span>발급 후 24시간 유효 · 남은 시간 05:21:10</span></div>
+        <div class="pv-btns"><span class="pv-badge warn">대기 중</span><button class="pv-btn danger" type="button">이전 링크 취소</button></div>
+      </div>
+      <div class="pv-row">
+        <div class="t"><b>소유권 이전 링크</b><span>만료됨 · 새 링크를 발급할 수 있어요</span></div>
+        <div class="pv-btns"><span class="pv-badge off">만료됨</span><button class="pv-btn primary" type="button">새 링크 발급</button></div>
+      </div>
+      <div class="pv-row">
+        <div class="t"><b>구매 요청</b><span>구매자가 요청을 취소했어요</span></div>
+        <div class="pv-btns"><span class="pv-badge danger">취소됨</span></div>
+      </div>
+    </section>
+
+    <section class="pv-case" aria-labelledby="c6">
+      <span class="lbl">취소 확인 (사유 입력)</span>
+      <h2 id="c6">취소 확인 창</h2>
+      <div class="pv-modal" role="dialog" aria-label="예약 취소">
+        <h3>예약을 취소할까요?</h3>
+        <p>취소하면 판매글이 다시 판매 중으로 바뀌고, 발급한 이전 링크도 함께 사용할 수 없게 돼요.</p>
+        <textarea aria-label="취소 사유" placeholder="취소 사유를 적어 주세요. (기록으로 남아요)"></textarea>
+        <div class="pv-btns"><button class="pv-btn" type="button">돌아가기</button><button class="pv-btn danger" type="button">예약 취소하기</button></div>
+      </div>
+    </section>
+
+    <section class="pv-case" aria-labelledby="c7">
+      <span class="lbl">처리 중·실패 안내</span>
+      <h2 id="c7">실패했을 때</h2>
+      <div class="pv-row"><div class="t"><b>이전 요청 처리 중…</b><span>잠시만 기다려 주세요.</span></div></div>
+      <div class="pv-row"><div class="t"><b>요청이 너무 많아요</b><span>10분 후 다시 시도해 주세요.</span></div><button class="pv-btn" type="button">다시 시도</button></div>
+    </section>
+  </div>
+</main>
+</body>
+</html>

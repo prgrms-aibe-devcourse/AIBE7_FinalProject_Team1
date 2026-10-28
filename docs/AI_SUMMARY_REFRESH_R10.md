@@ -50,7 +50,7 @@ events.publishEvent(new ProductFactsChanged(productId));
 
 ## DB 변경
 
-새 `V2026102701__support_listing_summary_refresh.sql`만 추가한다. 기존 마이그레이션은 수정하지 않는다.
+새 `V2026102706__support_listing_summary_refresh.sql`만 추가한다. 기존 마이그레이션은 수정하지 않는다.
 
 - `summary_requested_at`: 실행 제한 대기와 별개로 유지하는 최초 접수 시각.
 - `summary_available_at`: 짧은 수정 대기·Redis 실행 제한 후 다음 실행이 가능한 시각.

@@ -23,6 +23,7 @@ import org.example.springtestci.trade.entity.PurchaseRequestStatus;
 import org.example.springtestci.trade.entity.TransactionStatus;
 import org.example.springtestci.trade.repository.PurchaseRequestRepository;
 import org.example.springtestci.trade.repository.PurchaseRequestRepository.PageResult;
+import org.example.springtestci.trade.repository.TradeAuditRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,6 +47,7 @@ class PurchaseRequestServiceTest {
   @Mock private ChatRoomRepository roomRepository;
   @Mock private PublishedListingAccess listingAccess;
   @Mock private InternalTransferPendingWriter transferWriter;
+  @Mock private TradeAuditRepository tradeAudit;
 
   private PurchaseRequestService service;
 
@@ -53,7 +55,7 @@ class PurchaseRequestServiceTest {
   void setUp() {
     service =
         new PurchaseRequestService(
-            requestRepository, roomRepository, listingAccess, transferWriter);
+            requestRepository, roomRepository, listingAccess, transferWriter, tradeAudit);
   }
 
   @Test
@@ -135,6 +137,15 @@ class PurchaseRequestServiceTest {
     assertThat(command.getValue().toUserId()).isEqualTo(BUYER_ID);
     assertThat(command.getValue().transferType()).isEqualTo("INTERNAL");
     assertThat(command.getValue().status()).isEqualTo("PENDING");
+    verify(tradeAudit)
+        .log(
+            PRODUCT_ID,
+            SELLER_ID,
+            REQUEST_ID,
+            "PURCHASE_REQUEST_ACCEPTED",
+            "PENDING",
+            "ACCEPTED",
+            null);
   }
 
   @Test
@@ -211,17 +222,36 @@ class PurchaseRequestServiceTest {
   void buyerCancelsAndSellerRejectsPendingRequests() {
     PurchaseRequest cancelled = pendingRequest();
     when(requestRepository.findByIdForUpdate(REQUEST_ID)).thenReturn(Optional.of(cancelled));
+    when(listingAccess.findById(LISTING_ID)).thenReturn(Optional.of(activeListing()));
     givenRoom();
 
     assertThat(service.cancel(REQUEST_ID, BUYER_ID).requestStatus())
         .isEqualTo(PurchaseRequestStatus.CANCELLED);
     verify(requestRepository).update(cancelled);
+    verify(tradeAudit)
+        .log(
+            PRODUCT_ID,
+            BUYER_ID,
+            REQUEST_ID,
+            "PURCHASE_REQUEST_CANCELLED",
+            "PENDING",
+            "CANCELLED",
+            "BUYER_CANCELLED");
 
     PurchaseRequest rejected = pendingRequest();
     when(requestRepository.findByIdForUpdate(REQUEST_ID)).thenReturn(Optional.of(rejected));
     assertThat(service.reject(REQUEST_ID, SELLER_ID).requestStatus())
         .isEqualTo(PurchaseRequestStatus.REJECTED);
     verify(requestRepository).update(rejected);
+    verify(tradeAudit)
+        .log(
+            PRODUCT_ID,
+            SELLER_ID,
+            REQUEST_ID,
+            "PURCHASE_REQUEST_REJECTED",
+            "PENDING",
+            "REJECTED",
+            "SELLER_REJECTED");
   }
 
   @Test

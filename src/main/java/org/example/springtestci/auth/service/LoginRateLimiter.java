@@ -19,6 +19,7 @@ public class LoginRateLimiter {
 
   private static final String EMAIL_KEY = "auth:login:fail:email:";
   private static final String IP_KEY = "auth:login:fail:ip:";
+  private static final long NO_EXPIRY = -1L;
 
   private final StringRedisTemplate redisTemplate;
 
@@ -51,6 +52,10 @@ public class LoginRateLimiter {
       return;
     }
     Long ttl = redisTemplate.getExpire(key);
+    // INCR과 EXPIRE 사이에 실패해 만료가 없는 키가 남았다면, 영구 잠금이 되지 않도록 윈도우를 다시 건다.
+    if (ttl != null && ttl == NO_EXPIRY) {
+      redisTemplate.expire(key, WINDOW);
+    }
     throw new RateLimitedException(
         ErrorCode.LOGIN_RATE_LIMITED, ttl == null || ttl <= 0 ? WINDOW : Duration.ofSeconds(ttl));
   }

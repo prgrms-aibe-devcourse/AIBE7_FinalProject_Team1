@@ -177,6 +177,33 @@ public class ProductRepository {
         .isEmpty();
   }
 
+  public Optional<Long> findOwnerId(long productId) {
+    return jdbc
+        .queryForList(
+            "SELECT owner_id FROM products WHERE id = ? AND archived_at IS NULL",
+            Long.class,
+            productId)
+        .stream()
+        .findFirst();
+  }
+
+  public Optional<String> findTitle(long productId) {
+    return jdbc
+        .queryForList(
+            "SELECT title FROM products WHERE id = ? AND archived_at IS NULL",
+            String.class,
+            productId)
+        .stream()
+        .findFirst();
+  }
+
+  public void updateOwner(long productId, long newOwnerId) {
+    jdbc.update(
+        "UPDATE products SET owner_id = ?, updated_at = NOW() WHERE id = ? AND archived_at IS NULL",
+        newOwnerId,
+        productId);
+  }
+
   public void updateProduct(long productId, UpdateProductRequest request) {
     jdbc.update(
         """

@@ -370,6 +370,37 @@ class ListingBrowseHttpTest {
     assertEquals(404, get("/api/v1/listings/11/thumbnail", null).statusCode());
   }
 
+  /** NFR-01: 판매글 목록과 상세 조회 API는 측정 요청의 95%가 1초 이내에 응답한다. */
+  @Test
+  void p95ResponseTimeUnderOneSecondForListingBrowse() throws Exception {
+    int iterations = 30;
+    long[] listTimes = new long[iterations];
+    long[] detailTimes = new long[iterations];
+
+    for (int i = 0; i < iterations; i++) {
+      long start = System.nanoTime();
+      var response = get("/api/v1/listings?page=0&size=10", null);
+      listTimes[i] = (System.nanoTime() - start) / 1_000_000;
+      assertEquals(200, response.statusCode());
+
+      start = System.nanoTime();
+      var detail = get("/api/v1/listings/11", "1");
+      detailTimes[i] = (System.nanoTime() - start) / 1_000_000;
+      assertEquals(200, detail.statusCode());
+    }
+
+    java.util.Arrays.sort(listTimes);
+    java.util.Arrays.sort(detailTimes);
+
+    int p95Index = (int) Math.ceil(iterations * 0.95) - 1;
+    long listP95 = listTimes[p95Index];
+    long detailP95 = detailTimes[p95Index];
+
+    assertTrue(listP95 < 1000, "Listing browse P95 response time must be under 1000ms: " + listP95);
+    assertTrue(
+        detailP95 < 1000, "Listing detail P95 response time must be under 1000ms: " + detailP95);
+  }
+
   private void seed(long id, long product, long seller, int price, int grade, String date) {
     jdbc.update(
         "INSERT INTO listings(id,product_id,seller_id,title,price,condition_grade,description,status,published_at,source_draft_id,source_draft_version,active_slot) VALUES (?,?,?,?,?,?,?,'ACTIVE',?,?,0,1)",

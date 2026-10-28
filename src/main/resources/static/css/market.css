@@ -25,11 +25,20 @@
 .mk-reset{font-size:12px;color:#8f9198;text-decoration:underline;text-underline-offset:3px}
 
 /* R06 공개 목록: 실제 제품 사진·조합 필터·페이지 */
-#market .mk-filter-help{margin:0 0 16px;font-size:12px;line-height:1.6}
+/* 필터: 위쪽 가로 띠. 제조사·가격·등급은 한 줄, 제품 사양은 접어 둔다 (새 입력칸이 기존 짧은 섹션보다 커서 낮게 맞춘다) */
+#market .mk-filter{align-items:flex-end;gap:12px 24px;padding:16px 24px}
+#market .mk-filter section{flex:1 1 180px;min-width:0;margin:0;padding:0}
+#market .mk-filter section:has(.mk-range){flex-basis:280px}
+#market .mk-filter h3{margin:0 0 2px;font-size:13px}
+#market .mk-filter-help{flex:1 0 100%;margin:0;font-size:12px;line-height:1.5;color:var(--muted)}
+#market .mk-spec-fields{order:1;flex:1 0 100%;padding-top:10px;border-top:1px solid var(--line)}
+#market .mk-spec-fields summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--ink)}
+#market .mk-spec-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 24px;margin-top:8px}
+#market .mk-apply{width:auto;height:36px;padding:0 22px;margin:0 0 6px}
+#market .mk-reset{margin:0 0 12px}
 #market .mk-filter .mk-field{display:grid;gap:6px;padding:6px 0;cursor:default}
 #market .mk-field input,#market .mk-field select,#market .mk-control select{min-width:0;width:100%;height:36px;padding:0 8px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--ink);font:inherit}
 #market .mk-field input:focus,#market select:focus{outline:2px solid var(--blue);outline-offset:2px}
-#market .mk-apply{width:100%;margin-bottom:12px}
 #market .mk-control{display:flex;align-items:center;gap:8px;font-size:13px;white-space:nowrap}
 #market .mk-control select{width:auto}
 #market .mk-bar{gap:12px;flex-wrap:wrap}
@@ -102,11 +111,12 @@
 @media(prefers-reduced-motion:reduce){.mk-thumb .laptop,.mk-wish,.chip-btn,.lp-hot button{transition:none}.mk-card:hover .mk-thumb .laptop{transform:none}}
 @media(max-width:900px){
   #market .mk-filter{display:block;position:static;padding:16px;border:1px solid var(--line);border-radius:8px}
-  #market .mk-spec-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}
-  #market .mk-spec-fields h3{grid-column:1/-1}
+  #market .mk-spec-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}
+  #market .mk-apply{width:100%;margin:12px 0 0}
+  #market .mk-reset{display:block;margin:12px auto 0}
 }
 @media(max-width:640px){#market .mk-card{grid-template-columns:1fr}}
-@media(max-width:420px){#market .mk-spec-fields{grid-template-columns:1fr}#market .mk-pagination{gap:10px;font-size:13px}}
+@media(max-width:420px){#market .mk-spec-grid{grid-template-columns:1fr}#market .mk-pagination{gap:10px;font-size:13px}}
 .landing-copy p{max-width:420px}
 
 /* 홈 히어로: 글은 왼쪽 세로 중앙, 노트북 사진은 오른쪽에 크게 */

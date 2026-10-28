@@ -11,6 +11,8 @@ import org.example.springtestci.auth.repository.UserRepository;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
 import org.example.springtestci.common.security.AccessTokenBlocklist;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -20,6 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AuthService {
+
+  private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
   /** 없는 이메일로 로그인해도 해시 비교 비용을 치르게 해, 계정 존재 여부를 응답 시간으로 알 수 없게 한다. */
   private static final String DUMMY_PASSWORD = "dummy-password-for-timing";
@@ -55,15 +59,17 @@ public class AuthService {
     this.dummyHash = passwordEncoder.encode(DUMMY_PASSWORD);
   }
 
-  /** 회원가입한다. 이메일과 닉네임 중복을 거부하고 인증 메일을 보낸다. */
-  @Transactional
+  /**
+   * 회원가입한다. 이메일과 닉네임 중복을 거부하고 인증 메일을 보낸다. 외부(Supabase) 호출이 DB 연결을 붙잡지 않도록 트랜잭션으로 묶지 않고, 저장소 호출마다 짧게
+   * 커밋한다.
+   */
   public UserResponse signup(SignupRequest request) {
     String email = normalizeEmail(request.email());
     String nickname = request.nickname().trim();
     if (userRepository.existsByEmail(email)) {
       throw new CommonException(ErrorCode.DUPLICATE_EMAIL);
     }
-    if (userRepository.existsByNickname(nickname)) {
+    if (userRepository.existsByNicknameIgnoreCase(nickname)) {
       throw new CommonException(ErrorCode.DUPLICATE_NICKNAME);
     }
 
@@ -80,13 +86,17 @@ public class AuthService {
               ? ErrorCode.DUPLICATE_NICKNAME
               : ErrorCode.DUPLICATE_EMAIL);
     }
-    // 메일을 보내지 못하면 예외로 가입 전체를 되돌려, 인증할 수 없는 계정이 남지 않게 한다.
-    emailVerificationService.sendLink(email);
+    // 메일을 보내지 못하면 방금 만든 계정을 지워, 인증할 수 없는 계정이 남지 않게 한다.
+    try {
+      emailVerificationService.sendLink(email);
+    } catch (RuntimeException exception) {
+      discardUnverified(saved);
+      throw exception;
+    }
     return UserResponse.from(saved);
   }
 
-  /** 로그인한다. 제한 중이면 거부하고, 실패는 기록하며, 미인증 계정은 인증 여부를 확인한 뒤에만 허용한다. */
-  @Transactional
+  /** 로그인한다. 제한 중이면 거부하고, 실패는 기록하며, 미인증 계정은 인증 여부를 확인한 뒤에만 허용한다. 인증 여부 확인이 외부 호출이라 트랜잭션으로 묶지 않는다. */
   public AuthTokens login(LoginRequest request, String clientIp) {
     String email = normalizeEmail(request.email());
     // 제한 중에는 비밀번호를 비교하지 않고 바로 거부한다.
@@ -105,6 +115,7 @@ public class AuthService {
         throw new CommonException(ErrorCode.EMAIL_NOT_VERIFIED);
       }
       user.markEmailVerified();
+      userRepository.save(user);
     }
     return issueTokens(user);
   }
@@ -147,6 +158,15 @@ public class AuthService {
         .findById(userId)
         .map(UserResponse::from)
         .orElseThrow(() -> new CommonException(ErrorCode.UNAUTHORIZED));
+  }
+
+  /** 인증 메일을 못 보낸 가입을 취소한다. 지우지 못해도 원래 오류를 가리지 않으며, 남은 계정은 미인증 정리 작업이 지운다. */
+  private void discardUnverified(User user) {
+    try {
+      userRepository.delete(user);
+    } catch (RuntimeException cleanupFailure) {
+      log.warn("메일 발송에 실패한 가입을 취소하지 못했습니다: userId={}", user.getId());
+    }
   }
 
   /** Access Token과 Refresh Token을 새로 발급한다. */

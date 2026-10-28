@@ -22,11 +22,13 @@ public class RefreshTokenStore {
   private final JwtProperties properties;
   private final SecureRandom secureRandom = new SecureRandom();
 
+  /** Redis와 토큰 만료 설정을 주입받는다. */
   public RefreshTokenStore(StringRedisTemplate redisTemplate, JwtProperties properties) {
     this.redisTemplate = redisTemplate;
     this.properties = properties;
   }
 
+  /** 새 Refresh Token을 만들어 해시 키로 Redis에 저장하고, 원문 토큰을 돌려준다. */
   public String issue(long userId) {
     byte[] bytes = new byte[TOKEN_BYTES];
     secureRandom.nextBytes(bytes);
@@ -50,10 +52,12 @@ public class RefreshTokenStore {
     }
   }
 
+  /** 로그아웃 때 Refresh Token을 폐기한다. */
   public void revoke(String token) {
     redisTemplate.delete(key(token));
   }
 
+  /** 토큰 원문 대신 SHA-256 해시로 Redis 키를 만든다. */
   private static String key(String token) {
     try {
       byte[] digest =

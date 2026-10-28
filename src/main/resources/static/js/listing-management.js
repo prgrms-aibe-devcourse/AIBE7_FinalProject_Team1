@@ -120,6 +120,17 @@
     } catch (error) { if (token === generation) failure(error); }
     finally { if (token === generation) { busy = false; controls(); } }
   }
+  async function deleteListing() {
+    if (!current || busy) return;
+    if (!confirm('이 판매글을 완전히 삭제할까요? 삭제 후에는 복구할 수 없습니다.')) return;
+    const token = generation, id = current; busy = true; controls(); message('판매글을 삭제하는 중이에요…');
+    try {
+      await api('/api/v1/listings/' + id, { method: 'DELETE' });
+      alert('판매글이 삭제되었습니다.');
+      if (typeof show === 'function') show('market');
+    } catch (error) { if (token === generation) failure(error); }
+    finally { if (token === generation) { busy = false; controls(); } }
+  }
   function reset() {
     generation++; request?.abort(); current = null; saved = null; selected = []; busy = false; stale = false;
     if (!find('[data-listing-editor]')) return;
@@ -150,6 +161,7 @@
     });
     find('[data-listing-cancel-back]').addEventListener('click', () => find('[data-listing-cancel-dialog]').close());
     find('[data-listing-cancel-confirm]').addEventListener('click', cancel);
+    find('[data-listing-delete-button]')?.addEventListener('click', deleteListing);
   }
   document.addEventListener('pastport:page-loaded', event => { if (event.detail.id === 'detail') init(); });
   document.addEventListener('pastport:page-shown', event => { if (event.detail.id !== 'detail') reset(); });

@@ -2,7 +2,7 @@ spring:
   application:
     name: aibe7-final-project-team1
   config:
-    import: optional:file:.env[.properties]
+    import: optional:file:${DOTENV_PATH:.env}[.properties]
   profiles:
     default: local
   flyway:

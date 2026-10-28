@@ -21,7 +21,18 @@ logging:
   level:
     root: INFO
     org.example.springtestci: INFO
+  # 운영 로그 보관 기준(NFR-07): docs/OPERATIONS.md 참고. 기본 90일·총 2GB를 넘으면 오래된 것부터 지운다.
+  file:
+    name: ${LOG_FILE:./logs/app.log}
+  logback:
+    rollingpolicy:
+      max-file-size: 50MB
+      max-history: ${LOG_RETENTION_DAYS:90}
+      total-size-cap: 2GB
 
 app:
   product:
     serial-secret: ${PRODUCT_SERIAL_SECRET}
+  jwt:
+    # 인증 쿠키(Access·Refresh)에 Secure를 강제한다. false면 ProductionSecurityGuard가 서버 시작을 막는다.
+    refresh-cookie-secure: true

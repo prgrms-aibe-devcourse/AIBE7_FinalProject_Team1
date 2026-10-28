@@ -15,6 +15,7 @@ import org.example.springtestci.trade.entity.PurchaseRequest;
 import org.example.springtestci.trade.entity.PurchaseRequestStatus;
 import org.example.springtestci.trade.repository.PurchaseRequestRepository;
 import org.example.springtestci.trade.repository.PurchaseRequestRepository.PageResult;
+import org.example.springtestci.trade.repository.TradeAuditRepository;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,16 +38,29 @@ public class PurchaseRequestService {
   private final ChatRoomRepository roomRepository;
   private final PublishedListingAccess listingAccess;
   private final InternalTransferPendingWriter transferWriter;
+  private final TradeAuditRepository tradeAudit;
 
   public PurchaseRequestService(
       PurchaseRequestRepository requestRepository,
       ChatRoomRepository roomRepository,
       PublishedListingAccess listingAccess,
       InternalTransferPendingWriter transferWriter) {
+    this(requestRepository, roomRepository, listingAccess, transferWriter, null);
+  }
+
+  @org.springframework.beans.factory.annotation.Autowired
+  public PurchaseRequestService(
+      PurchaseRequestRepository requestRepository,
+      ChatRoomRepository roomRepository,
+      PublishedListingAccess listingAccess,
+      InternalTransferPendingWriter transferWriter,
+      @org.springframework.beans.factory.annotation.Autowired(required = false)
+          TradeAuditRepository tradeAudit) {
     this.requestRepository = requestRepository;
     this.roomRepository = roomRepository;
     this.listingAccess = listingAccess;
     this.transferWriter = transferWriter;
+    this.tradeAudit = tradeAudit;
   }
 
   /** 구매 문의자만 요청할 수 있으며 같은 방의 기존 PENDING 요청은 멱등하게 반환한다. */
@@ -117,8 +131,17 @@ public class PurchaseRequestService {
     if (actorId != room.inquirerId()) {
       throw new CommonException(ErrorCode.ACCESS_DENIED);
     }
+    String before = request.requestStatus().name();
     request.cancelPending();
     requestRepository.update(request);
+    recordAudit(
+        request.listingId(),
+        actorId,
+        requestId,
+        "PURCHASE_REQUEST_CANCELLED",
+        before,
+        request.requestStatus().name(),
+        "BUYER_CANCELLED");
     return toResponse(request);
   }
 
@@ -130,8 +153,17 @@ public class PurchaseRequestService {
     if (actorId != room.sellerId()) {
       throw new CommonException(ErrorCode.ACCESS_DENIED);
     }
+    String before = request.requestStatus().name();
     request.reject();
     requestRepository.update(request);
+    recordAudit(
+        request.listingId(),
+        actorId,
+        requestId,
+        "PURCHASE_REQUEST_REJECTED",
+        before,
+        request.requestStatus().name(),
+        "SELLER_REJECTED");
     return toResponse(request);
   }
 
@@ -163,7 +195,45 @@ public class PurchaseRequestService {
     transferWriter.createPending(
         InternalTransferPendingWriter.Command.internalPending(
             listing.productId(), request.id(), listing.sellerId(), room.inquirerId()));
+    recordAudit(
+        listing.productId(),
+        actorId,
+        requestId,
+        "PURCHASE_REQUEST_ACCEPTED",
+        "PENDING",
+        "ACCEPTED",
+        null);
     return toResponse(request, PublishedListingStatus.RESERVED);
+  }
+
+  private void recordAudit(
+      long productIdOrListingId,
+      Long actorId,
+      long requestId,
+      String action,
+      String beforeFacts,
+      String afterFacts,
+      String reason) {
+    if (tradeAudit == null) {
+      return;
+    }
+    if ("PURCHASE_REQUEST_ACCEPTED".equals(action)) {
+      tradeAudit.log(
+          productIdOrListingId, actorId, requestId, action, beforeFacts, afterFacts, reason);
+    } else {
+      listingAccess
+          .findById(productIdOrListingId)
+          .ifPresent(
+              listing ->
+                  tradeAudit.log(
+                      listing.productId(),
+                      actorId,
+                      requestId,
+                      action,
+                      beforeFacts,
+                      afterFacts,
+                      reason));
+    }
   }
 
   /** 방이 없거나 당사자가 아니면 동일하게 404를 사용해 거래 존재를 노출하지 않는다. */

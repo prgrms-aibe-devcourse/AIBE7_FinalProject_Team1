@@ -8,12 +8,14 @@ import org.example.springtestci.auth.dto.EmailResendRequest;
 import org.example.springtestci.auth.dto.LoginRequest;
 import org.example.springtestci.auth.dto.LoginResponse;
 import org.example.springtestci.auth.dto.SignupRequest;
+import org.example.springtestci.auth.dto.SignupResponse;
 import org.example.springtestci.auth.dto.UserResponse;
 import org.example.springtestci.auth.service.AuthService;
 import org.example.springtestci.auth.service.EmailVerificationService;
 import org.example.springtestci.common.response.ApiResponse;
 import org.example.springtestci.common.security.JwtProperties;
 import org.example.springtestci.common.security.SecurityConfig;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -38,15 +40,18 @@ public class AuthController {
   private final AuthService authService;
   private final EmailVerificationService emailVerificationService;
   private final JwtProperties properties;
+  private final Duration unverifiedUserTtl;
 
-  /** 인증 요청을 처리하는 서비스와 토큰 설정을 주입받는다. */
+  /** 인증 요청을 처리하는 서비스와 토큰 설정, 미인증 계정 유예 시간을 주입받는다. */
   public AuthController(
       AuthService authService,
       EmailVerificationService emailVerificationService,
-      JwtProperties properties) {
+      JwtProperties properties,
+      @Value("${app.auth.unverified-user-ttl:30m}") Duration unverifiedUserTtl) {
     this.authService = authService;
     this.emailVerificationService = emailVerificationService;
     this.properties = properties;
+    this.unverifiedUserTtl = unverifiedUserTtl;
   }
 
   /** 아직 인증하지 못한 계정에 인증 메일을 다시 보낸다. 계정이 있는지는 응답으로 알려 주지 않는다. */
@@ -58,10 +63,11 @@ public class AuthController {
 
   /** 회원가입을 처리하고 인증 메일을 보낸다. */
   @PostMapping("/signup")
-  public ResponseEntity<ApiResponse<UserResponse>> signup(
+  public ResponseEntity<ApiResponse<SignupResponse>> signup(
       @Valid @RequestBody SignupRequest request) {
+    UserResponse user = authService.signup(request);
     return ResponseEntity.status(HttpStatus.CREATED)
-        .body(ApiResponse.success(authService.signup(request)));
+        .body(ApiResponse.success(SignupResponse.of(user, unverifiedUserTtl.toMinutes())));
   }
 
   /** 로그인하고 Access·Refresh Token을 HttpOnly 쿠키로 내려준다. */

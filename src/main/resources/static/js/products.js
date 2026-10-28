@@ -170,7 +170,8 @@
       ${editForm(product)}
       <section class="history-mount" data-history-root data-product-id="${product.productId}" aria-label="제품 이력"></section>
       ${images.length ? `<section class="product-image-manager"><h2>제품 이미지 관리</h2>${images.map((image, index) => `<div class="product-image-row"><span>${index + 1}번 이미지 ${image.primary ? '· 대표' : ''}</span><div><button class="button" type="button" data-image-move="up" data-image-id="${image.imageId}" ${index === 0 ? 'disabled' : ''}>앞으로</button><button class="button" type="button" data-image-move="down" data-image-id="${image.imageId}" ${index === images.length - 1 ? 'disabled' : ''}>뒤로</button><button class="button" type="button" data-image-primary data-image-id="${image.imageId}" ${image.primary ? 'disabled' : ''}>대표 지정</button><button class="button danger" type="button" data-image-delete data-image-id="${image.imageId}">삭제</button></div></div>`).join('')}</section>` : ''}
-      <section class="product-detail-upload"><div><h2>제품 이미지 추가</h2><p>JPG, PNG, WEBP · 장당 최대 5MB · 제품당 최대 10장</p></div><label class="button primary" for="product-detail-images">＋ 이미지 추가</label><input id="product-detail-images" type="file" accept="image/jpeg,image/png,image/webp" multiple data-product-detail-images></section>`;
+      <section class="product-detail-upload"><div><h2>제품 이미지 추가</h2><p>JPG, PNG, WEBP · 장당 최대 5MB · 제품당 최대 10장</p></div><label class="button primary" for="product-detail-images">＋ 이미지 추가</label><input id="product-detail-images" type="file" accept="image/jpeg,image/png,image/webp" multiple data-product-detail-images></section>
+      <section class="ph" data-product-history data-product-id="${escapeHtml(product.productId)}"></section>`;
     hydrateImages(container);
     document.dispatchEvent(new CustomEvent('pastport:product-detail-rendered', { detail: { product } }));
   };

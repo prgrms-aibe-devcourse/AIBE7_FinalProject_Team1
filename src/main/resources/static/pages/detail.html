@@ -3,6 +3,7 @@
 <button type="button" class="sc-btn" data-listing-retry>다시 불러오기</button>
 <button type="button" class="sc-btn primary" data-listing-login hidden>로그인하고 상세 보기</button>
 <button type="button" class="sc-btn" data-listing-manage hidden>내 판매글 관리</button>
+<button type="button" class="sc-btn primary" data-listing-chat hidden>판매자에게 채팅 문의하기</button>
 <div data-listing-content></div>
 <button type="button" class="sc-btn sl-drafts-more" data-listing-more hidden>공개 이력 더 보기</button>
 <section class="listing-management sc-card" data-listing-editor hidden aria-labelledby="listing-editor-heading">
@@ -27,7 +28,10 @@
       <legend>판매 중지</legend>
       <p class="sub">목록과 상세 공개를 종료하고 연결된 거래·이전 요청도 취소해요. 제품·이력과 과거 판매글 기록은 보존하며, 재판매하려면 새 글을 작성해야 해요.</p>
       <label class="sc-field"><span>판매 중지 사유</span><textarea name="reason" aria-label="판매 중지 사유" maxlength="500" required placeholder="판매를 중지하는 이유를 입력해 주세요."></textarea></label>
-      <button type="submit" class="sc-btn listing-cancel-button">판매 중지</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button type="submit" class="sc-btn listing-cancel-button">판매 중지</button>
+        <button type="button" class="sc-btn" data-listing-delete-button style="color:var(--warn,#e53e3e);border-color:var(--warn,#e53e3e)">판매글 완전히 삭제</button>
+      </div>
     </fieldset>
   </form>
 </section>

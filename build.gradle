@@ -64,4 +64,6 @@ spotless {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // application.yaml이 읽는 .env에는 실제 DB 접속 정보가 있으므로, 테스트는 로컬 .env를 읽지 않고 H2 기본값이나 TEST_* 환경변수만 쓴다.
+    systemProperty 'DOTENV_PATH', 'build/disabled-env/.env'
 }
