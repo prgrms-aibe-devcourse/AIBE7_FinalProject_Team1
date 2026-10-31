@@ -1,0 +1,81 @@
+/* 공통 원본의 비율을 유지하고, 로고가 놓이는 영역별로 표시 크기만 조절한다. */
+.pastport-logo {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.landing-logo {
+  min-width: 0;
+  padding: 0;
+  justify-content: flex-start;
+}
+
+.landing-logo .pastport-logo {
+  width: 210px;
+}
+
+.logo.pastport-brand {
+  justify-content: flex-start;
+  padding: 0 8px 16px;
+}
+
+.logo .pastport-logo {
+  width: 154px;
+}
+
+.lg-brand .pastport-logo {
+  width: 210px;
+}
+
+.pastport-logo--footer {
+  width: 150px;
+}
+
+.pastport-logo--verification {
+  width: 180px;
+  margin: 0 auto 18px;
+}
+
+.brand.pastport-admin-brand {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.brand.pastport-admin-brand .pastport-logo {
+  width: 168px;
+  height: auto;
+}
+
+.pastport-admin-label {
+  padding-left: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+
+@media (max-width: 1100px) {
+  .brand.pastport-admin-brand {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .brand.pastport-admin-brand .pastport-logo {
+    width: 150px;
+  }
+
+  .pastport-admin-label {
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 780px) {
+  .landing-logo .pastport-logo {
+    width: 180px;
+  }
+}

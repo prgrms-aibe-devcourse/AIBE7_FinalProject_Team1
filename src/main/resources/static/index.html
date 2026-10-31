@@ -4,8 +4,25 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="same-origin">
-  <title>Pastport</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+  <title>PastPort</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20261031-brand">
+  <meta name="description" content="제품의 구매·수리·소유 기록을 이어가는 제품 여권, PastPort. 기록을 확인하고 더 안심되는 중고거래를 시작하세요.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="PastPort">
+  <meta property="og:locale" content="ko_KR">
+  <meta property="og:title" content="PastPort · 기록이 남아 더 안심되는 거래">
+  <meta property="og:description" content="제품의 구매·수리·소유 기록을 이어가는 제품 여권">
+  <!-- 배포 주소 확정 후 og:image와 twitter:image를 실제 HTTPS 절대 주소로 변경한다. -->
+  <meta property="og:image" content="/images/brand/pastport-share-v1.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1730">
+  <meta property="og:image:height" content="909">
+  <meta property="og:image:alt" content="PastPort · 기록이 남아 더 안심되는 거래">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="PastPort · 기록이 남아 더 안심되는 거래">
+  <meta name="twitter:description" content="제품의 구매·수리·소유 기록을 이어가는 제품 여권">
+  <meta name="twitter:image" content="/images/brand/pastport-share-v1.png">
+  <meta name="twitter:image:alt" content="PastPort · 기록이 남아 더 안심되는 거래">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/spoqa/spoqa-han-sans@latest/css/SpoqaHanSansNeo.css">
   <link rel="stylesheet" href="/css/base.css">
   <link rel="stylesheet" href="/css/handover.css">
@@ -23,11 +40,12 @@
   <link rel="stylesheet" href="/css/doc-mask.css">
   <link rel="stylesheet" href="/css/my-listings.css">
   <link rel="stylesheet" href="/css/product-questions.css">
+  <link rel="stylesheet" href="/css/brand.css?v=20261031">
 </head>
 <body>
   <header class="site-header"><div class="landing-shell">
           <div class="landing-head">
-            <button class="landing-logo" data-page="landing"><span class="logo-mark">P</span><span>Pastport<small>PRODUCT PASSPORT</small></span></button>
+            <button class="landing-logo" type="button" data-page="landing" aria-label="PastPort 홈"><img class="pastport-logo" src="/images/brand/pastport-logo-v1.png" alt="PastPort" width="2172" height="724" fetchpriority="high"></button>
             <form class="landing-search" data-landing-search role="search"><input name="keyword" maxlength="100" aria-label="상품 검색" placeholder="찾고 있는 가전제품을 검색하세요."><span role="button" tabindex="0" aria-label="검색" data-landing-search-submit>⌕</span></form>
             <div class="landing-account"><button data-page="auth">로그인</button><span>|</span><button data-page="signup">회원가입</button></div>
           </div>
@@ -40,7 +58,7 @@
   <div class="app">
     <aside class="side" id="side">
       <div class="side-current"><span>현재 페이지</span><strong id="side-crumb">내 제품</strong></div>
-      <div class="logo" data-page="landing" role="button" tabindex="0" style="cursor:pointer"><span class="logo-mark">▣</span><span>Pastport<small>PRODUCT PASSPORT</small></span></div>
+      <button class="logo pastport-brand" type="button" data-page="landing" aria-label="PastPort 홈"><img class="pastport-logo" src="/images/brand/pastport-logo-v1.png" alt="PastPort" width="2172" height="724"></button>
       <div class="side-label">WORKSPACE</div>
       <nav class="nav">
         <button class="active" data-page="home"><span class="nav-icon">▦</span>내 제품</button>
