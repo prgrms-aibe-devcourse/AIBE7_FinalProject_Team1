@@ -257,15 +257,92 @@ class ListingHistoryIntegrationHttpTest {
     var items = history.get("items");
     assertEquals(List.of(2L, 3L, 4L, 1L), ids(items));
     assertEquals(List.of(102L, 101L), correctionIds(items.get(0).get("corrections")));
-    assertEquals("REVIEW_PENDING", items.get(0).get("detailsStatus").asString());
+    assertEquals("EXCLUDED", items.get(0).get("detailsStatus").asString());
     assertEquals("제품 점검", items.get(0).get("title").asString());
     assertTrue(items.get(0).get("content").isNull());
     assertTrue(items.get(0).get("corrections").get(0).get("reason").isNull());
+    assertEquals(
+        "EXCLUDED", items.get(0).get("corrections").get(0).get("detailsStatus").asString());
     assertEquals("VOID", items.get(1).get("status").asString());
     assertTrue(items.get(1).get("previousOwner").asBoolean());
     assertTrue(items.get(2).get("systemGenerated").asBoolean());
     assertFalse(items.get(2).get("previousOwner").asBoolean());
     assertPrivateFieldsAbsent(response.body());
+  }
+
+  @Test
+  void publicDetailsReachBuyerAndAiAndRefreshOnCorrectionWithoutAdminApproval() throws Exception {
+    jdbc.update(
+        "UPDATE product_events SET title='배터리 교체',content='교체 후 충전 동작 확인',service_provider='공식 서비스센터',replaced_part='배터리',public_text_reviewed=FALSE WHERE id IN (1,2,3)");
+    jdbc.update(
+        "UPDATE audit_logs SET reason='발생일 오기입 정정',public_reason_reviewed=FALSE WHERE id=101");
+    var preview = data(get(PUBLICATION, "1")).get("history");
+    var buyerResponse = get("/api/v1/listings/11", "2");
+    assertEquals(preview, data(buyerResponse).get("history"));
+    var item = preview.get("items").get(0);
+    assertEquals("배터리 교체", item.get("title").asString());
+    assertEquals("교체 후 충전 동작 확인", item.get("content").asString());
+    assertEquals("공식 서비스센터", item.get("serviceProvider").asString());
+    assertEquals("배터리", item.get("replacedPart").asString());
+    assertEquals("REVIEWED", item.get("detailsStatus").asString());
+    assertEquals("EXCLUDED", item.at("/corrections/0/detailsStatus").asString());
+    assertEquals("발생일 오기입 정정", item.at("/corrections/1/reason").asString());
+    assertTrue(preview.at("/items/3/previousOwner").asBoolean());
+    assertEquals("교체 후 충전 동작 확인", preview.at("/items/3/content").asString());
+    assertEquals("VOID", preview.at("/items/1/status").asString());
+    assertPrivateFieldsAbsent(buyerResponse.body());
+
+    readySummary();
+    assertEquals("교체 후 충전 동작 확인", aiEvent(2).get("content").asString());
+    assertEquals("교체 후 충전 동작 확인", aiEvent(1).get("content").asString());
+    assertTrue(aiEvent(3).get("content").isNull());
+
+    // 같은 제품 버전의 과거 메타데이터 전용 요약도 새 입력 정책으로 갱신할 수 있어야 한다.
+    jdbc.update("UPDATE listings SET summary_format_version=1 WHERE id=11");
+    assertEquals(List.of(11L), summaries().staleListings());
+    var legacy = data(get("/api/v1/listings/11/summary", "1"));
+    assertTrue(legacy.get("text").isNull());
+    assertTrue(legacy.get("canRequest").asBoolean());
+    context.getBean(ListingSummaryStore.class).refresh(11);
+    processPending();
+    assertEquals(2, summaries().read(11).formatVersion());
+    assertTrue(summaries().staleListings().isEmpty());
+
+    data(
+        write(
+            "PATCH",
+            "/api/v1/products/101/events/2",
+            """
+        {"occurredOn":"2025-05-20","title":"배터리 점검",
+         "content":"충전과 방전 동작 점검 완료","serviceProvider":"공식 서비스센터",
+         "replacedPart":"배터리","reason":"점검 내용 오기입 정정"}
+        """,
+            "1"));
+    assertEquals(8, factsVersion());
+    var corrected = data(get("/api/v1/listings/11", "2")).at("/history/items/0");
+    assertEquals("충전과 방전 동작 점검 완료", corrected.get("content").asString());
+    assertEquals("점검 내용 오기입 정정", corrected.at("/corrections/0/reason").asString());
+    processPending();
+    assertEquals("충전과 방전 동작 점검 완료", aiEvent(2).get("content").asString());
+
+    data(
+        write("POST", "/api/v1/products/101/events/2/void", "{\"reason\":\"중복 등록으로 무효 처리\"}", "1"));
+    var voided = data(get("/api/v1/listings/11", "2")).at("/history/items/0");
+    assertEquals("VOID", voided.get("status").asString());
+    assertEquals("중복 등록으로 무효 처리", voided.at("/corrections/0/reason").asString());
+    processPending();
+    assertEquals("VOID", aiEvent(2).get("status").asString());
+    assertTrue(aiEvent(2).get("content").isNull());
+    assertPrivateFieldsAbsent(AI_INPUT.get());
+
+    // 판매글을 읽을 수 있는 구매자에게도 문서 조회 권한은 주어지지 않는다.
+    assertEquals(403, get("/api/v1/products/101/documents", "2").statusCode());
+    assertEquals(200, get("/api/v1/products/101/documents", "1").statusCode());
+    assertFalse(
+        jdbc.queryForObject(
+            "SELECT public_text_reviewed FROM product_events WHERE id=2", Boolean.class));
+    assertEquals(
+        987654321L, jdbc.queryForObject("SELECT cost FROM product_events WHERE id=1", Long.class));
   }
 
   @Test
@@ -275,8 +352,8 @@ class ListingHistoryIntegrationHttpTest {
     String eventsPath = "/api/v1/products/101/events";
     String creation =
         """
-        {"eventType":"INSPECTION","occurredOn":"2025-05-20","title":"PRIVATE_HISTORY_TITLE",
-         "content":"private-person@fixture.invalid","serviceProvider":"PRIVATE_SERVICE_PROVIDER",
+        {"eventType":"INSPECTION","occurredOn":"2025-05-20","title":"고객명: PRIVATE_HISTORY_TITLE",
+         "content":"private-person@fixture.invalid","serviceProvider":"담당자: PRIVATE_SERVICE_PROVIDER",
          "cost":987654321,"documentIds":[]}
         """;
     assertEquals(404, write("POST", eventsPath, creation, "2").statusCode());
@@ -295,8 +372,8 @@ class ListingHistoryIntegrationHttpTest {
             "PATCH",
             eventsPath + "/" + eventId,
             """
-            {"occurredOn":"2025-05-21","title":"PRIVATE_CORRECTED_TITLE",
-             "content":"private-person@fixture.invalid","reason":"PRIVATE_CHANGE_REASON"}
+            {"occurredOn":"2025-05-21","title":"고객명: PRIVATE_CORRECTED_TITLE",
+             "content":"private-person@fixture.invalid","reason":"고객명: PRIVATE_CHANGE_REASON"}
             """,
             "1"));
     var correctedResponse = get(PUBLICATION, "1");
@@ -309,7 +386,7 @@ class ListingHistoryIntegrationHttpTest {
         write(
             "POST",
             eventsPath + "/" + eventId + "/void",
-            "{\"reason\":\"PRIVATE_VOID_REASON\"}",
+            "{\"reason\":\"고객명: PRIVATE_VOID_REASON\"}",
             "1"));
     var voidedResponse = get(PUBLICATION, "1");
     var voided = data(voidedResponse).get("history");
@@ -642,18 +719,18 @@ class ListingHistoryIntegrationHttpTest {
         author,
         type,
         date,
-        "PRIVATE_HISTORY_TITLE",
+        "고객명: PRIVATE_HISTORY_TITLE",
         "private-person@fixture.invalid",
-        "PRIVATE_SERVICE_PROVIDER",
+        "담당자: PRIVATE_SERVICE_PROVIDER",
         987654321L,
-        "PRIVATE_REPLACED_PART",
+        "시리얼: PRIVATE_REPLACED_PART",
         status,
         transfer);
   }
 
   private static void change(long id, long product, long event, String action) {
     jdbc.update(
-        "INSERT INTO audit_logs(id,product_id,actor_id,target_id,event_id,action,reason,before_facts,after_facts,created_at) VALUES(?,?,1,?,?,?,'PRIVATE_CHANGE_REASON','PRIVATE_BEFORE_FACTS','PRIVATE_AFTER_FACTS',CAST('2026-10-02T00:00:00Z' AS TIMESTAMP WITH TIME ZONE))",
+        "INSERT INTO audit_logs(id,product_id,actor_id,target_id,event_id,action,reason,before_facts,after_facts,created_at) VALUES(?,?,1,?,?,?,'고객명: PRIVATE_CHANGE_REASON','PRIVATE_BEFORE_FACTS','PRIVATE_AFTER_FACTS',CAST('2026-10-02T00:00:00Z' AS TIMESTAMP WITH TIME ZONE))",
         id,
         product,
         event,
@@ -703,7 +780,7 @@ class ListingHistoryIntegrationHttpTest {
     return new CreateHistoryEventRequest(
         HistoryEventType.INSPECTION,
         LocalDate.of(2025, 5, 20),
-        "PRIVATE_TEST_TITLE",
+        "고객명: PRIVATE_TEST_TITLE",
         "private-person@fixture.invalid",
         null,
         null,
@@ -726,13 +803,13 @@ class ListingHistoryIntegrationHttpTest {
   private static CorrectHistoryEventRequest correctionRequest(Map<String, Object> specs) {
     return new CorrectHistoryEventRequest(
         LocalDate.of(2025, 5, 21),
-        "PRIVATE_CORRECTED_TITLE",
+        "고객명: PRIVATE_CORRECTED_TITLE",
         null,
         null,
         null,
         null,
         specs,
-        "PRIVATE_CORRECTION_REASON");
+        "고객명: PRIVATE_CORRECTION_REASON");
   }
 
   private static String correctionJson(Map<String, Object> specs) {

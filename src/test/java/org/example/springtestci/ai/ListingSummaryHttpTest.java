@@ -325,7 +325,9 @@ class ListingSummaryHttpTest {
     store.refresh(1);
     assertNull(jdbc.queryForObject("SELECT summary_text FROM listings WHERE id=1", String.class));
     processor.process(repository.pending().get(0));
-    assertEquals(1, repository.read(1).formatVersion());
+    assertEquals(
+        org.example.springtestci.ai.entity.ListingSummaryState.CARD_FORMAT_VERSION,
+        repository.read(1).formatVersion());
     assertTrue(repository.read(1).text().length() <= 90);
     assertTrue(repository.staleListings().isEmpty());
     assertEquals(2, CALLS.get());

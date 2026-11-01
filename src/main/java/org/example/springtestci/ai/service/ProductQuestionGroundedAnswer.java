@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import org.example.springtestci.ai.dto.ProductAnswerResponse.Evidence;
+import org.example.springtestci.listing.service.PublicHistoryTextPolicy;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -59,8 +60,7 @@ final class ProductQuestionGroundedAnswer {
           if (voided(item)) lines.add(record + "은 무효 처리되어 실제 발생 여부를 확인할 수 없어요.");
           else {
             String corrected = facts.path("corrected").asBoolean() ? "정정된 " : "";
-            String pending = facts.path("detailsReviewed").asBoolean() ? "" : " 세부 내용은 미검토예요.";
-            lines.add(corrected + record + "이 등록되어 있어요." + pending);
+            lines.add(corrected + record + "이 등록되어 있어요." + publicDetails(facts));
           }
         }
         default -> {}
@@ -69,19 +69,34 @@ final class ProductQuestionGroundedAnswer {
     String partial =
         selected.size() < delivered.size() ? "\n답변에는 일부 근거만 담았어요. 전체 이력도 함께 확인해 주세요." : "";
     String text = String.join("\n", lines) + partial;
-    // 긴 근거를 잘라 다른 의미로 만들지 않고, 안내와 실제 근거 목록을 제공한다. 자유 입력 본문은 재사용하지 않는다.
+    // 긴 공개 내용을 잘라 다른 의미로 만들지 않고, 안내와 실제 근거 목록을 제공한다.
     if (text.length() > 2000)
       text =
           NOTICE
               + " "
               + warrantyNotice
-              + " 유효한 기록도 세부 내용이 미검토라면 유형·날짜·상태만 확인할 수 있어요. 제품 사양과 이력 근거를 함께 확인해 주세요."
+              + " 공개된 상세가 없는 유효 이력은 세부 내용을 확인할 수 없어요. 제품 사양과 이력 근거를 함께 확인해 주세요."
               + partial;
     return new Result(text, List.copyOf(selected.values()));
   }
 
   private static boolean voided(Evidence item) {
     return "EVENT".equals(item.type()) && "VOID".equals(item.facts().get("status"));
+  }
+
+  /** 무효 안내를 서버가 재구성할 때도 유효 이력의 자동 검사된 공개 내용은 유지한다. */
+  private static String publicDetails(JsonNode facts) {
+    if (!facts.path("detailsReviewed").asBoolean()) return " 공개된 세부 내용은 확인할 수 없어요.";
+    List<String> values = new ArrayList<>();
+    for (String field : List.of("title", "content", "replacedPart")) {
+      var value = facts.path(field);
+      if (value.isString()) {
+        String text =
+            PublicHistoryTextPolicy.clean(value.asString(), "content".equals(field) ? 2000 : 200);
+        if (text != null) values.add(text);
+      }
+    }
+    return values.isEmpty() ? "" : " 등록된 공개 내용: " + String.join(" · ", values);
   }
 
   private static String specs(JsonNode facts) {

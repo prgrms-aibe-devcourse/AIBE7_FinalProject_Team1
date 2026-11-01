@@ -33,8 +33,41 @@ class ProductQuestionGroundedAnswerTest {
         result.evidence().stream().map(Evidence::key).toList());
     assertTrue(result.text().contains("18GB"));
     assertTrue(result.text().contains("시험 CPU"));
-    assertTrue(result.text().contains("무효") && result.text().contains("미검토"));
+    assertTrue(result.text().contains("무효") && result.text().contains("확인할 수 없"));
     assertTrue(result.text().contains("보증 만료일이 등록되지 않아"));
+    assertFalse(result.text().contains("SECRET_PROSE"));
+  }
+
+  @Test
+  void keepsPublicValidDetailsAlongsideVoidNoticesWithoutReusingExcludedText() {
+    var valid =
+        new Evidence(
+            "event:2",
+            "EVENT",
+            "수리",
+            Map.of(
+                "eventId",
+                2,
+                "type",
+                "REPAIR",
+                "status",
+                "VALID",
+                "occurredOn",
+                "2026-09-18",
+                "detailsReviewed",
+                true,
+                "title",
+                "배터리 점검",
+                "content",
+                "충전 동작 점검 완료",
+                "replacedPart",
+                "배터리"));
+    var result =
+        ProductQuestionGroundedAnswer.compose(
+            List.of(valid), List.of(valid, event(1, "VOID")), false);
+    assertTrue(result.text().contains("충전 동작 점검 완료"));
+    assertTrue(result.text().contains("배터리"));
+    assertTrue(result.text().contains("무효"));
     assertFalse(result.text().contains("SECRET_PROSE"));
   }
 

@@ -271,8 +271,9 @@ class ListingBrowseHttpTest {
 
   private void readyCard(String text) {
     jdbc.update(
-        "UPDATE listings SET summary_status='READY',summary_text=?,summary_format_version=1,summary_attempt_id=?,summary_source_product_version=(SELECT facts_version FROM products WHERE id=101),summary_source_listing_version=content_version,summary_requested_at=CURRENT_TIMESTAMP,summary_available_at=CURRENT_TIMESTAMP,summary_error_code=NULL,summary_updated_at=CURRENT_TIMESTAMP WHERE id=11",
+        "UPDATE listings SET summary_status='READY',summary_text=?,summary_format_version=?,summary_attempt_id=?,summary_source_product_version=(SELECT facts_version FROM products WHERE id=101),summary_source_listing_version=content_version,summary_requested_at=CURRENT_TIMESTAMP,summary_available_at=CURRENT_TIMESTAMP,summary_error_code=NULL,summary_updated_at=CURRENT_TIMESTAMP WHERE id=11",
         text,
+        org.example.springtestci.ai.entity.ListingSummaryState.CARD_FORMAT_VERSION,
         UUID.randomUUID());
   }
 

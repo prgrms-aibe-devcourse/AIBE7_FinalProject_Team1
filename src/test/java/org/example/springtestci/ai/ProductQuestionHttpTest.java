@@ -143,7 +143,7 @@ class ProductQuestionHttpTest {
     jdbc.update(
         "INSERT INTO listings(id,product_id,seller_id,title,price,condition_grade,description,status,published_at,source_draft_id,source_draft_version,active_slot) VALUES(11,101,1,'qa listing',123456,4,'untrusted listing description','ACTIVE',CURRENT_TIMESTAMP,9001,0,1)");
     jdbc.update(
-        "INSERT INTO product_events(id,product_id,author_id,event_type,occurred_on,title,content,status) VALUES(501,101,1,'REPAIR',DATE '2025-05-20','private repair title','private-person@fixture.invalid 010-1234-5678 cost 50000','VALID')");
+        "INSERT INTO product_events(id,product_id,author_id,event_type,occurred_on,title,content,status) VALUES(501,101,1,'REPAIR',DATE '2025-05-20','고객명: private repair title','private-person@fixture.invalid 010-1234-5678 cost 50000','VALID')");
     CALLS.set(0);
     CONFIGURED.set(true);
     IN_TRANSACTION.set(false);
@@ -177,6 +177,33 @@ class ProductQuestionHttpTest {
   }
 
   @Test
+  void buyerQuestionUsesAutomaticallyPublicHistoryDetailsWithoutAdminApproval() throws Exception {
+    jdbc.update(
+        "UPDATE product_events SET title='배터리 교체',content='충전 동작 점검 완료',replaced_part='배터리',public_text_reviewed=FALSE WHERE id=501");
+    TOOLS.set(List.of("get_product_history"));
+    ANSWER.set(
+        new ProductQuestionGateway.Answer(
+            "2025-05-20 배터리 교체 후 충전 동작을 점검한 기록이 있습니다.", List.of("event:501")));
+    var response = post(LISTING, "2", "배터리 수리 기록을 알려줘");
+    assertEquals(200, response.statusCode(), response.body());
+    assertTrue(INPUT.get().contains("충전 동작 점검 완료"));
+    assertTrue(INPUT.get().contains("배터리"));
+    assertTrue(data(response).at("/sources/0/facts/detailsReviewed").asBoolean());
+    assertEquals("충전 동작 점검 완료", data(response).at("/sources/0/facts/content").asString());
+    assertFalse(
+        jdbc.queryForObject(
+            "SELECT public_text_reviewed FROM product_events WHERE id=501", Boolean.class));
+    assertFalse(INPUT.get().contains("private-person"));
+    // 무효 이력이 함께 조회돼 서버가 답변을 재구성해도 유효 이력의 공개 상세를 유지한다.
+    jdbc.update(
+        "INSERT INTO product_events(id,product_id,author_id,event_type,occurred_on,title,content,status) VALUES(502,101,1,'REPAIR',DATE '2025-05-19','고객명: 비공개','private-person@fixture.invalid','VOID')");
+    var withVoid = post(LISTING, "2", "배터리 수리 기록을 알려줘");
+    assertEquals(200, withVoid.statusCode(), withVoid.body());
+    assertTrue(data(withVoid).path("answer").asString().contains("충전 동작 점검 완료"));
+    assertTrue(data(withVoid).path("answer").asString().contains("무효"));
+  }
+
+  @Test
   void rejectsAnonymousForeignOwnerArchivedAndEndedListingsBeforeAi() throws Exception {
     assertEquals(401, post(PRODUCT, null, "메모리는?").statusCode());
     assertEquals(401, post(LISTING, null, "메모리는?").statusCode());
@@ -193,18 +220,19 @@ class ProductQuestionHttpTest {
   }
 
   @Test
-  void reservedListingsRemainQuestionableAndVoidPendingRecordsHaveExplicitFlags() throws Exception {
+  void reservedListingsRemainQuestionableAndVoidExcludedRecordsHaveExplicitFlags()
+      throws Exception {
     jdbc.update("UPDATE listings SET status='RESERVED' WHERE id=11");
     ANSWER.set(
         new ProductQuestionGateway.Answer(
-            "2025-05-20 수리 기록의 세부 내용은 미검토로 확인할 수 없어요.", List.of("event:501")));
+            "2025-05-20 수리 기록의 공개된 세부 내용은 확인할 수 없어요.", List.of("event:501")));
     var response = post(LISTING, "2", "수리 기록은?");
     assertEquals(200, response.statusCode(), response.body());
     assertFalse(data(response).at("/sources/0/facts/detailsReviewed").asBoolean());
     jdbc.update("UPDATE product_events SET status='VOID' WHERE id=501");
     ANSWER.set(
         new ProductQuestionGateway.Answer(
-            "2025-05-20 기록은 무효이며 세부 내용은 미검토입니다.", List.of("event:501")));
+            "2025-05-20 기록은 무효이며 공개된 세부 내용은 확인할 수 없어요.", List.of("event:501")));
     assertEquals(200, post(LISTING, "2", "수리 기록은?").statusCode());
     ANSWER.set(new ProductQuestionGateway.Answer("2025-05-20에 수리했습니다.", List.of("event:501")));
     var replaced = post(LISTING, "2", "수리 기록은?");
