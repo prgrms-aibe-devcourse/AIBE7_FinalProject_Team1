@@ -2,6 +2,8 @@
 // Access/Refresh Token은 모두 HttpOnly 쿠키라 JS에서 접근할 수 없다. 쓰기 요청은 XSRF-TOKEN 쿠키 값을 X-XSRF-TOKEN 헤더로 보내 CSRF를 검사받는다.
 const auth = (() => {
   let user = null;
+  let sessionVersion = 0;
+  const session = window.PastportSession;
 
   /** 쓰기 요청이면 XSRF-TOKEN 쿠키 값을 X-XSRF-TOKEN 헤더로 만들어 돌려준다. */
   const csrfHeaders = (method) => {
@@ -93,12 +95,89 @@ const auth = (() => {
       const el = member.querySelector(`[data-mp-field="${key}"]`);
       if (el) el.textContent = value;
     });
+    renderAvatar(member);
+  };
+
+  // 프로필 사진: 서버 저장 API가 아직 없어 이 브라우저(localStorage)에 계정별로 축소본만 보관한다.
+  const avatarKey = () => `pastport:avatar:${user?.id}`;
+  const readAvatar = () => { try { return localStorage.getItem(avatarKey()); } catch { return null; } };
+
+  /** 저장된 프로필 사진이 있으면 이미지로, 없으면 닉네임 첫 글자를 보여준다. */
+  const renderAvatar = (member) => {
+    const src = readAvatar();
+    const img = member.querySelector('[data-mp-img]');
+    img.hidden = !src;
+    if (src) img.src = src; else img.removeAttribute('src');
+    member.querySelector('[data-mp-field="initial"]').hidden = !!src;
+    member.querySelector('[data-mp-remove]').hidden = !src;
+    renderSideAccount();
+  };
+
+  /** 선택한 이미지를 256px 정사각형 JPEG로 잘라 줄인다. */
+  const shrinkImage = (file) => new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      const size = 256, side = Math.min(image.width, image.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      canvas.getContext('2d').drawImage(image, (image.width - side) / 2, (image.height - side) / 2, side, side, 0, 0, size, size);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('이미지를 읽지 못했어요.')); };
+    image.src = url;
+  });
+
+  document.addEventListener('change', async (event) => {
+    const input = event.target.closest?.('[data-mp-file]');
+    if (!input || !user) return;
+    const member = input.closest('[data-mp="member"]');
+    const msg = member.querySelector('[data-mp-msg]');
+    const file = input.files[0];
+    input.value = '';
+    msg.hidden = true;
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { msg.textContent = '5MB 이하 이미지만 올릴 수 있어요.'; msg.hidden = false; return; }
+    try {
+      localStorage.setItem(avatarKey(), await shrinkImage(file));
+      renderAvatar(member);
+    } catch (e) {
+      msg.textContent = e.message || '사진을 저장하지 못했어요.'; msg.hidden = false;
+    }
+  });
+
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest?.('[data-mp-remove]');
+    if (!button || !user) return;
+    try { localStorage.removeItem(avatarKey()); } catch { /* 저장소를 쓸 수 없으면 무시 */ }
+    renderAvatar(button.closest('[data-mp="member"]'));
+  });
+
+  /** 왼쪽 사이드바 하단의 내 계정 영역을 로그인한 사용자 정보로 채운다. */
+  const renderSideAccount = () => {
+    const box = document.querySelector('[data-side-account]');
+    if (!box) return;
+    const src = user ? readAvatar() : null;
+    const avatar = box.querySelector('[data-side-avatar]');
+    avatar.replaceChildren();
+    if (src) {
+      const img = document.createElement('img');
+      img.src = src; img.alt = '';
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%';
+      avatar.append(img);
+    } else {
+      avatar.textContent = user ? ([...user.nickname][0] || '') : '?';
+    }
+    box.querySelector('[data-side-name]').textContent = user ? user.nickname : '로그인 필요';
+    box.querySelector('[data-side-sub]').textContent = user ? '내 계정' : '로그인하면 확인할 수 있어요';
   };
 
   /** 로그인 응답으로 세션 상태를 갱신하고 화면에 반영한다. */
   const setSession = (data) => {
     user = data?.user ?? null;
     renderHeader();
+    renderSideAccount();
     renderMyPage();
     document.dispatchEvent(new CustomEvent('pastport:auth-changed', { detail: { signedIn: Boolean(user), userId: user?.id ?? null } }));
   };
@@ -136,9 +215,12 @@ const auth = (() => {
     if (!email || !password) return message(form, '이메일과 비밀번호를 입력해 주세요.');
     const resend = form.querySelector('[data-email-resend]');
     if (resend) resend.hidden = true;
+    const current = ++sessionVersion;
     setBusy(form, true);
     try {
-      const data = await request('/api/auth/login', { body: { email, password } });
+      const data = await session.exclusive(() => current === sessionVersion
+        ? request('/api/auth/login', { body: { email, password } }) : null);
+      if (current !== sessionVersion || !data) return;
       form.elements.password.value = '';
       message(form, '');
       setSession(data);
@@ -148,28 +230,43 @@ const auth = (() => {
       else if (new URL(window.location.href).searchParams.get('myListings') === '1') goto('my-listings');
       else goto('landing');
     } catch (error) {
+      if (current !== sessionVersion) return;
       form.elements.password.value = '';
       message(form, error.message);
       // 이메일 인증 전이면 인증 메일을 다시 받을 수 있게 한다.
       if (resend) resend.hidden = error.code !== 'AUTH_008';
     } finally {
-      setBusy(form, false);
+      if (current === sessionVersion) setBusy(form, false);
     }
   };
 
   // Refresh Token은 1회용이라 동시에 두 번 갱신하면 한쪽이 실패한다. 진행 중인 갱신이 있으면 그 결과를 같이 기다린다.
   let refreshing = null;
-  /** Refresh Token 쿠키로 세션을 갱신한다. 동시에 여러 번 불려도 한 번만 요청한다. */
+  /** 현재 쿠키로 회원을 먼저 조회하고 필요할 때만 갱신한다. 직접 로그인·로그아웃 이전의 응답은 화면에 반영하지 않는다. */
   const refresh = () => {
-    refreshing ??= request('/api/auth/refresh')
-      .then((data) => { setSession(data); return data; })
-      .finally(() => { refreshing = null; });
+    if (refreshing) return refreshing;
+    const current = sessionVersion;
+    refreshing = session.recover(signal => fetch('/api/auth/me', { credentials: 'same-origin', cache: 'no-store', signal }), () => current === sessionVersion)
+      .then(async response => {
+        if (!response || current !== sessionVersion) return null;
+        const payload = await response.json().catch(() => null);
+        if (current !== sessionVersion) return null;
+        if (!response.ok) {
+          const error = new Error(payload?.message || '로그인 상태를 확인해 주세요.');
+          error.status = response.status;
+          throw error;
+        }
+        const data = { user: payload?.data ?? null };
+        setSession(data);
+        return data;
+      }).finally(() => { refreshing = null; });
     return refreshing;
   };
 
   // 다른 화면(판매글 작성 등)이 fetch 대신 쓰는 공통 요청 함수. 쿠키와 CSRF 헤더를 붙이고, 401이면 한 번 갱신해 다시 보낸다.
   /** 쿠키와 CSRF 헤더를 붙여 요청하고, 401이면 세션을 한 번 갱신해 다시 보낸다. */
   const authFetch = async (url, options = {}) => {
+    const current = sessionVersion;
     const send = () => {
       const headers = new Headers(options.headers || {});
       Object.entries(csrfHeaders(options.method)).forEach(([name, value]) => headers.set(name, value));
@@ -177,16 +274,26 @@ const auth = (() => {
     };
     // 새로고침 직후 세션 복구가 진행 중이면 먼저 끝나기를 기다린다.
     if (!user && refreshing) await refreshing.catch(() => {});
+    if (current !== sessionVersion) throw Object.assign(new Error('로그인 상태가 변경됐어요.'), { name: 'AbortError' });
     const response = await send();
-    if (response.status !== 401) return response;
+    if (current !== sessionVersion || response.status !== 401) return response;
     try {
       await refresh();
     } catch {
       return response; // 세션이 끝났으면 원래 401을 그대로 돌려준다.
     }
-    return send();
+    return current === sessionVersion ? send() : response;
   };
   window.PastportApi = { fetch: authFetch };
+  window.addEventListener('pagehide', () => { sessionVersion++; });
+  window.addEventListener('pageshow', event => {
+    if (!event.persisted) return;
+    const current = sessionVersion;
+    Promise.resolve(refreshing).catch(() => {}).then(() => {
+      if (current !== sessionVersion) return;
+      return refresh().catch(() => { if (current === sessionVersion) clearSession(); });
+    });
+  });
 
   /** 회원가입 폼을 검증하고 가입한 뒤 로그인 화면으로 안내한다. */
   const handleSignup = async (form) => {
@@ -270,9 +377,15 @@ const auth = (() => {
   });
   document.addEventListener('click', async (event) => {
     if (!event.target.closest?.('[data-auth-logout]')) return;
+    const current = ++sessionVersion;
     try {
-      await request('/api/auth/logout');
+      await session.exclusive(async () => {
+        if (current !== sessionVersion) return null;
+        await request('/api/auth/logout');
+        return true; // 성공한 204와 요청하지 않은 작업(null)을 구분한다.
+      });
     } catch { /* 서버 응답과 관계없이 화면에서는 로그아웃 처리 */ }
+    if (current !== sessionVersion) return;
     clearSession();
     goto('landing');
   });
@@ -287,8 +400,9 @@ const auth = (() => {
   });
 
   // 새로고침 후 HttpOnly refresh 쿠키가 남아 있으면 세션을 복구한다.
-  refresh().then(() => { returnToAdmin(); }).catch(() => {
-    if (adminReturn) { clearSession(); goto('auth'); }
+  const startupVersion = sessionVersion;
+  refresh().then(() => { if (startupVersion === sessionVersion) returnToAdmin(); }).catch(() => {
+    if (startupVersion === sessionVersion && adminReturn) { clearSession(); goto('auth'); }
   });
 
   return { get user() { return user; } };

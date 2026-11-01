@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { environment, deferred, flush } from './dom.mjs';
+import { lockManager } from './auth-locks.mjs';
 
 /** 실제 화면 모듈을 DOM 대역에 연결한다. 화면 크기·레이아웃은 이 시험의 검증 범위가 아니다. */
-function setup(handler) {
+function setup(handler, locks = lockManager(), globals = {}) {
   const env = environment(handler);
   env.document.getElementById = id => env.document.querySelector('#' + id);
   const create = env.document.createElement.bind(env.document);
@@ -15,6 +16,7 @@ function setup(handler) {
   for (const id of ['filters', 'filter-panel', 'refresh', 'trades-tab', 'audits-tab', 'actor-label', 'date-label', 'status-field', 'action-field', 'scope-note', 'result-title', 'message', 'count', 'range', 'previous', 'next', 'detail', 'detail-title', 'detail-body', 'rows', 'columns', 'close-detail', 'reset-filters', 'updated', 'results', 'page-title', 'page-description', 'breadcrumb', 'records-table', 'related-scope', 'related-product', 'clear-related', 'trade-overview', 'overview-statuses', 'overview-requests', 'overview-cancellations', 'overview-message', 'overview-dates', 'cancel-scope', 'cancel-scope-label', 'clear-cancel', 'trade-status']) env.add('div', { id });
   env.document.body = env.document.root;
   env.document.cookie = 'XSRF-TOKEN=csrf-test';
+  env.window.navigator = { locks };
   env.window.location.replace = path => env.navigations.push(path);
   const detail = env.document.getElementById('detail');
   detail.showModal = () => { detail.open = true; };
@@ -22,6 +24,7 @@ function setup(handler) {
   env.document.getElementById('filters').reset = () => {};
   env.window.FormData = class { constructor(form) { this.entries = form.formEntries || []; } *[Symbol.iterator]() { yield* this.entries; } };
   env.document.getElementById('related-scope').hidden = true;
+  env.run('auth-session.js', globals);
   env.run('admin.js');
   env.$ = id => env.document.getElementById(id);
   return env;
@@ -33,6 +36,35 @@ const event = (overrides = {}) => ({ key: 'AUDIT:1:PURCHASE_REQUEST_ACCEPTED', a
 const timeline = (items = [event()], total = items.length, number = 0, available = true) => ({ tradeId: 41, events: { ...page(items, total), page: number }, reviewHistoryAvailable: available });
 const progress = (overrides = {}) => ({ tradeId: 41, state: 'WAITING_BOTH_CONFIRMATIONS', sellerConfirmation: 'NOT_CONFIRMED', buyerConfirmation: 'NOT_CONFIRMED', unreviewedChangeCount: 0, factsVersion: 2, sellerConfirmedVersion: null, buyerConfirmedVersion: null, ...overrides });
 const overview = (overrides = {}) => ({ total: 10, pending: 1, rejected: 1, reserved: 3, completed: 2, cancelled: 3, other: 0, cancellations: [{ category: 'MUTUAL_AGREEMENT', count: 2 }, { category: 'BEFORE_RESERVATION', count: 1 }, { category: 'UNRECORDED', count: 0 }], ...overrides });
+
+test('리뷰: 관리자 잠금 안 재조회는 읽기 제한 시간과 화면 이탈 취소를 모두 따른다', async () => {
+  for (const source of ['deadline', 'view']) {
+    let reads = 0, apiSignal;
+    const timers = [];
+    const env = setup((path, options) => {
+      if (++reads === 1) return { response: { status: 401, ok: false } };
+      apiSignal = options.signal;
+      return new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true }));
+    }, lockManager(), { AbortSignal: { any: AbortSignal.any.bind(AbortSignal), timeout(ms) { assert.equal(ms, 15000); const timer = new AbortController(); timers.push(timer); return timer.signal; } } });
+    await flush(); assert.ok(apiSignal); assert.equal(timers.length, 1);
+    if (source === 'deadline') timers[0].abort(new DOMException('Timed out', 'TimeoutError'));
+    else { env.document.hidden = true; await env.document.emit('visibilitychange'); }
+    await flush();
+    assert.equal(apiSignal.aborted, true);
+    assert.equal(timers[0].signal.aborted, source === 'deadline');
+    assert.equal(await env.window.PastportSession.exclusive(() => true), true);
+    assert.equal(env.$('rows').textContent, '');
+  }
+});
+
+test('리뷰: CSRF 준비 GET이 거절되면 관리자 기록을 비우고 로그인 복구로 이동한다', async () => {
+  const env = setup(path => { if (path === '/') throw new TypeError('Network failed'); return { response: { status: 401, ok: false } }; });
+  await flush();
+  assert.equal(env.$('rows').textContent, '');
+  assert.equal(env.$('detail-body').textContent, '');
+  assert.ok(env.navigations.includes('/?returnTo=admin'));
+  assert.equal(env.calls.filter(call => call.path === '/api/auth/refresh').length, 0);
+});
 
 test('목록·페이지 이동은 조회 요청만 보내고 실제 전체 건수를 표시한다', async () => {
   const env = setup(path => page([trade(path.includes('page=1') ? 42 : 41)], 21));
@@ -308,7 +340,7 @@ test('권한 회수 뒤에는 운영 집계와 선택한 취소 유형도 지운
   assert.equal(env.$('cancel-scope-label').textContent, ''); assert.equal(env.$('cancel-scope').hidden, true);
 });
 
-test('관리자 API의 401은 CSRF 보호 갱신 후 한 번 재시도하고 목록을 유지한다', async () => {
+test('관리자 API의 401은 잠금 안의 GET 재검사 뒤 CSRF 보호 갱신·최종 조회로 목록을 유지한다', async () => {
   let expired = true;
   const env = setup(path => {
     if (path === '/') return {};
@@ -373,4 +405,31 @@ test('거래·업무 검색은 한국 시간 기준을 표시하고 날짜 문�
   await env.$('filters').emit('submit'); await flush();
   query = new URL(env.calls.at(-1).path, 'http://test.invalid').searchParams;
   assert.equal(query.get('from'), '2026-10-30'); assert.equal(query.get('to'), '2026-10-30');
+});
+
+test('서로 다른 관리자 문서의 동시 401도 회전 쿠키를 한 번만 사용하고 두 목록을 복구한다', async () => {
+  const locks = lockManager(), slow = deferred(); let expired = true;
+  const handler = async path => {
+    if (path === '/') return {};
+    if (path === '/api/auth/refresh') { await slow.promise; expired = false; return {}; }
+    return expired ? { response: { ok: false, status: 401 } } : page([trade()]);
+  };
+  const first = setup(handler, locks), second = setup(handler, locks);
+  await flush();
+  assert.equal([...first.calls, ...second.calls].filter(call => call.path === '/api/auth/refresh').length, 1);
+  slow.resolve(); await flush();
+  for (const env of [first, second]) {
+    assert.match(env.$('rows').textContent, /검증 노트북/);
+    assert.deepEqual(env.navigations, []);
+    assert.ok(env.calls.filter(call => call.path.startsWith('/api/v1/admin/trades')).length <= 3);
+  }
+});
+
+test('잠금 안 재검사에서 권한 거부로 바뀌면 회전·로그인 이동 없이 업무 표시를 지운다', async () => {
+  let reads = 0;
+  const env = setup(() => ({ response: { ok: false, status: ++reads === 1 ? 401 : 403 } }));
+  await flush();
+  assert.equal(env.$('rows').textContent, '');
+  assert.equal(env.calls.filter(call => call.path === '/api/auth/refresh').length, 0);
+  assert.deepEqual(env.navigations, []);
 });

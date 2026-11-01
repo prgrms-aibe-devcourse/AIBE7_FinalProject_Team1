@@ -50,15 +50,18 @@
   function mount(root, { listingId = null, onSelect }) {
     let generation = 0, request = null, disposed = false, busy = false;
     let items = [], page = null, selected = null;
-    const empty = listingId ? '아직 이 판매글에 들어온 문의가 없습니다' : '아직 나눈 채팅이 없습니다';
+    const empty = listingId ? '아직 이 판매글에 들어온 문의가 없어요' : '아직 나눈 채팅이 없어요';
     function render() {
       root.replaceChildren(...items.map(room => row(room, selected, onSelect)));
       if (!items.length) {
-        const text = document.createElement('p'); text.className = 'sub'; text.textContent = empty; root.append(text);
+        const box = document.createElement('div'); box.className = 'dl-empty';
+        const text = document.createElement('b'); text.textContent = empty; box.append(text);
         if (!listingId) {
-          const market = document.createElement('button'); market.className = 'sc-btn';
-          market.dataset.page = 'market'; market.textContent = '마켓 둘러보기'; root.append(market);
+          const hint = document.createElement('p'); hint.textContent = '마음에 드는 상품을 찾아 판매자에게 문의해 보세요.';
+          const market = document.createElement('button'); market.type = 'button'; market.className = 'sc-btn primary';
+          market.dataset.page = 'market'; market.textContent = '마켓 둘러보기'; box.append(hint, market);
         }
+        root.append(box);
       }
       if (page?.hasNext) {
         const more = document.createElement('button');

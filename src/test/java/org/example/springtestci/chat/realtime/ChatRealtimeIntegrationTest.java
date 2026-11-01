@@ -431,6 +431,12 @@ class ChatRealtimeIntegrationTest {
 
     @Bean
     @Primary
+    org.example.springtestci.chat.repository.ChatRoomLeaveRepository chatLeaveFixture() {
+      return new org.example.springtestci.chat.InMemoryChatRoomLeaveRepository();
+    }
+
+    @Bean
+    @Primary
     ChatListingReader chatListingReader() {
       return new ChatListingReader() {
         @Override

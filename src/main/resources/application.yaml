@@ -7,6 +7,7 @@ spring:
     default: local
   flyway:
     enabled: true
+    ignore-migration-patterns: "*:*"
   servlet:
     multipart:
       max-file-size: 10MB

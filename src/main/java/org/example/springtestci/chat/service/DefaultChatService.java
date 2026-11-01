@@ -1,5 +1,7 @@
 package org.example.springtestci.chat.service;
 
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -18,6 +20,7 @@ import org.example.springtestci.chat.dto.ChatRoomSummaryResponse;
 import org.example.springtestci.chat.dto.ReadPositionResponse;
 import org.example.springtestci.chat.repository.ChatMessageRepository;
 import org.example.springtestci.chat.repository.ChatReadPositionRepository;
+import org.example.springtestci.chat.repository.ChatRoomLeaveRepository;
 import org.example.springtestci.chat.repository.ChatRoomRepository;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
@@ -44,6 +47,7 @@ public class DefaultChatService implements ChatService {
   private final ChatRoomRepository roomRepository;
   private final ChatMessageRepository messageRepository;
   private final ChatReadPositionRepository readPositionRepository;
+  private final ChatRoomLeaveRepository leaveRepository;
   private final ChatListingReader listingReader;
   private final ChatUserReader userReader;
   private final ChatMessageDelivery messageDelivery;
@@ -53,12 +57,14 @@ public class DefaultChatService implements ChatService {
       ChatRoomRepository roomRepository,
       ChatMessageRepository messageRepository,
       ChatReadPositionRepository readPositionRepository,
+      ChatRoomLeaveRepository leaveRepository,
       ChatListingReader listingReader,
       ChatUserReader userReader,
       ChatMessageDelivery messageDelivery) {
     this.roomRepository = roomRepository;
     this.messageRepository = messageRepository;
     this.readPositionRepository = readPositionRepository;
+    this.leaveRepository = leaveRepository;
     this.listingReader = listingReader;
     this.userReader = userReader;
     this.messageDelivery = messageDelivery;
@@ -70,7 +76,12 @@ public class DefaultChatService implements ChatService {
   public ChatRoomResponse openRoom(long listingId, long actorId) {
     return roomRepository
         .findByListingIdAndInquirerId(listingId, actorId)
-        .map(this::toRoomResponse)
+        .map(
+            room -> {
+              // 나갔던 문의자가 같은 글에서 다시 문의하면 본인 목록에 방을 되살린다.
+              leaveRepository.clearLeft(room.roomId(), actorId);
+              return toRoomResponse(room);
+            })
         .orElseGet(() -> createRoom(listingId, actorId));
   }
 
@@ -91,19 +102,24 @@ public class DefaultChatService implements ChatService {
             ? roomRepository.findByParticipantId(actorId, PageRequest.of(page, size))
             : roomRepository.findByParticipantIdAndListingId(
                 actorId, listingId, PageRequest.of(page, size));
-    List<Long> roomIds = rooms.stream().map(ChatRoom::roomId).toList();
+    // 내가 나간 방은 목록에서 숨긴다. 페이지 메타데이터는 DB 조회 기준이다.
+    List<ChatRoom> visibleRooms =
+        rooms.stream()
+            .filter(room -> leaveRepository.findLeftAt(room.roomId(), actorId).isEmpty())
+            .toList();
+    List<Long> roomIds = visibleRooms.stream().map(ChatRoom::roomId).toList();
     Map<Long, ChatMessage> latestMessages =
         messageRepository.findLatestByRoomIds(roomIds).stream()
             .collect(Collectors.toMap(ChatMessage::roomId, Function.identity()));
     Map<Long, ChatListingSnapshot> listings =
-        listingReader.findByIds(rooms.stream().map(ChatRoom::listingId).toList());
+        listingReader.findByIds(visibleRooms.stream().map(ChatRoom::listingId).toList());
     Set<Long> unreadRoomIds = messageRepository.findRoomIdsWithUnreadMessages(roomIds, actorId);
     Map<Long, String> nicknames =
         userReader.findNicknamesByIds(
-            rooms.stream().map(room -> counterpartyId(room, actorId)).distinct().toList());
+            visibleRooms.stream().map(room -> counterpartyId(room, actorId)).distinct().toList());
 
     List<ChatRoomSummaryResponse> items =
-        rooms.stream()
+        visibleRooms.stream()
             .map(
                 room ->
                     toRoomSummary(
@@ -120,16 +136,29 @@ public class DefaultChatService implements ChatService {
   @Override
   public ChatPageResponse<ChatMessageResponse> listMessages(
       long roomId, long actorId, int page, int size) {
-    requireParticipant(roomId, actorId);
+    ChatRoom room = requireActiveParticipant(roomId, actorId);
     Page<ChatMessage> messages =
         messageRepository.findByRoomId(roomId, PageRequest.of(page, size, MESSAGE_SORT));
-    return page(messages.stream().map(this::toMessageResponse).toList(), messages);
+    List<ChatMessageResponse> items = new ArrayList<>();
+    // 상대방이 나갔다면 최신 위치(첫 페이지 맨 앞)에 저장되지 않는 안내 메시지를 덧붙인다.
+    if (page == 0) {
+      long counterpartyId = counterpartyId(room, actorId);
+      leaveRepository
+          .findLeftAt(roomId, counterpartyId)
+          .ifPresent(leftAt -> items.add(leaveNotice(roomId, counterpartyId, leftAt)));
+    }
+    messages.stream().map(this::toMessageResponse).forEach(items::add);
+    return page(items, messages);
   }
 
   @Override
   @Transactional
   public ChatMessageResponse sendMessage(long roomId, long actorId, String content) {
-    requireParticipant(roomId, actorId);
+    ChatRoom sendRoom = requireActiveParticipant(roomId, actorId);
+    if (leaveRepository.findLeftAt(roomId, counterpartyId(sendRoom, actorId)).isPresent()) {
+      // 상대방이 나간 방에는 더 이상 메시지를 보낼 수 없다.
+      throw new CommonException(ErrorCode.ACCESS_DENIED);
+    }
     if (content == null || content.isBlank()) {
       throw new CommonException(ErrorCode.INVALID_INPUT);
     }
@@ -138,6 +167,23 @@ public class DefaultChatService implements ChatService {
     // 롤백된 메시지가 구독자에게 먼저 보이지 않도록 실제 발행은 커밋 이후로 미룬다.
     messageDelivery.publishAfterCommit(response);
     return response;
+  }
+
+  /**
+   * 나간 사람의 목록에서만 방을 숨긴다. DB의 방과 메시지는 삭제하지 않으며, 상대방은 나간 시각이 기록된 것을 보고 "나갔어요" 안내를 받는다. 이미 나갔다면 아무 일도
+   * 하지 않는다.
+   */
+  @Override
+  public void leaveRoom(long roomId, long actorId) {
+    requireParticipant(roomId, actorId);
+    leaveRepository.markLeft(roomId, actorId, Instant.now());
+  }
+
+  /** 저장하지 않는 시스템 안내 메시지다. messageId가 음수라 실제 메시지와 구분된다. */
+  private ChatMessageResponse leaveNotice(long roomId, long leaverId, Instant leftAt) {
+    String nickname =
+        userReader.findNicknamesByIds(List.of(leaverId)).getOrDefault(leaverId, "상대방");
+    return new ChatMessageResponse(-1L, roomId, leaverId, nickname + "님이 채팅방을 나갔어요.", leftAt, true);
   }
 
   @Override
@@ -174,6 +220,15 @@ public class DefaultChatService implements ChatService {
             .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND));
     if (!accessPolicy.canAccessRoom(room, actorId)) {
       throw new CommonException(ErrorCode.ACCESS_DENIED);
+    }
+    return room;
+  }
+
+  /** 이미 나간 방은 조회·전송 대상에서 제외한다. */
+  private ChatRoom requireActiveParticipant(long roomId, long actorId) {
+    ChatRoom room = requireParticipant(roomId, actorId);
+    if (leaveRepository.findLeftAt(roomId, actorId).isPresent()) {
+      throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
     }
     return room;
   }

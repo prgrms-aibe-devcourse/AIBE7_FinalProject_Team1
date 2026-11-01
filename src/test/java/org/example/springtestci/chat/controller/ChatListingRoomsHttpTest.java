@@ -50,6 +50,12 @@ class ChatListingRoomsHttpTest {
   @TestConfiguration(proxyBeanMethods = false)
   static class HistoryFixture {
     @Bean
+    @org.springframework.context.annotation.Primary
+    org.example.springtestci.chat.repository.ChatRoomLeaveRepository chatLeaveFixture() {
+      return new org.example.springtestci.chat.InMemoryChatRoomLeaveRepository();
+    }
+
+    @Bean
     ListingHistoryReader chatListHistoryFixture() {
       return productId ->
           new ListingHistoryReader.Snapshot(ListingHistoryReader.State.READY, false, List.of());
