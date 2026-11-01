@@ -163,7 +163,7 @@ async function openAll(page, selector = '#side [data-page=deals]') {
   await rows(seller.page, detailRoot, 1);
   assert.equal(await seller.page.locator('[data-listing-chats]').isVisible(), true);
   await detail(seller.page, 64);
-  await seller.page.getByText('아직 이 판매글에 들어온 문의가 없습니다', { exact: true }).waitFor();
+  await seller.page.getByText('아직 이 판매글에 들어온 문의가 없어요', { exact: true }).waitFor();
   const failRoute = '**/api/v1/chat-rooms?*listingId=62*';
   await seller.page.route(failRoute, route => route.fulfill({ status: 500, contentType: 'application/json', body: '{"message":"synthetic failure"}' }));
   await detail(seller.page, 62);
@@ -268,7 +268,7 @@ async function openAll(page, selector = '#side [data-page=deals]') {
   const empty = await context();
   await login(empty.page, 4);
   await empty.page.evaluate(() => show('deals'));
-  await empty.page.getByText('아직 나눈 채팅이 없습니다', { exact: true }).waitFor();
+  await empty.page.getByText('아직 나눈 채팅이 없어요', { exact: true }).waitFor();
   await empty.created.close();
   record('CL-04 empty all distinct from guest and failure');
 

@@ -84,6 +84,7 @@ export function environment(handler = () => ({})) {
     createElement(tag) { return new Node(tag, document); },
     createTextNode(text) { const node = this.createElement('#text'); node.text = text; return node; },
     addEventListener(type, fn) { if (!events.has(type)) events.set(type, []); events.get(type).push(fn); },
+    removeEventListener(type, fn) { events.set(type, (events.get(type) || []).filter(x => x !== fn)); },
     async emit(type, detail, event = {}) { await Promise.all((events.get(type) || []).map(fn => fn({ detail, ...event }))); },
     querySelector(selector) {
       const space = selector.indexOf(' ');

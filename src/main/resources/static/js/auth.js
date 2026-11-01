@@ -95,12 +95,89 @@ const auth = (() => {
       const el = member.querySelector(`[data-mp-field="${key}"]`);
       if (el) el.textContent = value;
     });
+    renderAvatar(member);
+  };
+
+  // 프로필 사진: 서버 저장 API가 아직 없어 이 브라우저(localStorage)에 계정별로 축소본만 보관한다.
+  const avatarKey = () => `pastport:avatar:${user?.id}`;
+  const readAvatar = () => { try { return localStorage.getItem(avatarKey()); } catch { return null; } };
+
+  /** 저장된 프로필 사진이 있으면 이미지로, 없으면 닉네임 첫 글자를 보여준다. */
+  const renderAvatar = (member) => {
+    const src = readAvatar();
+    const img = member.querySelector('[data-mp-img]');
+    img.hidden = !src;
+    if (src) img.src = src; else img.removeAttribute('src');
+    member.querySelector('[data-mp-field="initial"]').hidden = !!src;
+    member.querySelector('[data-mp-remove]').hidden = !src;
+    renderSideAccount();
+  };
+
+  /** 선택한 이미지를 256px 정사각형 JPEG로 잘라 줄인다. */
+  const shrinkImage = (file) => new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      const size = 256, side = Math.min(image.width, image.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      canvas.getContext('2d').drawImage(image, (image.width - side) / 2, (image.height - side) / 2, side, side, 0, 0, size, size);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('이미지를 읽지 못했어요.')); };
+    image.src = url;
+  });
+
+  document.addEventListener('change', async (event) => {
+    const input = event.target.closest?.('[data-mp-file]');
+    if (!input || !user) return;
+    const member = input.closest('[data-mp="member"]');
+    const msg = member.querySelector('[data-mp-msg]');
+    const file = input.files[0];
+    input.value = '';
+    msg.hidden = true;
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { msg.textContent = '5MB 이하 이미지만 올릴 수 있어요.'; msg.hidden = false; return; }
+    try {
+      localStorage.setItem(avatarKey(), await shrinkImage(file));
+      renderAvatar(member);
+    } catch (e) {
+      msg.textContent = e.message || '사진을 저장하지 못했어요.'; msg.hidden = false;
+    }
+  });
+
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest?.('[data-mp-remove]');
+    if (!button || !user) return;
+    try { localStorage.removeItem(avatarKey()); } catch { /* 저장소를 쓸 수 없으면 무시 */ }
+    renderAvatar(button.closest('[data-mp="member"]'));
+  });
+
+  /** 왼쪽 사이드바 하단의 내 계정 영역을 로그인한 사용자 정보로 채운다. */
+  const renderSideAccount = () => {
+    const box = document.querySelector('[data-side-account]');
+    if (!box) return;
+    const src = user ? readAvatar() : null;
+    const avatar = box.querySelector('[data-side-avatar]');
+    avatar.replaceChildren();
+    if (src) {
+      const img = document.createElement('img');
+      img.src = src; img.alt = '';
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%';
+      avatar.append(img);
+    } else {
+      avatar.textContent = user ? ([...user.nickname][0] || '') : '?';
+    }
+    box.querySelector('[data-side-name]').textContent = user ? user.nickname : '로그인 필요';
+    box.querySelector('[data-side-sub]').textContent = user ? '내 계정' : '로그인하면 확인할 수 있어요';
   };
 
   /** 로그인 응답으로 세션 상태를 갱신하고 화면에 반영한다. */
   const setSession = (data) => {
     user = data?.user ?? null;
     renderHeader();
+    renderSideAccount();
     renderMyPage();
     document.dispatchEvent(new CustomEvent('pastport:auth-changed', { detail: { signedIn: Boolean(user), userId: user?.id ?? null } }));
   };

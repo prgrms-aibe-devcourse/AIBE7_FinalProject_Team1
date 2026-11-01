@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -28,6 +29,7 @@ import org.example.springtestci.chat.dto.ChatRoomResponse;
 import org.example.springtestci.chat.dto.ChatRoomSummaryResponse;
 import org.example.springtestci.chat.repository.ChatMessageRepository;
 import org.example.springtestci.chat.repository.ChatReadPositionRepository;
+import org.example.springtestci.chat.repository.ChatRoomLeaveRepository;
 import org.example.springtestci.chat.repository.ChatRoomRepository;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
@@ -55,6 +57,7 @@ class DefaultChatServiceTest {
   @Mock private ChatRoomRepository roomRepository;
   @Mock private ChatMessageRepository messageRepository;
   @Mock private ChatReadPositionRepository readPositionRepository;
+  @Mock private ChatRoomLeaveRepository leaveRepository;
   @Mock private ChatListingReader listingReader;
   @Mock private ChatUserReader userReader;
   @Mock private ChatMessageDelivery messageDelivery;
@@ -68,6 +71,7 @@ class DefaultChatServiceTest {
             roomRepository,
             messageRepository,
             readPositionRepository,
+            leaveRepository,
             listingReader,
             userReader,
             messageDelivery);
@@ -271,6 +275,62 @@ class DefaultChatServiceTest {
     CommonException exception =
         assertThrows(CommonException.class, () -> service.listMyRooms(BUYER_ID, 0L, 0, 20));
     assertEquals(ErrorCode.INVALID_INPUT, exception.errorCode());
+  }
+
+  @Test
+  void leavingRoomOnlyRecordsLeaveTimeAndDeletesNothing() {
+    when(roomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room()));
+
+    service.leaveRoom(ROOM_ID, BUYER_ID);
+
+    verify(leaveRepository).markLeft(eq(ROOM_ID), eq(BUYER_ID), any(Instant.class));
+    verify(messageRepository, never()).append(anyLong(), anyLong(), any());
+  }
+
+  @Test
+  void outsiderCannotLeaveRoom() {
+    when(roomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room()));
+
+    CommonException exception =
+        assertThrows(CommonException.class, () -> service.leaveRoom(ROOM_ID, OUTSIDER_ID));
+
+    assertEquals(ErrorCode.ACCESS_DENIED, exception.errorCode());
+    verify(leaveRepository, never()).markLeft(anyLong(), anyLong(), any());
+  }
+
+  @Test
+  void counterpartySeesLeaveNoticeOnFirstMessagePage() {
+    when(roomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room()));
+    when(leaveRepository.findLeftAt(ROOM_ID, SELLER_ID)).thenReturn(Optional.empty());
+    when(leaveRepository.findLeftAt(ROOM_ID, BUYER_ID)).thenReturn(Optional.of(NOW));
+    when(userReader.findNicknamesByIds(List.of(BUYER_ID))).thenReturn(Map.of(BUYER_ID, "구매자"));
+    when(messageRepository.findByRoomId(eq(ROOM_ID), any(Pageable.class)))
+        .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+    var page = service.listMessages(ROOM_ID, SELLER_ID, 0, 20);
+
+    assertEquals(1, page.items().size());
+    assertTrue(page.items().get(0).system());
+    assertEquals("구매자님이 채팅방을 나갔어요.", page.items().get(0).content());
+  }
+
+  @Test
+  void leaverCannotReadRoomAnymore() {
+    when(roomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room()));
+    when(leaveRepository.findLeftAt(ROOM_ID, BUYER_ID)).thenReturn(Optional.of(NOW));
+
+    assertThrows(CommonException.class, () -> service.listMessages(ROOM_ID, BUYER_ID, 0, 20));
+  }
+
+  @Test
+  void cannotSendMessageAfterCounterpartyLeft() {
+    when(roomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room()));
+    when(leaveRepository.findLeftAt(ROOM_ID, BUYER_ID)).thenReturn(Optional.empty());
+    when(leaveRepository.findLeftAt(ROOM_ID, SELLER_ID)).thenReturn(Optional.of(NOW));
+
+    assertThrows(CommonException.class, () -> service.sendMessage(ROOM_ID, BUYER_ID, "안녕"));
+
+    verify(messageRepository, never()).append(anyLong(), anyLong(), any());
   }
 
   private ChatListingSnapshot activeListing() {

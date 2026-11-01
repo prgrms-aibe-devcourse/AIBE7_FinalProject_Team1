@@ -85,14 +85,45 @@ test('이전 방의 정지된 폴링과 finally가 새 방의 갱신·busy 상�
   assert.equal(s.calls.filter(x => x.path.includes('/chat-rooms/2/messages?')).length, count + 1);
 });
 
+/** 나가기 확인 팝업(body 끝에 추가됨)에서 '나가기' 또는 '취소'를 누른다. 대역 DOM은 innerHTML을 해석하지 않으므로 클릭 대상을 직접 지정한다. */
+async function answerLeaveConfirm(s, ok) {
+  const overlay = s.document.body.children.at(-1);
+  const choice = ok ? '[data-confirm-ok]' : '[data-confirm-cancel]';
+  await overlay.emit('click', { target: { closest: selector => selector === choice ? {} : null } });
+  await flush();
+}
+
+/** 나가기 버튼 클릭은 deals.js가 document에서 위임 처리하므로, 대역 DOM에는 버블링 대신 문서로 직접 보낸다. */
+async function clickLeave(s) {
+  await s.document.emit('click', undefined, { target: { closest: selector => selector === '#deals [data-deals-leave]' ? {} : null } });
+  await flush();
+}
+
+/** 나가기 확인 팝업이 붙을 수 있도록 대역 문서에 body를 만든다. */
+function withBody(s) {
+  s.document.body = s.document.createElement('body');
+  s.document.root.append(s.document.body);
+  return s;
+}
+
 test('방을 나가면 메시지·완료 확인·갱신을 정리하고 모바일 목록을 복구한다', async () => {
-  const s = await screen(); await s.select(0);
+  const s = withBody(await screen()); await s.select(0);
   assert.equal(s.grid.classList.contains('dl-has-room'), true);
-  await s.nodes.leave.emit('click');
+  await clickLeave(s);
+  await answerLeaveConfirm(s, true);
+  assert.equal(s.calls.some(x => x.path === '/api/v1/chat-rooms/1' && x.options.method === 'DELETE'), true);
   assert.equal(s.grid.classList.contains('dl-has-room'), false);
   assert.equal(s.nodes['chat-section'].style.display, 'none');
   assert.equal(s.intervals.size, 0);
   assert.ok(s.state.cleared > 0);
+});
+
+test('나가기 확인에서 취소하면 서버 요청 없이 대화를 그대로 유지한다', async () => {
+  const s = withBody(await screen()); await s.select(0);
+  await clickLeave(s);
+  await answerLeaveConfirm(s, false);
+  assert.equal(s.calls.some(x => x.options.method === 'DELETE'), false);
+  assert.equal(s.grid.classList.contains('dl-has-room'), true);
 });
 
 test('문의 POST 중 다른 판매글로 이동하면 이전 대화로 이동하지 않는다', async () => {

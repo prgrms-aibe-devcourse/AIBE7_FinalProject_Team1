@@ -106,13 +106,56 @@
     const infoSection = find('[data-deals-info]'); if (infoSection) infoSection.style.display = 'none';
   }
 
-  /** 대화방 나가기는 서버 기록을 삭제하지 않고 현재 화면과 조회만 닫는다. */
-  function leaveRoom() {
+  /**
+   * 대화방 나가기: 확인을 받은 뒤 서버에 나가기를 요청한다. 내 목록에서 방이 사라지고 상대방에게는 나갔다는 안내가 남는다.
+   * 서버 요청이 성공한 뒤에만 화면을 닫아, 실패하면 대화가 그대로 남는다.
+   */
+  /** 브라우저 기본 confirm 대신 페이지 안 팝업으로 나가기를 한 번 더 확인한다. 일부 내장 브라우저는 confirm을 조용히 막는다. */
+  function confirmLeave() {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'dl-confirm';
+      overlay.innerHTML = '<div class="dl-confirm-box" role="dialog" aria-modal="true" aria-label="채팅방 나가기 확인">'
+        + '<b>채팅방을 나갈까요?</b>'
+        + '<p>나가면 이 채팅방과 대화 내용이 삭제돼요.<br>상대방에게는 나갔다는 안내가 표시됩니다.</p>'
+        + '<div class="dl-confirm-actions"><button type="button" class="sc-btn" data-confirm-cancel>취소</button>'
+        + '<button type="button" class="sc-btn danger" data-confirm-ok>나가기</button></div></div>';
+      const onKey = (e) => { if (e.key === 'Escape') done(false); };
+      const done = (value) => { overlay.remove(); document.removeEventListener('keydown', onKey); resolve(value); };
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay || e.target.closest('[data-confirm-cancel]')) done(false);
+        else if (e.target.closest('[data-confirm-ok]')) done(true);
+      });
+      document.addEventListener('keydown', onKey);
+      document.body.appendChild(overlay);
+      overlay.querySelector('[data-confirm-cancel]')?.focus();
+    });
+  }
+
+  async function leaveRoom() {
+    const scope = roomScope;
+    if (!scope || !roomCurrent(scope)) return;
+    if (!(await confirmLeave())) return;
+    try {
+      await api(`/api/v1/chat-rooms/${scope.room.roomId}`, { method: 'DELETE' });
+    } catch (e) {
+      if (e.status === 401) { resetDeals(); return; }
+      // alert가 막힌 환경에서도 보이도록 대화창 안에도 실패 안내를 남긴다.
+      const box = find('[data-deals-messages]');
+      if (box) {
+        const fail = document.createElement('div');
+        fail.className = 'msg-system';
+        fail.textContent = '채팅방을 나가지 못했어요: ' + e.message;
+        box.appendChild(fail);
+        box.scrollTop = box.scrollHeight;
+      }
+      return;
+    }
     closeRoom();
     find('[data-deals-messages]')?.replaceChildren();
     const chatSection = find('[data-deals-chat-section]'); if (chatSection) chatSection.style.display = 'none';
     const infoSection = find('[data-deals-info]'); if (infoSection) infoSection.style.display = 'none';
-    renderRoomList();
+    loadRooms();
   }
 
   /** 서버가 허용한 대화 목록을 그린다. 판매글 상태와 상대방 문자열은 화면 출력용으로만 사용한다. */
@@ -178,8 +221,8 @@
       if (!roomCurrent(scope)) return;
       renderMessages(messages);
 
-      if (messages.length > 0) {
-        const lastMsg = messages[messages.length - 1];
+      if (messages.some((m) => !m.system)) {
+        const lastMsg = messages.filter((m) => !m.system).pop();
         await api(`/api/v1/chat-rooms/${roomId}/read-position`, {
           method: 'PUT',
           signal: scope.controller.signal,
@@ -204,6 +247,13 @@
     container.replaceChildren();
 
     messages.forEach((msg) => {
+      if (msg.system) {
+        const notice = document.createElement('div');
+        notice.className = 'msg-system';
+        notice.textContent = msg.content;
+        container.appendChild(notice);
+        return;
+      }
       const isMe = currentUserId != null && msg.senderId === currentUserId;
       const box = document.createElement('div');
       box.className = 'msg ' + (isMe ? 'me' : 'you');
@@ -211,6 +261,13 @@
       box.innerHTML = `<p>${escapeHtml(msg.content)}</p><time>${timeStr}</time>`;
       container.appendChild(box);
     });
+
+    // 상대방이 나갔다는 안내가 있으면 더 이상 메시지를 보낼 수 없다.
+    const partnerLeft = messages.some((m) => m.system && m.senderId !== currentUserId);
+    const input = find('[data-deals-input]');
+    const send = find('[data-deals-send]');
+    if (input) { input.disabled = partnerLeft; input.placeholder = partnerLeft ? '상대방이 나간 채팅방이에요' : '메시지를 입력하세요'; }
+    if (send && partnerLeft) send.disabled = true;
 
     container.scrollTop = container.scrollHeight;
   }
@@ -431,7 +488,6 @@
     find('[data-deals-back]')?.addEventListener('click', closeRoom);
     const input = find('[data-deals-input]');
     sendBtn?.addEventListener('click', sendMessage);
-    find('[data-deals-leave]')?.addEventListener('click', leaveRoom);
     input?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -514,6 +570,11 @@
   document.addEventListener('pastport:auth-changed', (event) => {
     resetDeals();
     if (event.detail?.signedIn && document.querySelector('#deals.active')) activate();
+  });
+
+  // 나가기 버튼은 화면 HTML이 다시 그려져도 동작하도록 문서 전체에서 위임해 처리한다.
+  document.addEventListener('click', (e) => {
+    if (e.target.closest?.('#deals [data-deals-leave]')) leaveRoom();
   });
 
   window.PastportDeals = Object.freeze({

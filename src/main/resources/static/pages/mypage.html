@@ -8,10 +8,18 @@
 
 <div data-mp="member" hidden>
   <section class="sc-card mp-profile" aria-label="내 계정">
-    <span class="mp-avatar" data-mp-field="initial" aria-hidden="true"></span>
+    <span class="mp-avatar">
+      <img data-mp-img alt="내 프로필 사진" hidden>
+      <span data-mp-field="initial" aria-hidden="true"></span>
+    </span>
     <div class="mp-who">
       <strong data-mp-field="nickname"></strong>
       <span data-mp-field="email"></span>
+      <div class="mp-photo-actions">
+        <label class="mp-photo-btn">사진 변경<input type="file" accept="image/png,image/jpeg,image/webp" data-mp-file hidden></label>
+        <button type="button" class="mp-photo-btn" data-mp-remove hidden>삭제</button>
+      </div>
+      <small class="mp-photo-msg" data-mp-msg hidden></small>
     </div>
     <button type="button" class="sc-btn" data-auth-logout>로그아웃</button>
   </section>

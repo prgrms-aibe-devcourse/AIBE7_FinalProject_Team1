@@ -79,3 +79,7 @@
     width: 180px;
   }
 }
+
+/* 사이드바가 있는 모든 화면: 본문을 사이드바 쪽에 붙이고 같은 폭을 써서 화면을 옮겨도 위치·크기가 흔들리지 않게 한다. */
+:is(#home,#passport,#register,#documents,#market,#my-listings,#sell,#auth,#signup,#mypage,#docmask,#detail,#deals,#receive,#trade,#ai).page{max-width:1360px;margin:0 auto 0 0}
+.product-register,.product-detail-shell{max-width:none}
