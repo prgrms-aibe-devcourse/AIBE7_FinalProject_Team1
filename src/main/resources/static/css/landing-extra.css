@@ -150,3 +150,7 @@
 /* 찾기 영역 가로폭을 위(히어로)·아래(카테고리)와 같게. 세로 간격은 그대로 */
 .lpx-find{padding-left:0;padding-right:0}
 .lpx-find-card{max-width:none}
+/* 현재 MVP는 노트북만 제공한다. 나머지 가전 카테고리는 준비 중이라 흐리게 표시하고 선택하지 못하게 한다. */
+.lpx-find-row option:disabled{color:#a6a8ad}
+.lpx-find-cats a.is-soon,.lpx-find-cats a.is-soon:hover,.lpx-find-cats a.is-soon:focus-visible{opacity:.4;cursor:not-allowed;pointer-events:none;border-color:var(--line);color:var(--ink)}
+.lpx-cats a.is-soon,.lpx-cats a.is-soon:hover,.lpx-cats a.is-soon:focus-visible{opacity:.4;cursor:not-allowed;pointer-events:none;transform:none;border-color:var(--line)}

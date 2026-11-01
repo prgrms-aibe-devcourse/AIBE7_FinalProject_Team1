@@ -128,7 +128,7 @@
       });
       document.addEventListener('keydown', onKey);
       document.body.appendChild(overlay);
-      overlay.querySelector('[data-confirm-cancel]').focus();
+      overlay.querySelector('[data-confirm-cancel]')?.focus();
     });
   }
 

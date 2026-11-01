@@ -18,19 +18,19 @@
         <button type="button" role="tab" aria-selected="false" data-find-tab="category">카테고리별로 찾고 있어요</button>
       </div>
       <form class="lpx-find-row" data-find-form data-find-panel="want" role="tabpanel">
-        <select name="category" aria-label="카테고리" data-find-category><option value="">카테고리 전체</option><option value="LAPTOP">노트북</option><option value="MOBILE">스마트폰·태블릿</option><option value="DISPLAY">TV·모니터</option><option value="LARGE_APPLIANCE">냉장고·세탁기</option><option value="CLEANING_AIR">청소기·공기청정기</option><option value="CLIMATE">에어컨·난방</option><option value="KITCHEN">주방가전</option><option value="AUDIO_GAME">오디오·게임기</option></select>
+        <select name="category" aria-label="카테고리" data-find-category><option value="">카테고리 전체</option><option value="LAPTOP">노트북</option><option value="MOBILE" disabled>스마트폰·태블릿</option><option value="DISPLAY" disabled>TV·모니터</option><option value="LARGE_APPLIANCE" disabled>냉장고·세탁기</option><option value="CLEANING_AIR" disabled>청소기·공기청정기</option><option value="CLIMATE" disabled>에어컨·난방</option><option value="KITCHEN" disabled>주방가전</option><option value="AUDIO_GAME" disabled>오디오·게임기</option></select>
         <select name="manufacturer" aria-label="제조사" data-find-maker><option value="">제조사 전체</option></select>
         <select name="minConditionGrade" aria-label="최소 상태 등급"><option value="">상태 등급 전체</option><option value="5">5등급 (최상)</option><option value="4">4등급 이상</option><option value="3">3등급 이상</option></select>
         <button type="submit" class="lpx-find-go">검색하기</button>
       </form>
       <form class="lpx-find-row" data-find-form data-find-panel="budget" role="tabpanel" hidden>
-        <select name="category" aria-label="카테고리"><option value="">카테고리 전체</option><option value="LAPTOP">노트북</option><option value="MOBILE">스마트폰·태블릿</option><option value="DISPLAY">TV·모니터</option><option value="LARGE_APPLIANCE">냉장고·세탁기</option><option value="CLEANING_AIR">청소기·공기청정기</option><option value="CLIMATE">에어컨·난방</option><option value="KITCHEN">주방가전</option><option value="AUDIO_GAME">오디오·게임기</option></select>
+        <select name="category" aria-label="카테고리"><option value="">카테고리 전체</option><option value="LAPTOP">노트북</option><option value="MOBILE" disabled>스마트폰·태블릿</option><option value="DISPLAY" disabled>TV·모니터</option><option value="LARGE_APPLIANCE" disabled>냉장고·세탁기</option><option value="CLEANING_AIR" disabled>청소기·공기청정기</option><option value="CLIMATE" disabled>에어컨·난방</option><option value="KITCHEN" disabled>주방가전</option><option value="AUDIO_GAME" disabled>오디오·게임기</option></select>
         <select name="minPrice" aria-label="최소 가격"><option value="">최소 가격</option><option value="100000">10만원</option><option value="300000">30만원</option><option value="500000">50만원</option><option value="1000000">100만원</option><option value="2000000">200만원</option><option value="3000000">300만원</option></select>
         <select name="maxPrice" aria-label="최대 가격"><option value="">최대 가격</option><option value="100000">10만원</option><option value="300000">30만원</option><option value="500000">50만원</option><option value="1000000">100만원</option><option value="2000000">200만원</option><option value="3000000">300만원</option></select>
         <button type="submit" class="lpx-find-go">검색하기</button>
       </form>
       <div class="lpx-find-row lpx-find-cats" data-find-panel="category" role="tabpanel" hidden>
-        <a href="/?market=1&category=LAPTOP">노트북</a><a href="/?market=1&category=MOBILE">스마트폰·태블릿</a><a href="/?market=1&category=DISPLAY">TV·모니터</a><a href="/?market=1&category=LARGE_APPLIANCE">냉장고·세탁기</a><a href="/?market=1&category=CLEANING_AIR">청소기·공기청정기</a><a href="/?market=1&category=CLIMATE">에어컨·난방</a><a href="/?market=1&category=KITCHEN">주방가전</a><a href="/?market=1&category=AUDIO_GAME">오디오·게임기</a>
+        <a href="/?market=1&category=LAPTOP">노트북</a><a class="is-soon" aria-disabled="true" tabindex="-1" title="준비 중입니다">스마트폰·태블릿</a><a class="is-soon" aria-disabled="true" tabindex="-1" title="준비 중입니다">TV·모니터</a><a class="is-soon" aria-disabled="true" tabindex="-1" title="준비 중입니다">냉장고·세탁기</a><a class="is-soon" aria-disabled="true" tabindex="-1" title="준비 중입니다">청소기·공기청정기</a><a class="is-soon" aria-disabled="true" tabindex="-1" title="준비 중입니다">에어컨·난방</a><a class="is-soon" aria-disabled="true" tabindex="-1" title="준비 중입니다">주방가전</a><a class="is-soon" aria-disabled="true" tabindex="-1" title="준비 중입니다">오디오·게임기</a>
       </div>
     </div>
   </section>
@@ -45,13 +45,13 @@
     <div class="landing-section-head lpx-reveal"><div><h2>카테고리</h2><p>카테고리별로 판매 중인 제품을 모아 봐요.</p></div></div>
   <div class="lpx-cats lpx-reveal">
     <a href="/?market=1&category=LAPTOP"><i aria-hidden="true">▭</i><span>노트북</span></a>
-    <a href="/?market=1&category=MOBILE"><i aria-hidden="true">▯</i><span>스마트폰·태블릿</span></a>
-    <a href="/?market=1&category=DISPLAY"><i aria-hidden="true">▬</i><span>TV·모니터</span></a>
-    <a href="/?market=1&category=LARGE_APPLIANCE"><i aria-hidden="true">▥</i><span>냉장고·세탁기</span></a>
-    <a href="/?market=1&category=CLEANING_AIR"><i aria-hidden="true">◌</i><span>청소기·공기청정기</span></a>
-    <a href="/?market=1&category=CLIMATE"><i aria-hidden="true">❄</i><span>에어컨·난방</span></a>
-    <a href="/?market=1&category=KITCHEN"><i aria-hidden="true">◍</i><span>주방가전</span></a>
-    <a href="/?market=1&category=AUDIO_GAME"><i aria-hidden="true">◐</i><span>오디오·게임기</span></a>
+    <a class="is-soon" aria-disabled="true" tabindex="-1" title="준비 중입니다"><i aria-hidden="true">▯</i><span>스마트폰·태블릿</span></a>
+    <a class="is-soon" aria-disabled="true" tabindex="-1" title="준비 중입니다"><i aria-hidden="true">▬</i><span>TV·모니터</span></a>
+    <a class="is-soon" aria-disabled="true" tabindex="-1" title="준비 중입니다"><i aria-hidden="true">▥</i><span>냉장고·세탁기</span></a>
+    <a class="is-soon" aria-disabled="true" tabindex="-1" title="준비 중입니다"><i aria-hidden="true">◌</i><span>청소기·공기청정기</span></a>
+    <a class="is-soon" aria-disabled="true" tabindex="-1" title="준비 중입니다"><i aria-hidden="true">❄</i><span>에어컨·난방</span></a>
+    <a class="is-soon" aria-disabled="true" tabindex="-1" title="준비 중입니다"><i aria-hidden="true">◍</i><span>주방가전</span></a>
+    <a class="is-soon" aria-disabled="true" tabindex="-1" title="준비 중입니다"><i aria-hidden="true">◐</i><span>오디오·게임기</span></a>
   </div>
 
   <div class="landing-section-head"><div><h2>방금 올라온 상품</h2><p>판매 중인 가전제품을 최신순으로 보여드려요.</p></div><button data-page="market">전체 보기 →</button></div>
