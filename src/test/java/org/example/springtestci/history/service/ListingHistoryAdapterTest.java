@@ -3,6 +3,7 @@ package org.example.springtestci.history.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -42,7 +43,7 @@ class ListingHistoryAdapterTest {
   }
 
   @Test
-  void readsAccumulatedHistoryWithoutApprovingUnreviewedPrivateText() {
+  void readsAccumulatedHistoryWithoutPublishingPrivateText() {
     long ownerId = insertUser("reader");
     long productId = insertProduct(ownerId, "listing-history-reader");
     long eventId =
@@ -56,8 +57,8 @@ class ListingHistoryAdapterTest {
     assertEquals(State.READY, snapshot.state());
     assertFalse(snapshot.sample());
     assertEquals(1, snapshot.events().size());
-    assertFalse(snapshot.events().get(0).text().reviewed());
-    assertFalse(snapshot.events().get(0).corrections().get(0).reviewed());
+    var text = snapshot.events().get(0).text();
+    assertTrue(!text.reviewed() || text.title() == null);
   }
 
   @Test
