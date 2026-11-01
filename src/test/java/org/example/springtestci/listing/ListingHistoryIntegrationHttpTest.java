@@ -47,6 +47,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -268,6 +270,29 @@ class ListingHistoryIntegrationHttpTest {
     assertTrue(items.get(2).get("systemGenerated").asBoolean());
     assertFalse(items.get(2).get("previousOwner").asBoolean());
     assertPrivateFieldsAbsent(response.body());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"010\u20111234\u20115678", "010-\n1234-5678", "수리비 50000"})
+  void unusualContactsAndBareCostsCannotReachBuyerDetailsOrAiInputs(String value) throws Exception {
+    jdbc.update(
+        "UPDATE product_events SET title='배터리 점검',content=?,service_provider='공식 서비스센터',replaced_part='배터리' WHERE id=2",
+        value);
+    jdbc.update("UPDATE audit_logs SET reason=? WHERE id=101", value);
+    var response = data(get("/api/v1/listings/11", "2")).at("/history/items/0");
+    assertEquals("배터리 점검", response.get("title").asString());
+    assertEquals("공식 서비스센터", response.get("serviceProvider").asString());
+    assertEquals("배터리", response.get("replacedPart").asString());
+    assertTrue(response.get("content").isNull());
+    assertTrue(response.at("/corrections/1/reason").isNull());
+    assertEquals("EXCLUDED", response.at("/corrections/1/detailsStatus").asString());
+    readySummary();
+    assertTrue(aiEvent(2).get("content").isNull());
+    assertFalse(AI_INPUT.get().contains(value));
+    assertEquals(
+        value, jdbc.queryForObject("SELECT content FROM product_events WHERE id=2", String.class));
+    assertEquals(
+        value, jdbc.queryForObject("SELECT reason FROM audit_logs WHERE id=101", String.class));
   }
 
   @Test

@@ -14,6 +14,9 @@ final class ProductQuestionGroundedAnswer {
   private static final JsonMapper JSON = JsonMapper.builder().build();
   private static final String NOTICE =
       "조회한 이력에 무효 처리된 기록이 포함되어 있어요. 무효 기록은 실제 발생 사실의 근거로 사용하지 않아요.";
+  private static final int MAX_LENGTH = 2000;
+  private static final String PARTIAL_NOTICE =
+      "답변에는 일부 근거 또는 상세만 담았어요. 답변 아래 근거와 전체 이력을 함께 확인해 주세요.";
 
   private ProductQuestionGroundedAnswer() {}
 
@@ -35,93 +38,117 @@ final class ProductQuestionGroundedAnswer {
     for (var item : delivered) {
       if (selected.size() < 20) selected.putIfAbsent(item.key(), item);
     }
-    List<String> lines = new ArrayList<>();
-    lines.add(NOTICE);
-    String warrantyNotice = missingWarranty ? "보증 만료일이 등록되지 않아 현재 보증 여부를 확인할 수 없어요." : "";
-    if (!warrantyNotice.isEmpty()) lines.add(warrantyNotice);
+    var text = new AnswerText(selected.size() < delivered.size());
+    text.add(NOTICE);
+    if (missingWarranty) text.add("보증 만료일이 등록되지 않아 현재 보증 여부를 확인할 수 없어요.");
+    // 이력의 존재·무효 여부를 먼저 남긴다. 긴 상세 하나 때문에 다른 사건의 상태까지 사라지지 않게 한다.
     for (var item : selected.values()) {
+      if (!"EVENT".equals(item.type())) continue;
       var facts = JSON.valueToTree(item.facts());
-      switch (item.type()) {
-        case "SPECS" -> lines.add(specs(facts));
-        case "WARRANTY" ->
-            lines.add("등록된 보증 만료일은 " + facts.path("warrantyExpiresOn").asString() + "이에요.");
-        case "EVENT" -> {
-          String label =
-              switch (facts.path("type").asString()) {
-                case "PURCHASE" -> "구매";
-                case "INSPECTION" -> "점검";
-                case "REPAIR" -> "수리";
-                case "PART_REPLACEMENT" -> "부품 교체";
-                case "SPEC_CHANGE" -> "사양 변경";
-                case "TRANSFER" -> "소유권 이전";
-                default -> "제품";
-              };
-          String record = facts.path("occurredOn").asString() + " " + label + " 기록";
-          if (voided(item)) lines.add(record + "은 무효 처리되어 실제 발생 여부를 확인할 수 없어요.");
-          else {
-            String corrected = facts.path("corrected").asBoolean() ? "정정된 " : "";
-            lines.add(corrected + record + "이 등록되어 있어요." + publicDetails(facts));
-          }
-        }
-        default -> {}
+      String record = recordLabel(facts);
+      if (voided(item)) text.add(record + "은 무효 처리되어 실제 발생 여부를 확인할 수 없어요.");
+      else {
+        String corrected = facts.path("corrected").asBoolean() ? "정정된 " : "";
+        String detail = facts.path("detailsReviewed").asBoolean() ? "" : " 공개된 세부 내용은 확인할 수 없어요.";
+        text.add(corrected + record + "이 등록되어 있어요." + detail);
       }
     }
-    String partial =
-        selected.size() < delivered.size() ? "\n답변에는 일부 근거만 담았어요. 전체 이력도 함께 확인해 주세요." : "";
-    String text = String.join("\n", lines) + partial;
-    // 긴 공개 내용을 잘라 다른 의미로 만들지 않고, 안내와 실제 근거 목록을 제공한다.
-    if (text.length() > 2000)
-      text =
-          NOTICE
-              + " "
-              + warrantyNotice
-              + " 공개된 상세가 없는 유효 이력은 세부 내용을 확인할 수 없어요. 제품 사양과 이력 근거를 함께 확인해 주세요."
-              + partial;
-    return new Result(text, List.copyOf(selected.values()));
+    for (var item : selected.values()) {
+      var facts = JSON.valueToTree(item.facts());
+      if ("SPECS".equals(item.type())) addSpecs(text, facts);
+      else if ("WARRANTY".equals(item.type()))
+        text.add("등록된 보증 만료일은 " + facts.path("warrantyExpiresOn").asString() + "이에요.");
+    }
+    // 짧은 공개 제목·부품을 본문보다 먼저 담는다. 한도를 넘는 필드는 통째로 생략해 문장을 자르지 않는다.
+    for (var item : selected.values()) {
+      if (!"EVENT".equals(item.type())) continue;
+      var facts = JSON.valueToTree(item.facts());
+      addPublicDetail(text, facts, "title", "공개 제목", 200);
+      addPublicDetail(text, facts, "replacedPart", "교체 부품", 200);
+    }
+    for (var item : selected.values()) {
+      if ("EVENT".equals(item.type()))
+        addPublicDetail(text, JSON.valueToTree(item.facts()), "content", "공개 내용", 2000);
+    }
+    return new Result(text.finish(), List.copyOf(selected.values()));
   }
 
   private static boolean voided(Evidence item) {
     return "EVENT".equals(item.type()) && "VOID".equals(item.facts().get("status"));
   }
 
-  /** 무효 안내를 서버가 재구성할 때도 유효 이력의 자동 검사된 공개 내용은 유지한다. */
-  private static String publicDetails(JsonNode facts) {
-    if (!facts.path("detailsReviewed").asBoolean()) return " 공개된 세부 내용은 확인할 수 없어요.";
-    List<String> values = new ArrayList<>();
-    for (String field : List.of("title", "content", "replacedPart")) {
-      var value = facts.path(field);
-      if (value.isString()) {
-        String text =
-            PublicHistoryTextPolicy.clean(value.asString(), "content".equals(field) ? 2000 : 200);
-        if (text != null) values.add(text);
-      }
-    }
-    return values.isEmpty() ? "" : " 등록된 공개 내용: " + String.join(" · ", values);
+  private static String recordLabel(JsonNode facts) {
+    String label =
+        switch (facts.path("type").asString()) {
+          case "PURCHASE" -> "구매";
+          case "INSPECTION" -> "점검";
+          case "REPAIR" -> "수리";
+          case "PART_REPLACEMENT" -> "부품 교체";
+          case "SPEC_CHANGE" -> "사양 변경";
+          case "TRANSFER" -> "소유권 이전";
+          default -> "제품";
+        };
+    return facts.path("occurredOn").asString() + " " + label + " 기록";
   }
 
-  private static String specs(JsonNode facts) {
-    List<String> values = new ArrayList<>();
-    add(values, facts, "manufacturer", "제조사 ", "");
-    add(values, facts, "modelName", "모델 ", "");
+  /** 무효 본문은 사용하지 않으며 공개 필드 검사도 다시 적용한다. 원래 근거 데이터는 자르지 않는다. */
+  private static void addPublicDetail(
+      AnswerText text, JsonNode facts, String field, String label, int max) {
+    if (!"VALID".equals(facts.path("status").asString())
+        || !facts.path("detailsReviewed").asBoolean()) return;
+    var value = facts.path(field);
+    if (!value.isString()) return;
+    String allowed = PublicHistoryTextPolicy.clean(value.asString(), max);
+    if (allowed != null) text.add(recordLabel(facts) + " · " + label + ": " + allowed);
+  }
+
+  private static void addSpecs(AnswerText text, JsonNode facts) {
+    boolean visible = add(text, facts, "manufacturer", "제조사 ", "");
+    visible |= add(text, facts, "modelName", "모델 ", "");
     var specs = facts.path("specifications");
-    add(values, specs, "cpu", "CPU ", "");
-    add(values, specs, "gpu", "GPU ", "");
-    add(values, specs, "ramGb", "메모리 ", "GB");
-    add(values, specs, "storageGb", "저장 용량 ", "GB");
-    add(values, specs, "storageType", "저장 방식 ", "");
-    add(values, specs, "display", "화면 ", "");
-    add(values, specs, "os", "운영체제 ", "");
-    add(values, specs, "batteryHealthPercent", "배터리 상태 ", "%");
-    return values.isEmpty()
-        ? "등록된 세부 사양을 확인할 수 없어요."
-        : "등록된 사양: " + String.join(", ", values) + ".";
+    visible |= add(text, specs, "cpu", "CPU ", "");
+    visible |= add(text, specs, "gpu", "GPU ", "");
+    visible |= add(text, specs, "ramGb", "메모리 ", "GB");
+    visible |= add(text, specs, "storageGb", "저장 용량 ", "GB");
+    visible |= add(text, specs, "storageType", "저장 방식 ", "");
+    visible |= add(text, specs, "display", "화면 ", "");
+    visible |= add(text, specs, "os", "운영체제 ", "");
+    visible |= add(text, specs, "batteryHealthPercent", "배터리 상태 ", "%");
+    if (!visible) text.add("등록된 세부 사양은 답변 아래 근거에서 확인해 주세요.");
   }
 
-  private static void add(
-      List<String> values, JsonNode data, String field, String label, String unit) {
+  private static boolean add(
+      AnswerText text, JsonNode data, String field, String label, String unit) {
     var value = data.path(field);
     if ((value.isString() || value.isNumber()) && !value.asString().isBlank())
-      values.add(label + value.asString() + unit);
+      return text.add("등록된 사양 · " + label + value.asString() + unit + ".");
+    return false;
+  }
+
+  /** 생략 안내를 위한 공간을 미리 확보하고, 들어갈 수 있는 완전한 항목만 누적한다. */
+  private static final class AnswerText {
+    private final List<String> lines = new ArrayList<>();
+    private int length;
+    private boolean omitted;
+
+    private AnswerText(boolean omitted) {
+      this.omitted = omitted;
+    }
+
+    private boolean add(String line) {
+      int added = line.length() + (lines.isEmpty() ? 0 : 1);
+      if (length + added > MAX_LENGTH - PARTIAL_NOTICE.length() - 1) {
+        omitted = true;
+        return false;
+      }
+      lines.add(line);
+      length += added;
+      return true;
+    }
+
+    private String finish() {
+      return String.join("\n", lines) + (omitted ? "\n" + PARTIAL_NOTICE : "");
+    }
   }
 
   record Result(String text, List<Evidence> evidence) {}

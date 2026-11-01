@@ -2,6 +2,8 @@ package org.example.springtestci.listing;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.time.Instant;
+import org.example.springtestci.listing.service.ListingHistoryReader.Correction;
 import org.example.springtestci.listing.service.ListingHistoryReader.PublicText;
 import org.example.springtestci.listing.service.PublicHistoryTextPolicy;
 import org.junit.jupiter.api.Test;
@@ -54,6 +56,38 @@ class PublicHistoryTextPolicyTest {
         "비공개\u0001내용"
       })
   void excludesTheWholeSensitiveFieldRatherThanPretendingPartialRedactionIsComplete(String value) {
+    assertNull(PublicHistoryTextPolicy.clean(value, 2000));
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "010\u20111234\u20115678", "010\u20131234\u20135678", "010\u22121234\u22125678",
+        "010-\n1234-5678", "010 -\n 1234-\t5678", "+82\u201110\u20111234\u20115678",
+        "900101\u20111234567", "카드 1234\u20115678\u20119012\u20113456"
+      })
+  void unicodeAndMultilineContactsAreExcludedAtThePublicDtoBoundary(String value) {
+    var text = new PublicText("배터리 점검", value, "공식 서비스센터", "배터리", true);
+    assertNull(text.content());
+    assertNull(new Correction(1, Instant.EPOCH, value, true).reason());
+    assertEquals("배터리 점검", text.title());
+    assertEquals("공식 서비스센터", text.serviceProvider());
+    assertEquals("배터리", text.replacedPart());
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "수리비 50000",
+        "구매금액 50000",
+        "구매 금액 50,000",
+        "비용 50000",
+        "금액 50000",
+        "repair cost 50000",
+        "purchase price 50000",
+        "수리비 5만 원"
+      })
+  void costLabelsAreExcludedEvenWhenTheCurrencyUnitIsMissing(String value) {
     assertNull(PublicHistoryTextPolicy.clean(value, 2000));
   }
 

@@ -72,6 +72,91 @@ class ProductQuestionGroundedAnswerTest {
   }
 
   @Test
+  void aLongPublicBodyDoesNotRemoveShortEventDetailsSpecsOrWarranty() {
+    String longBody = "긴본문".repeat(650) + " 충전 불량은 확인되지 않았습니다.";
+    assertTrue(longBody.length() <= 2000);
+    var valid =
+        new Evidence(
+            "event:2",
+            "EVENT",
+            "점검",
+            Map.of(
+                "eventId",
+                2,
+                "type",
+                "INSPECTION",
+                "status",
+                "VALID",
+                "occurredOn",
+                "2026-09-18",
+                "detailsReviewed",
+                true,
+                "title",
+                "배터리 점검",
+                "content",
+                longBody,
+                "replacedPart",
+                "배터리"));
+    var specs = new Evidence("specs", "SPECS", "사양", Map.of("specifications", Map.of("ramGb", 18)));
+    var warranty =
+        new Evidence("warranty", "WARRANTY", "보증", Map.of("warrantyExpiresOn", "2027-02-12"));
+    var result =
+        ProductQuestionGroundedAnswer.compose(
+            List.of(valid), List.of(event(1, "VOID"), valid, specs, warranty), false);
+    assertTrue(result.text().length() <= 2000);
+    assertTrue(result.text().contains("무효"));
+    assertTrue(result.text().contains("배터리 점검"));
+    assertTrue(result.text().contains("교체 부품") && result.text().contains("배터리"));
+    assertTrue(result.text().contains("18GB"));
+    assertTrue(result.text().contains("2027-02-12"));
+    assertTrue(result.text().contains("일부"));
+    assertFalse(result.text().contains("긴본문"));
+    assertEquals(4, result.evidence().size());
+  }
+
+  @Test
+  void aLongSpecDoesNotDiscardOtherSpecFieldsOrPublicEventContents() {
+    var valid =
+        new Evidence(
+            "event:2",
+            "EVENT",
+            "점검",
+            Map.of(
+                "eventId",
+                2,
+                "type",
+                "INSPECTION",
+                "status",
+                "VALID",
+                "occurredOn",
+                "2026-09-18",
+                "detailsReviewed",
+                true,
+                "content",
+                "충전 동작 점검 완료"));
+    var specs =
+        new Evidence(
+            "specs",
+            "SPECS",
+            "사양",
+            Map.of(
+                "modelName",
+                "시험 모델",
+                "specifications",
+                Map.of("cpu", "Z".repeat(2000), "ramGb", 18, "storageGb", 512)));
+    var result =
+        ProductQuestionGroundedAnswer.compose(
+            List.of(valid), List.of(event(1, "VOID"), valid, specs), true);
+    assertTrue(result.text().length() <= 2000);
+    assertTrue(result.text().contains("18GB"));
+    assertTrue(result.text().contains("512GB"));
+    assertTrue(result.text().contains("시험 모델"));
+    assertTrue(result.text().contains("충전 동작 점검 완료"));
+    assertTrue(result.text().contains("보증 만료일이 등록되지 않아"));
+    assertFalse(result.text().contains("ZZZ"));
+  }
+
+  @Test
   void showsOnlyRegisteredWarrantyDateWhenWarrantyWasActuallyQueried() {
     var warranty =
         new Evidence(

@@ -204,6 +204,33 @@ class ProductQuestionHttpTest {
   }
 
   @Test
+  void longGroundedAnswerKeepsShortFactsAndLeavesFullPublicBodyInEvidence() throws Exception {
+    String longBody = "긴본문".repeat(650) + " 충전 불량은 확인되지 않았습니다.";
+    jdbc.update(
+        "UPDATE product_events SET title='배터리 점검',content=?,replaced_part='배터리' WHERE id=501",
+        longBody);
+    jdbc.update(
+        "INSERT INTO product_events(id,product_id,author_id,event_type,occurred_on,title,status) VALUES(502,101,1,'REPAIR',DATE '2025-05-19','무효 기록','VOID')");
+    TOOLS.set(List.of("get_product_history", "get_product_specs", "get_product_warranty"));
+    var response = post(LISTING, "2", "배터리 점검 기록과 사양, 보증을 알려줘");
+    assertEquals(200, response.statusCode(), response.body());
+    var result = data(response);
+    String answer = result.path("answer").asString();
+    assertTrue(answer.length() <= 2000);
+    for (String expected : List.of("무효", "배터리 점검", "교체 부품", "18GB", "2027-02-12", "일부"))
+      assertTrue(answer.contains(expected), expected);
+    assertFalse(answer.contains("긴본문"));
+    JsonNode evidence = null;
+    for (var source : result.path("sources"))
+      if ("event:501".equals(source.path("key").asString())) evidence = source;
+    assertNotNull(evidence);
+    assertEquals(longBody, evidence.at("/facts/content").asString());
+    assertEquals(
+        longBody,
+        jdbc.queryForObject("SELECT content FROM product_events WHERE id=501", String.class));
+  }
+
+  @Test
   void rejectsAnonymousForeignOwnerArchivedAndEndedListingsBeforeAi() throws Exception {
     assertEquals(401, post(PRODUCT, null, "메모리는?").statusCode());
     assertEquals(401, post(LISTING, null, "메모리는?").statusCode());

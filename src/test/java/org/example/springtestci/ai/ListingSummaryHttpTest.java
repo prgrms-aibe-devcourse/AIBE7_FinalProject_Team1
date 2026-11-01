@@ -20,6 +20,8 @@ import org.example.springtestci.common.error.*;
 import org.example.springtestci.listing.service.*;
 import org.example.springtestci.listing.service.ListingHistoryReader.*;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -304,6 +306,36 @@ class ListingSummaryHttpTest {
         oldAttempt,
         jdbc.queryForObject("SELECT summary_attempt_id FROM listings WHERE id=1", UUID.class));
     assertNull(jdbc.queryForObject("SELECT summary_text FROM listings WHERE id=1", String.class));
+    processor.process(repository.pending().get(0));
+    assertEquals("READY", data(get(PATH, "2")).get("status").asString());
+    assertEquals(2, CALLS.get());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"010\u20111234\u20115678", "수리비 50000"})
+  void storedExcludedTextIsHiddenFromEveryReadAndOwnerCanRegenerate(String value) throws Exception {
+    readySummary();
+    String oldText = "MacBook Pro 14이며 " + value + "입니다.";
+    jdbc.update("UPDATE listings SET summary_text=? WHERE id=1", oldText);
+    var owner = data(get(PATH, "1"));
+    assertEquals("FAILED", owner.get("status").asString());
+    assertTrue(owner.get("text").isNull());
+    assertTrue(owner.get("canRequest").asBoolean());
+    assertTrue(data(get(PATH, "2")).get("text").isNull());
+    assertTrue(data(get("/api/v1/listings/1", "2")).at("/summary/text").isNull());
+    var items = data(get("/api/v1/listings", "2")).path("items");
+    boolean found = false;
+    for (var item : items) {
+      if (item.path("listingId").asLong() != 1) continue;
+      found = true;
+      assertEquals("FAILED", item.at("/aiSummary/status").asString());
+      assertTrue(item.at("/aiSummary/text").isNull());
+    }
+    assertTrue(found);
+    assertEquals(1, CALLS.get());
+    assertEquals(
+        oldText, jdbc.queryForObject("SELECT summary_text FROM listings WHERE id=1", String.class));
+    assertEquals(202, post(PATH, "1", "").statusCode());
     processor.process(repository.pending().get(0));
     assertEquals("READY", data(get(PATH, "2")).get("status").asString());
     assertEquals(2, CALLS.get());
