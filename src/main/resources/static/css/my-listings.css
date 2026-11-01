@@ -1,5 +1,5 @@
 /* 기존 기록상회 색·서체를 유지한다. 목록은 64px 사진 + 16px 간격 + 가변 제목 + 가격 + 관리 버튼으로 정렬한다. */
-#my-listings.page{max-width:1120px;padding:32px 28px 56px;color:var(--ink)}
+#my-listings.page{max-width:1220px;padding:32px 28px 56px;color:var(--ink)}
 #my-listings [hidden]{display:none!important}
 .ml-head h1{margin:0;font-size:26px;letter-spacing:-.8px}
 .ml-head p{margin:8px 0 0;font-size:14px;color:#5f6368;line-height:1.6}

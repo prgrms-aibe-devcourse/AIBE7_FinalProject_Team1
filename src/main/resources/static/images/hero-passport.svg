@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 520" role="img" aria-label="Pastport 제품 여권">
+  <g transform="translate(70 60) rotate(6 200 200)">
+    <rect x="150" y="30" width="300" height="400" rx="10" fill="#fff" stroke="#c9d0e0" stroke-width="2"/>
+    <rect x="178" y="62" width="120" height="14" rx="3" fill="#1f2f5c"/>
+    <rect x="178" y="92" width="244" height="8" rx="3" fill="#d7dcea"/>
+    <rect x="178" y="112" width="200" height="8" rx="3" fill="#d7dcea"/>
+    <rect x="178" y="132" width="224" height="8" rx="3" fill="#d7dcea"/>
+    <rect x="178" y="170" width="244" height="1.5" fill="#c9d0e0"/>
+    <g fill="#d7dcea">
+      <rect x="178" y="190" width="70" height="8" rx="3"/><rect x="262" y="190" width="160" height="8" rx="3"/>
+      <rect x="178" y="214" width="70" height="8" rx="3"/><rect x="262" y="214" width="130" height="8" rx="3"/>
+      <rect x="178" y="238" width="70" height="8" rx="3"/><rect x="262" y="238" width="150" height="8" rx="3"/>
+    </g>
+    <g fill="#1f2f5c">
+      <rect x="330" y="300" width="22" height="22"/><rect x="358" y="300" width="22" height="22"/><rect x="386" y="300" width="22" height="22" opacity=".35"/>
+      <rect x="330" y="328" width="22" height="22" opacity=".35"/><rect x="358" y="328" width="22" height="22"/><rect x="386" y="328" width="22" height="22"/>
+      <rect x="330" y="356" width="22" height="22"/><rect x="358" y="356" width="22" height="22" opacity=".35"/><rect x="386" y="356" width="22" height="22"/>
+    </g>
+    <rect x="178" y="300" width="120" height="78" rx="6" fill="none" stroke="#c9d0e0" stroke-width="2" stroke-dasharray="5 5"/>
+    <text x="238" y="345" font-family="Pretendard, sans-serif" font-size="14" font-weight="700" fill="#62646b" text-anchor="middle">수리 · 교체 이력</text>
+  </g>
+  <g transform="translate(40 80) rotate(-5 160 220)">
+    <rect x="40" y="40" width="300" height="400" rx="12" fill="#1f2f5c"/>
+    <rect x="52" y="52" width="276" height="376" rx="6" fill="none" stroke="#c7a85a" stroke-width="1.5" opacity=".7"/>
+    <circle cx="190" cy="190" r="62" fill="none" stroke="#c7a85a" stroke-width="2"/>
+    <circle cx="190" cy="190" r="44" fill="none" stroke="#c7a85a" stroke-width="1.5"/>
+    <path d="M190 146v88M146 190h88" stroke="#c7a85a" stroke-width="1.5"/>
+    <text x="190" y="310" font-family="Pretendard, sans-serif" font-size="30" font-weight="800" fill="#fff" text-anchor="middle" letter-spacing="3">PASTPORT</text>
+    <text x="190" y="340" font-family="Pretendard, sans-serif" font-size="13" fill="#c9d0e0" text-anchor="middle" letter-spacing="4">PRODUCT PASSPORT</text>
+    <rect x="165" y="378" width="50" height="12" rx="3" fill="#c7a85a" opacity=".8"/>
+  </g>
+</svg>

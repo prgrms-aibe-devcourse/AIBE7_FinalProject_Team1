@@ -59,30 +59,28 @@
     <p class="sub" style="grid-column:1/-1;text-align:center;padding:30px 0;color:var(--muted)">판매 중인 상품을 불러오는 중이에요…</p>
   </div>
 
-  <div class="landing-section-head lpx-reveal"><div><h2>내 관심 브랜드</h2><p>내가 고른 브랜드의 판매 중인 제품만 모아 봐요.</p></div><button type="button" data-interest-edit aria-expanded="false">브랜드 선택</button></div>
-  <div class="lpx-interest-editor" data-interest-editor hidden role="group" aria-label="관심 브랜드 선택"></div>
-  <div class="lpx-brands lpx-reveal" data-interest-list></div>
-
   <section class="lp-how">
     <h2>기록이 있으면 거래가 달라져요</h2>
-    <div class="lp-how-grid">
-      <div><b>1</b><h3>기록하고</h3><p>구매 영수증과 수리 내역을 제품 여권에 쌓아요. 개인정보는 가려서 보관해요.</p></div>
-      <div><b>2</b><h3>확인하고</h3><p>판매글에서 이전 소유자의 이력까지 한눈에 보고, 궁금한 건 AI에게 물어봐요.</p></div>
-      <div><b>3</b><h3>이어받아요</h3><p>거래가 끝나면 QR로 소유권을 넘기고, 모든 기록을 그대로 이어받아요.</p></div>
-    </div>
+    <ol class="lp-how-grid">
+      <li><span>01</span><h3>기록하고</h3><p>구매 영수증과 수리 내역을 제품 여권에 쌓아요. 개인정보는 가려서 보관해요.</p></li>
+      <li><span>02</span><h3>확인하고</h3><p>판매글에서 이전 소유자의 이력까지 한눈에 보고, 궁금한 건 AI에게 물어봐요.</p></li>
+      <li><span>03</span><h3>이어받아요</h3><p>거래가 끝나면 QR로 소유권을 넘기고, 모든 기록을 그대로 이어받아요.</p></li>
+    </ol>
   </section>
 
-  <div class="landing-section-head lpx-reveal"><div><h2>제품 여권에 담기는 정보</h2><p>판매글 하나에서 아래 기록을 모두 확인할 수 있어요.</p></div></div>
-  <div class="lpx-passport lpx-reveal">
-    <article><span class="lpx-ico" aria-hidden="true">▤</span><h3>제품 정보·사양</h3><p>제조사와 모델, 주요 사양, 상태 등급까지 한 번에 확인해요. 노트북은 CPU·메모리·저장장치도 함께 보여줘요.</p></article>
-    <article><span class="lpx-ico" aria-hidden="true">◷</span><h3>구매일·보증</h3><p>구매일과 보증 만료일로 남은 보증 기간을 바로 알 수 있어요.</p></article>
-    <article><span class="lpx-ico" aria-hidden="true">✎</span><h3>수리·교체 이력</h3><p>부품 교체·수리 같은 이력이 시간순으로 쌓이고, 유효·무효 건수가 표시돼요.</p></article>
-    <article><span class="lpx-ico" aria-hidden="true">▣</span><h3>증빙 문서</h3><p>영수증·수리 내역서는 개인정보를 가린 상태로만 공개돼요.</p></article>
-    <article><span class="lpx-ico" aria-hidden="true">⌁</span><h3>소유권 이전 기록</h3><p>이전 소유자에서 현재 소유자까지 이어진 기록을 확인해요.</p></article>
-    <article><span class="lpx-ico" aria-hidden="true">✦</span><h3>AI 요약</h3><p>긴 이력은 AI가 짧게 정리해 판매글 카드에서 먼저 보여줘요.</p></article>
-  </div>
+  <section class="lpx-spec lpx-reveal">
+    <div class="lpx-spec-head"><h2>제품 여권에 담기는 정보</h2><p>판매글 하나에서 아래 기록을 모두 확인할 수 있어요.</p></div>
+    <dl>
+      <div><dt>제품 정보·사양</dt><dd>제조사와 모델, 주요 사양, 상태 등급까지 한 번에 확인해요. 노트북은 CPU·메모리·저장장치도 함께 보여줘요.</dd></div>
+      <div><dt>구매일·보증</dt><dd>구매일과 보증 만료일로 남은 보증 기간을 바로 알 수 있어요.</dd></div>
+      <div><dt>수리·교체 이력</dt><dd>부품 교체·수리 같은 이력이 시간순으로 쌓이고, 유효·무효 건수가 표시돼요.</dd></div>
+      <div><dt>증빙 문서</dt><dd>영수증·수리 내역서는 개인정보를 가린 상태로만 공개돼요.</dd></div>
+      <div><dt>소유권 이전 기록</dt><dd>이전 소유자에서 현재 소유자까지 이어진 기록을 확인해요.</dd></div>
+      <div><dt>AI 요약</dt><dd>긴 이력은 AI가 짧게 정리해 판매글 카드에서 먼저 보여줘요.</dd></div>
+    </dl>
+  </section>
 
-  <div class="landing-section-head lpx-reveal"><div><h2>안심하고 거래하려면</h2><p>Pastport에서 거래할 때 꼭 확인하세요.</p></div></div>
+  <div class="lpx-spec-head lpx-safety-head lpx-reveal"><h2>안심하고 거래하려면</h2><p>Pastport에서 거래할 때 꼭 확인하세요.</p></div>
   <div class="lpx-safety lpx-reveal">
     <ol>
       <li><b>이력을 먼저 확인해요</b><span>판매글의 누적 핵심 이력에서 유효·무효 건수와 증빙 문서를 살펴보세요.</span></li>
@@ -97,10 +95,10 @@
     </div>
   </div>
 
-  <div class="landing-section-head"><div><h2>내 제품 관리</h2><p>판매 전에도 기록은 미리 쌓아두세요.</p></div></div>
-  <div class="shortcut-grid"><button class="shortcut" data-page="register"><i>＋</i><span>제품 등록</span></button><button class="shortcut" data-page="passport"><i>▤</i><span>제품 여권</span></button><button class="shortcut" data-page="docmask"><i>▣</i><span>문서 보관</span></button><button class="shortcut" data-page="deals"><i>✉</i><span>내 거래</span></button><button class="shortcut" data-page="trade"><i>⌁</i><span>소유권 이전</span></button></div>
   <footer class="lpx-footer">
-    <div><img class="pastport-logo pastport-logo--footer" src="/images/brand/pastport-logo-v1.png" alt="PastPort" width="2172" height="724" loading="lazy"><p>제품 여권으로 확인하는 안심 중고거래 서비스. 가전제품의 구매·수리·소유 기록을 남기고 이어받아요.</p></div>
-    <nav aria-label="바로가기"><button data-page="market">중고 거래</button><button data-page="sell">판매글 작성</button><button data-page="register">제품 등록</button><button data-page="deals">내 거래</button></nav>
+    <div class="lpx-foot-brand"><img class="pastport-logo pastport-logo--footer" src="/images/brand/pastport-logo-v1.png" alt="PastPort" width="2172" height="724" loading="lazy"><p>제품 여권으로 확인하는 안심 중고거래 서비스. 가전제품의 구매·수리·소유 기록을 남기고 이어받아요.</p></div>
+    <nav aria-label="거래"><h4>거래</h4><button data-page="market">중고 거래</button><button data-page="sell">판매글 작성</button><button data-page="deals">내 거래</button></nav>
+    <nav aria-label="내 제품"><h4>내 제품</h4><button data-page="register">제품 등록</button><button data-page="passport">제품 여권</button><button data-page="docmask">문서 보관</button></nav>
+    <p class="lpx-copy">© 2026 Pastport. All rights reserved.</p>
   </footer>
 </div>
