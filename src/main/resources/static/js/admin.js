@@ -3,7 +3,6 @@
   const $ = id => document.getElementById(id);
   const form = $('filters');
   let tab = 'trades', page = 0, version = 0, controller, filters = new URLSearchParams(), opener, relatedProduct;
-  let refreshing = null;
   const labels = {
     PENDING: '구매 요청', ACCEPTED: '수락', REJECTED: '요청 거절', RESERVED: '예약', COMPLETED: '완료', CANCELLED: '취소',
     SUCCESS: '성공', SELF_CIRCUMSTANCES: '개인 사정', MUTUAL_AGREEMENT: '상호 합의', COUNTERPART_UNREACHABLE: '상대방 연락 두절', CONDITION_MISMATCH: '제품 상태 불일치',
@@ -50,29 +49,16 @@
   /** 취소된 요청이 늦게 완료돼도 다른 탭·계정의 화면을 다시 채우지 못하게 세대를 함께 확인한다. */
   const invalidate = () => { version++; controller?.abort(); controller = new AbortController(); return version; };
   const clear = () => { hideDetail(); $('rows').replaceChildren(); $('count').textContent = ''; $('range').textContent = ''; $('updated').textContent = ''; $('previous').disabled = true; $('next').disabled = true; $('results').setAttribute('aria-busy', 'false'); $('trade-overview').hidden = true; for (const id of ['overview-statuses', 'overview-requests', 'overview-cancellations']) $(id).replaceChildren(); $('overview-message').textContent = ''; $('cancel-scope').hidden = true; $('cancel-scope-label').textContent = ''; };
-  /** 1회용 refresh 쿠키는 동시에 한 번만 사용한다. 화면 전환으로 갱신 응답을 취소해 새 쿠키를 잃지 않게 한다. */
-  const refreshSession = () => {
-    refreshing ??= (async () => {
-      const seed = await window.fetch('/', { credentials: 'same-origin', cache: 'no-store' });
-      if (!seed.ok) return false;
-      const token = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/);
-      if (!token) return false;
-      const response = await window.fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'X-XSRF-TOKEN': decodeURIComponent(token[1]) } });
-      return response.ok;
-    })().catch(() => false).finally(() => { refreshing = null; });
-    return refreshing;
-  };
+  /** 401 뒤 최대 두 번만 GET한다: 공유 잠금 안의 재검사, 필요했던 갱신 뒤 최종 조회다. 403은 복구하지 않는다. */
   const request = async (path, current) => {
     const signal = controller.signal;
     const send = () => window.fetch('/api/v1/admin/' + path, { credentials: 'same-origin', cache: 'no-store', signal });
     let response = await send();
     if (current !== version) return null;
     if (response.status === 401) {
-      const restored = await refreshSession();
-      if (current !== version) return null;
-      if (restored) response = await send();
+      response = await window.PastportSession.recover(send, () => current === version);
     }
-    if (current !== version) return null;
+    if (!response || current !== version) return null;
     if (response.status === 401 || response.status === 403) {
       invalidate(); clear(); setRelated(); $('message').textContent = '관리자 권한을 확인할 수 없어요. 홈에서 로그인한 계정을 확인해 주세요.';
       if (response.status === 401) window.location.replace('/?returnTo=admin');

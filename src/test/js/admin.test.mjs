@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { environment, deferred, flush } from './dom.mjs';
+import { lockManager } from './auth-locks.mjs';
 
 /** 실제 화면 모듈을 DOM 대역에 연결한다. 화면 크기·레이아웃은 이 시험의 검증 범위가 아니다. */
-function setup(handler) {
+function setup(handler, locks = lockManager()) {
   const env = environment(handler);
   env.document.getElementById = id => env.document.querySelector('#' + id);
   const create = env.document.createElement.bind(env.document);
@@ -15,6 +16,7 @@ function setup(handler) {
   for (const id of ['filters', 'filter-panel', 'refresh', 'trades-tab', 'audits-tab', 'actor-label', 'date-label', 'status-field', 'action-field', 'scope-note', 'result-title', 'message', 'count', 'range', 'previous', 'next', 'detail', 'detail-title', 'detail-body', 'rows', 'columns', 'close-detail', 'reset-filters', 'updated', 'results', 'page-title', 'page-description', 'breadcrumb', 'records-table', 'related-scope', 'related-product', 'clear-related', 'trade-overview', 'overview-statuses', 'overview-requests', 'overview-cancellations', 'overview-message', 'overview-dates', 'cancel-scope', 'cancel-scope-label', 'clear-cancel', 'trade-status']) env.add('div', { id });
   env.document.body = env.document.root;
   env.document.cookie = 'XSRF-TOKEN=csrf-test';
+  env.window.navigator = { locks };
   env.window.location.replace = path => env.navigations.push(path);
   const detail = env.document.getElementById('detail');
   detail.showModal = () => { detail.open = true; };
@@ -22,6 +24,7 @@ function setup(handler) {
   env.document.getElementById('filters').reset = () => {};
   env.window.FormData = class { constructor(form) { this.entries = form.formEntries || []; } *[Symbol.iterator]() { yield* this.entries; } };
   env.document.getElementById('related-scope').hidden = true;
+  env.run('auth-session.js');
   env.run('admin.js');
   env.$ = id => env.document.getElementById(id);
   return env;
@@ -308,7 +311,7 @@ test('권한 회수 뒤에는 운영 집계와 선택한 취소 유형도 지운
   assert.equal(env.$('cancel-scope-label').textContent, ''); assert.equal(env.$('cancel-scope').hidden, true);
 });
 
-test('관리자 API의 401은 CSRF 보호 갱신 후 한 번 재시도하고 목록을 유지한다', async () => {
+test('관리자 API의 401은 잠금 안의 GET 재검사 뒤 CSRF 보호 갱신·최종 조회로 목록을 유지한다', async () => {
   let expired = true;
   const env = setup(path => {
     if (path === '/') return {};
@@ -373,4 +376,31 @@ test('거래·업무 검색은 한국 시간 기준을 표시하고 날짜 문�
   await env.$('filters').emit('submit'); await flush();
   query = new URL(env.calls.at(-1).path, 'http://test.invalid').searchParams;
   assert.equal(query.get('from'), '2026-10-30'); assert.equal(query.get('to'), '2026-10-30');
+});
+
+test('서로 다른 관리자 문서의 동시 401도 회전 쿠키를 한 번만 사용하고 두 목록을 복구한다', async () => {
+  const locks = lockManager(), slow = deferred(); let expired = true;
+  const handler = async path => {
+    if (path === '/') return {};
+    if (path === '/api/auth/refresh') { await slow.promise; expired = false; return {}; }
+    return expired ? { response: { ok: false, status: 401 } } : page([trade()]);
+  };
+  const first = setup(handler, locks), second = setup(handler, locks);
+  await flush();
+  assert.equal([...first.calls, ...second.calls].filter(call => call.path === '/api/auth/refresh').length, 1);
+  slow.resolve(); await flush();
+  for (const env of [first, second]) {
+    assert.match(env.$('rows').textContent, /검증 노트북/);
+    assert.deepEqual(env.navigations, []);
+    assert.ok(env.calls.filter(call => call.path.startsWith('/api/v1/admin/trades')).length <= 3);
+  }
+});
+
+test('잠금 안 재검사에서 권한 거부로 바뀌면 회전·로그인 이동 없이 업무 표시를 지운다', async () => {
+  let reads = 0;
+  const env = setup(() => ({ response: { ok: false, status: ++reads === 1 ? 401 : 403 } }));
+  await flush();
+  assert.equal(env.$('rows').textContent, '');
+  assert.equal(env.calls.filter(call => call.path === '/api/auth/refresh').length, 0);
+  assert.deepEqual(env.navigations, []);
 });
