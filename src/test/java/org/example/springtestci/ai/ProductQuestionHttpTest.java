@@ -207,22 +207,85 @@ class ProductQuestionHttpTest {
             "2025-05-20 기록은 무효이며 세부 내용은 미검토입니다.", List.of("event:501")));
     assertEquals(200, post(LISTING, "2", "수리 기록은?").statusCode());
     ANSWER.set(new ProductQuestionGateway.Answer("2025-05-20에 수리했습니다.", List.of("event:501")));
-    assertError(502, "AI_003", post(LISTING, "2", "수리 기록은?"));
+    var replaced = post(LISTING, "2", "수리 기록은?");
+    assertEquals(200, replaced.statusCode(), replaced.body());
+    assertFalse(data(replaced).path("answer").asString().contains("수리했습니다"));
+    assertTrue(data(replaced).path("answer").asString().contains("무효"));
   }
 
-  @Test
-  void voidEvidenceNeedsVoidNoticeWithoutRequiringPendingDetailsBoilerplate() throws Exception {
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "이 기록은 무효지만 실제 수리를 받았습니다.",
+        "무효가 아니고 정상 수리입니다.",
+        "2025-05-20에 수리했습니다.",
+        "무효 기록이고 미검토지만 실제로 교체했습니다.",
+        "이 기록은 무효 처리되어 실제 수리 사실로 볼 수 없습니다."
+      })
+  void voidEvidenceUsesServerFactsInsteadOfUnreliableModelPolarity(String modelText)
+      throws Exception {
     TOOLS.set(List.of("get_product_history"));
     jdbc.update("UPDATE product_events SET status='VOID' WHERE id=501");
-    ANSWER.set(
-        new ProductQuestionGateway.Answer(
-            "이 기록은 무효 처리되어 실제 수리 사실로 볼 수 없습니다.", List.of("event:501")));
+    ANSWER.set(new ProductQuestionGateway.Answer(modelText, List.of("event:501")));
     var response = post(PRODUCT, "1", "무효 수리 기록은?");
     assertEquals(200, response.statusCode(), response.body());
     assertEquals("VOID", data(response).at("/sources/0/facts/status").asString());
     assertFalse(data(response).at("/sources/0/facts").has("content"));
-    ANSWER.set(new ProductQuestionGateway.Answer("등록된 수리 기록입니다.", List.of("event:501")));
+    String text = data(response).path("answer").asString();
+    assertNotEquals(modelText, text);
+    assertTrue(text.contains("무효") && text.contains("2025-05-20"), text);
+    assertTrue(text.contains("실제 발생 여부를 확인할 수 없"), text);
+    assertFalse(text.contains("private-person"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"specs", ""})
+  void voidRecordsRemainExplicitEvenWhenModelOmitsTheirCitation(String key) throws Exception {
+    jdbc.update("UPDATE product_events SET status='VOID' WHERE id=501");
+    ANSWER.set(
+        new ProductQuestionGateway.Answer(
+            "등록된 메모리는 18GB이고 실제 수리를 받았습니다.", key.isEmpty() ? List.of() : List.of(key)));
+    var response = post(PRODUCT, "1", "메모리와 수리 기록은?");
+    assertEquals(200, response.statusCode(), response.body());
+    String text = data(response).path("answer").asString();
+    assertTrue(text.contains("18GB") && text.contains("무효"), text);
+    assertFalse(text.contains("실제 수리를 받았습니다"));
+    var evidence = data(response).path("sources");
+    assertEquals(2, evidence.size());
+    assertEquals("event:501", evidence.get(0).path("key").asString());
+    assertEquals("specs", evidence.get(1).path("key").asString());
+  }
+
+  @Test
+  void voidReplacementStillRejectsForgedEvidenceAndChangedFacts() throws Exception {
+    jdbc.update("UPDATE product_events SET status='VOID' WHERE id=501");
+    ANSWER.set(new ProductQuestionGateway.Answer("무효입니다.", List.of("event:9999")));
     assertError(502, "AI_003", post(PRODUCT, "1", "수리 기록은?"));
+    ANSWER.set(new ProductQuestionGateway.Answer("무효지만 수리했습니다.", List.of("event:501")));
+    DURING.set(() -> jdbc.update("UPDATE product_events SET status='VALID' WHERE id=501"));
+    assertError(409, "AI_005", post(PRODUCT, "1", "수리 기록은?"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "get_product_specs,get_product_warranty",
+        "get_product_warranty,get_product_specs"
+      })
+  void missingWarrantyPreservesOtherToolEvidenceRegardlessOfToolOrder(String order)
+      throws Exception {
+    TOOLS.set(List.of(order.split(",")));
+    jdbc.update("UPDATE products SET warranty_expires_at=NULL WHERE id=101");
+    ANSWER.set(new ProductQuestionGateway.Answer("메모리는 18GB이며 보증은 확인할 수 없어요.", List.of("specs")));
+    var response = post(PRODUCT, "1", "메모리와 보증은?");
+    assertEquals(200, response.statusCode(), response.body());
+    assertTrue(data(response).path("answer").asString().contains("18GB"));
+    assertEquals("specs", data(response).at("/sources/0/key").asString());
+    assertEquals(1, data(response).path("sources").size());
+    var payloads = JSON.readTree(INPUT.get());
+    var warranty = payloads.get(order.startsWith("get_product_warranty") ? 0 : 1);
+    assertFalse(warranty.has("sourceKey"));
+    assertFalse(warranty.path("note").asString().contains("sourceKeys는 빈 배열"));
   }
 
   @Test
@@ -271,6 +334,27 @@ class ProductQuestionHttpTest {
     assertEquals("2027-02-12", data(response).at("/sources/0/facts/warrantyExpiresOn").asString());
     assertFalse(data(response).at("/sources/0/facts/asOf").asString().isBlank());
     jdbc.update("UPDATE products SET warranty_expires_at=NULL WHERE id=101");
+    assertError(502, "AI_003", post(PRODUCT, "1", "보증 만료일은?"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"2027년 2월 12일", "2027-2-12"})
+  void equivalentRegisteredWarrantyDatesAreNormalizedBeforeNumberValidation(String date)
+      throws Exception {
+    TOOLS.set(List.of("get_product_warranty"));
+    ANSWER.set(
+        new ProductQuestionGateway.Answer("등록된 보증 만료일은 " + date + "입니다.", List.of("warranty")));
+    var response = post(PRODUCT, "1", "보증 만료일은?");
+    assertEquals(200, response.statusCode(), response.body());
+    assertTrue(data(response).path("answer").asString().contains("2027-02-12"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"2027-12-02", "2027-02-30"})
+  void rearrangedOrInvalidCalendarDatesAreRejected(String date) throws Exception {
+    TOOLS.set(List.of("get_product_warranty"));
+    ANSWER.set(
+        new ProductQuestionGateway.Answer("등록된 보증 만료일은 " + date + "입니다.", List.of("warranty")));
     assertError(502, "AI_003", post(PRODUCT, "1", "보증 만료일은?"));
   }
 

@@ -1,13 +1,16 @@
 package org.example.springtestci.ai.service;
 
 import java.time.Clock;
+import java.time.DateTimeException;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.example.springtestci.ai.dto.ProductAnswerResponse;
 import org.example.springtestci.ai.dto.ProductAnswerResponse.Evidence;
@@ -30,6 +33,9 @@ public class ProductQuestionService {
   private static final Pattern OUT_OF_SCOPE =
       Pattern.compile(
           "(?i)(시리얼|serial|증빙|영수증|보증서|OCR|계좌|전화번호|연락처|주소|구매\\s*(추천|비추천)|가성비|적정\\s*(가격|시세)|정품|안전한가|안전성|품질\\s*(평가|보장)|얼마에\\s*(사|팔)|수리비|구매금액)");
+  private static final Pattern DATE =
+      Pattern.compile(
+          "(?<!\\d)(?:(\\d{4})-(\\d{1,2})-(\\d{1,2})|(\\d{4})\\s*년\\s*(\\d{1,2})\\s*월\\s*(\\d{1,2})\\s*일)(?!\\d)");
   private final ProductQuestionSource sources;
   private final ProductQuestionGateway gateway;
   private final AiSuggestionRateLimiter limits;
@@ -83,15 +89,27 @@ public class ProductQuestionService {
         if (item == null) invalid();
         evidence.add(item);
       }
+      // 단어 검사만으로 무효 이력에 대한 모델의 긍정·부정을 판별하지 않는다. 구조화된 근거로 문장을 대체한다.
+      var grounded =
+          ProductQuestionGroundedAnswer.compose(
+              evidence,
+              session.delivered.values(),
+              session.called.contains("get_product_warranty")
+                  && !session.delivered.containsKey("warranty"));
+      if (grounded != null) evidence = grounded.evidence();
       String text =
           evidence.isEmpty()
               ? NO_RECORD
               : textPolicy
                   .validate(
-                      new ListingSuggestionGateway.Suggestion("제품 기록 답변", answer.answer()),
+                      new ListingSuggestionGateway.Suggestion(
+                          "제품 기록 답변",
+                          grounded == null
+                              ? normalizeDates(answer.answer(), session.registeredDates)
+                              : grounded.text()),
                       session.deliveredJson.toString())
                   .description();
-      // 무효 기록은 무효 표시로 충분하다. 유효하지만 미검토인 기록만 별도의 확인 불가 안내를 요구한다.
+      // 서버가 구성한 무효 안내와 유효하지만 미검토인 기록의 안내가 유지되는지도 확인한다.
       for (var item : evidence) {
         boolean voided = "VOID".equals(item.facts().get("status"));
         if (voided && !text.contains("무효")) invalid();
@@ -126,6 +144,30 @@ public class ProductQuestionService {
     throw new CommonException(ErrorCode.AI_INVALID_RESULT);
   }
 
+  // 숫자 비교 전에 실제 조회한 날짜의 한글·ISO 표기를 맞춘다. 같은 숫자를 조합한 다른 날짜는 허용하지 않는다.
+  private static String normalizeDates(String text, Set<String> registered) {
+    if (text == null) return null;
+    var matcher = DATE.matcher(text);
+    var normalized = new StringBuilder();
+    while (matcher.find()) {
+      int first = matcher.group(1) != null ? 1 : 4;
+      String date;
+      try {
+        date =
+            LocalDate.of(
+                    Integer.parseInt(matcher.group(first)),
+                    Integer.parseInt(matcher.group(first + 1)),
+                    Integer.parseInt(matcher.group(first + 2)))
+                .toString();
+      } catch (DateTimeException failure) {
+        throw new CommonException(ErrorCode.AI_INVALID_RESULT);
+      }
+      if (!registered.contains(date)) invalid();
+      matcher.appendReplacement(normalized, Matcher.quoteReplacement(date));
+    }
+    return matcher.appendTail(normalized).toString();
+  }
+
   /** 모델이 전달한 식별자는 받지 않는다. 허용된 도구를 최대 세 번 실행하고 실제 전달한 근거만 기억한다. */
   private final class ReadSession implements ProductQuestionGateway.Tools {
     private final Target target;
@@ -134,6 +176,7 @@ public class ProductQuestionService {
     private final Set<String> called = new LinkedHashSet<>();
     private final Map<String, Evidence> delivered = new LinkedHashMap<>();
     private final StringBuilder deliveredJson = new StringBuilder();
+    private final Set<String> registeredDates = new LinkedHashSet<>();
 
     private ReadSession(Target target, long userId, Snapshot initial) {
       this.target = target;
@@ -165,20 +208,27 @@ public class ProductQuestionService {
           var facts = new LinkedHashMap<String, Object>();
           facts.put("productId", current.productId());
           facts.put("asOf", current.asOf().toString());
+          registeredDates.add(current.asOf().toString());
           if (!product.path("warrantyExpiresAt").isNull()
               && !product.path("warrantyExpiresAt").isMissingNode()) {
             facts.put("warrantyExpiresOn", product.get("warrantyExpiresAt").asString());
+            registeredDates.add(product.get("warrantyExpiresAt").asString());
             delivered.put("warranty", new Evidence("warranty", "WARRANTY", "등록된 보증 만료일", facts));
             payload = Map.of("sourceKey", "warranty", "data", facts);
           } else {
             // 실제 근거가 없는 경우 모델에도 인용할 키를 주지 않아 확인 불가 답변이 가짜 근거로 거부되지 않게 한다.
             payload =
-                Map.of("data", facts, "note", "등록된 보증 만료일이 없어 인용할 근거가 없다. sourceKeys는 빈 배열로 답한다.");
+                Map.of(
+                    "data",
+                    facts,
+                    "note",
+                    "이 도구에는 등록된 보증 만료일과 보증 근거 키가 없다. 보증만 미확인으로 설명하고 다른 도구의 근거는 사용한 대로 인용한다.");
           }
         }
         default -> {
           List<Map<String, Object>> events = new ArrayList<>();
           for (JsonNode event : current.data().path("history")) {
+            registeredDates.add(event.path("occurredOn").asString());
             long id = event.path("eventId").asLong();
             String key = "event:" + id;
             var facts = new LinkedHashMap<String, Object>();

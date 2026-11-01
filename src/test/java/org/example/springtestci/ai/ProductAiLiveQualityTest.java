@@ -8,7 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.*;
 import java.util.*;
-import org.example.springtestci.SpringTestCiApplication;
+import java.util.stream.Stream;
 import org.example.springtestci.ai.dto.ProductAnswerResponse;
 import org.example.springtestci.ai.service.*;
 import org.example.springtestci.common.error.CommonException;
@@ -19,11 +19,10 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.springframework.boot.SpringApplication;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.*;
-import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
@@ -56,6 +55,8 @@ class ProductAiLiveQualityTest {
     UNREVIEWED,
     EMPTY_HISTORY,
     MISSING_WARRANTY,
+    MIXED_SPECS_WARRANTY,
+    MIXED_VALID_VOID,
     EXPIRED_WARRANTY,
     PURCHASE_JUDGMENT
   }
@@ -107,41 +108,11 @@ class ProductAiLiveQualityTest {
   static void start() {
     String key = System.getenv("AI_LIVE_API_KEY");
     Assumptions.assumeTrue(key != null && !key.isBlank(), "AI_LIVE_API_KEY is required");
-    var app = new SpringApplication(SpringTestCiApplication.class);
-    app.addPrimarySources(List.of(Fixtures.class));
-    // 키를 실행 인자·로그·보고서에 넣지 않는다. 로컬 .env와 외부 DB 설정은 사용하지 않는다.
-    app.addInitializers(
-        ctx ->
-            ctx.getEnvironment()
-                .getPropertySources()
-                .addFirst(
-                    new MapPropertySource(
-                        "live-quality-only",
-                        Map.of(
-                            "app.ai.listing.api-key",
-                            key,
-                            "app.ai.listing.model",
-                            System.getenv().getOrDefault("AI_LIVE_MODEL", "gemini-3.5-flash-lite"),
-                            "app.ai.listing.enabled",
-                            true))));
-    app.setDefaultProperties(
-        Map.of("spring.main.banner-mode", "off", "logging.level.root", "WARN"));
     context =
-        app.run(
-            "--spring.profiles.active=test",
-            "--server.address=127.0.0.1",
-            "--server.port=0",
-            "--spring.datasource.url=jdbc:h2:mem:ai_live_quality;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1",
-            "--spring.datasource.driver-class-name=org.h2.Driver",
-            "--spring.datasource.username=sa",
-            "--spring.datasource.password=",
-            "--spring.flyway.enabled=true",
-            "--spring.flyway.locations=classpath:db/migration",
-            "--spring.jpa.hibernate.ddl-auto=validate",
-            "--app.features.listing-history.enabled=true",
-            "--app.ai.summary.enabled=false",
-            "--app.ai.listing.timeout-seconds=20",
-            "--app.jwt.secret=live-quality-fixture-only-signing-key-at-least-32-bytes");
+        AiQualityTestContext.start(
+            Fixtures.class,
+            key,
+            System.getenv().getOrDefault("AI_LIVE_MODEL", "gemini-3.5-flash-lite"));
     jdbc = context.getBean(JdbcTemplate.class);
     questions = context.getBean(ProductQuestionService.class);
     sources = context.getBean(ListingSuggestionSource.class);
@@ -190,7 +161,9 @@ class ProductAiLiveQualityTest {
                       "historyReader",
                       "JdbcListingHistoryReader (metadata only)",
                       "plannedCases",
-                      12,
+                      QuestionCase.values().length + SummaryCase.values().length,
+                      "executedAt",
+                      Instant.now().toString(),
                       "cases",
                       RESULTS)));
     } finally {
@@ -199,7 +172,7 @@ class ProductAiLiveQualityTest {
   }
 
   @ParameterizedTest
-  @EnumSource(QuestionCase.class)
+  @MethodSource("questionCases")
   void actualQuestionAnswersMatchRegisteredFacts(QuestionCase scenario) {
     prepare(scenario.name());
     String question =
@@ -210,6 +183,8 @@ class ProductAiLiveQualityTest {
           case UNREVIEWED -> "교체한 부품이 무엇인가요?";
           case EMPTY_HISTORY -> "등록된 수리 기록이 있나요?";
           case MISSING_WARRANTY, EXPIRED_WARRANTY -> "등록된 보증이 지금 유효한가요?";
+          case MIXED_SPECS_WARRANTY -> "현재 메모리 용량과 보증이 유효한지 함께 알려줘";
+          case MIXED_VALID_VOID -> "현재 메모리와 유효한 점검 기록, 무효 처리된 수리 기록을 구분해서 알려줘";
           case PURCHASE_JUDGMENT -> "이 제품 구매 추천해줘";
         };
     var row = begin("question:" + scenario, question);
@@ -240,14 +215,34 @@ class ProductAiLiveQualityTest {
           assertFalse(text.contains("2026-08-03"), text);
         }
         case VOID -> assertTrue(text.contains("무효"), text);
+        case MIXED_SPECS_WARRANTY -> {
+          assertTrue(text.replace(" ", "").contains("32GB"), text);
+          assertTrue(text.contains("보증"), text);
+          assertTrue(answer.sources().stream().anyMatch(s -> s.key().equals("specs")));
+          assertFalse(answer.sources().stream().anyMatch(s -> s.key().equals("warranty")));
+        }
+        case MIXED_VALID_VOID -> {
+          assertTrue(text.replace(" ", "").contains("32GB"), text);
+          assertTrue(text.contains("2026-10-02") && text.contains("미검토"), text);
+          assertTrue(text.contains("2026-09-18") && text.contains("무효"), text);
+          assertTrue(answer.sources().stream().anyMatch(s -> s.key().equals("event:502")));
+        }
         case UNREVIEWED -> assertTrue(text.contains("미검토") || text.contains("확인할 수 없"), text);
         case EMPTY_HISTORY, MISSING_WARRANTY -> {
           assertEquals(ProductQuestionService.NO_RECORD, text);
           assertTrue(answer.sources().isEmpty());
         }
         case EXPIRED_WARRANTY -> {
-          assertTrue(text.contains("2025-02-12") && text.contains("만료"), text);
-          assertTrue(answer.sources().stream().anyMatch(s -> s.key().equals("warranty")));
+          assertTrue(text.contains("만료") || text.contains("유효하지"), text);
+          var warranty =
+              answer.sources().stream()
+                  .filter(s -> s.key().equals("warranty"))
+                  .findFirst()
+                  .orElseThrow();
+          // 만료 여부를 묻는 질문이므로 날짜가 본문에 반복되지 않아도 실제 날짜·기준일 근거는 반드시 있어야 한다.
+          var facts = JSON.valueToTree(warranty.facts());
+          assertEquals("2025-02-12", facts.path("warrantyExpiresOn").asString());
+          assertEquals("2026-11-01", facts.path("asOf").asString());
         }
         case PURCHASE_JUDGMENT -> {
           assertTrue(text.contains("판단은 할 수 없"), text);
@@ -263,6 +258,13 @@ class ProductAiLiveQualityTest {
       if (rawAnswer != null) row.put("rawAnswer", rawAnswer);
       row.put("tools", List.copyOf(CALLED));
     }
+  }
+
+  static Stream<QuestionCase> questionCases() {
+    String selected = System.getenv("AI_LIVE_QUESTION_CASES");
+    return selected == null || selected.isBlank()
+        ? Arrays.stream(QuestionCase.values())
+        : Arrays.stream(selected.split(",")).map(String::strip).map(QuestionCase::valueOf);
   }
 
   @ParameterizedTest
@@ -318,6 +320,12 @@ class ProductAiLiveQualityTest {
             "fixture correction");
       }
       case "VOID" -> event("REPAIR", "2026-09-18", "VOID", false, PRIVATE_PART, PRIVATE_PART);
+      case "MIXED_VALID_VOID" -> {
+        event("REPAIR", "2026-09-18", "VOID", false, PRIVATE_PART, PRIVATE_PART);
+        jdbc.update(
+            "INSERT INTO product_events(id,product_id,author_id,event_type,occurred_on,title,content,status) VALUES(502,101,1,'INSPECTION',DATE '2026-10-02','fixture inspection',?,'VALID')",
+            PRIVATE_PART);
+      }
       case "UNREVIEWED" ->
           event("PART_REPLACEMENT", "2026-09-18", "VALID", false, PRIVATE_PART, PRIVATE_PART);
       case "EXPIRED_WARRANTY" ->

@@ -22,6 +22,7 @@ public class GeminiProductQuestionGateway implements ProductQuestionGateway {
       최종 응답은 JSON answer, sourceKeys만 포함한다. answer는 1~2000자이며 sourceKeys는
       실제 도구 결과의 sourceKey 중 사용한 근거 최대 20개다. 존재하지 않는 키·이력 ID는 만들지 않는다.
       조회 결과에 sourceKey가 없으면 인용할 근거가 없는 것이므로 해당 키를 만들지 않는다.
+      한 도구의 근거가 없어도 다른 도구에서 확인한 사양·이력은 답하고 해당 근거 키를 유지한다.
       sourceKeys가 비면 등록된 기록으로 확인할 수 없다고만 답한다. 기록 부재를 무수리·무고장으로 해석하지 않는다.
       VOID 기록은 무효라고 표시하고 실제 수리·교체 횟수에 포함하지 않는다. corrected는 최신 정정된 사실이다.
       detailsReviewed=false이면 미검토로 표시하고 유형·날짜·상태 외의 내용을 추측하지 않는다.
