@@ -1,6 +1,6 @@
-const pageNames={home:'내 제품',passport:'제품 여권',register:'새 제품 등록',documents:'문서 보관함',ai:'AI 이력 검색',market:'중고 거래',sell:'판매글 작성',auth:'로그인',signup:'회원가입',mypage:'마이페이지',docmask:'문서 마스킹 확인',detail:'판매글 상세',deals:'내 거래',receive:'이전 받기',trade:'거래 · 소유권 이전'};
+const pageNames={home:'제품 여권',passport:'제품 여권',register:'새 제품 등록',documents:'문서 보관함',ai:'AI 이력 검색',market:'중고 거래',sell:'판매글 작성',auth:'로그인',signup:'회원가입',mypage:'마이페이지',docmask:'문서 마스킹 확인',detail:'판매글 상세',deals:'내 거래',receive:'이전 받기',trade:'거래 · 소유권 이전'};
 pageNames.landing='홈';
-pageNames['my-listings']='내 판매글';
+pageNames['my-listings']='내 거래';
 
 const pendingPages = new Set(['ai', 'trade']);
 
