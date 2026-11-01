@@ -169,7 +169,7 @@ const auth = (() => {
   const refresh = () => {
     if (refreshing) return refreshing;
     const current = sessionVersion;
-    refreshing = session.recover(() => fetch('/api/auth/me', { credentials: 'same-origin', cache: 'no-store' }), () => current === sessionVersion)
+    refreshing = session.recover(signal => fetch('/api/auth/me', { credentials: 'same-origin', cache: 'no-store', signal }), () => current === sessionVersion)
       .then(async response => {
         if (!response || current !== sessionVersion) return null;
         const payload = await response.json().catch(() => null);
@@ -302,7 +302,11 @@ const auth = (() => {
     if (!event.target.closest?.('[data-auth-logout]')) return;
     const current = ++sessionVersion;
     try {
-      await session.exclusive(() => current === sessionVersion ? request('/api/auth/logout') : null);
+      await session.exclusive(async () => {
+        if (current !== sessionVersion) return null;
+        await request('/api/auth/logout');
+        return true; // 성공한 204와 요청하지 않은 작업(null)을 구분한다.
+      });
     } catch { /* 서버 응답과 관계없이 화면에서는 로그아웃 처리 */ }
     if (current !== sessionVersion) return;
     clearSession();

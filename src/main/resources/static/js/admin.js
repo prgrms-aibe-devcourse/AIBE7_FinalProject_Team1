@@ -52,7 +52,8 @@
   /** 401 뒤 최대 두 번만 GET한다: 공유 잠금 안의 재검사, 필요했던 갱신 뒤 최종 조회다. 403은 복구하지 않는다. */
   const request = async (path, current) => {
     const signal = controller.signal;
-    const send = () => window.fetch('/api/v1/admin/' + path, { credentials: 'same-origin', cache: 'no-store', signal });
+    const send = deadline => window.fetch('/api/v1/admin/' + path, { credentials: 'same-origin', cache: 'no-store',
+      signal: deadline ? AbortSignal.any([signal, deadline]) : signal });
     let response = await send();
     if (current !== version) return null;
     if (response.status === 401) {

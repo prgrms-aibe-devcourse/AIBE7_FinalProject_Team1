@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { environment, deferred, flush } from './dom.mjs';
 import { lockManager } from './auth-locks.mjs';
 
-function setup(handler = () => ({}), locks = lockManager()) {
+function setup(handler = () => ({}), locks = lockManager(), globals = {}) {
   const env = environment(handler);
   env.window.navigator = { locks };
   env.document.cookie = 'XSRF-TOKEN=current%2Bcsrf';
-  env.run('auth-session.js');
+  env.run('auth-session.js', globals);
   env.session = env.window.PastportSession;
   return env;
 }
@@ -37,6 +37,87 @@ test('두 문서의 갱신은 같은 잠금을 공유하고 두 번째 문서는
   assert.equal(post.options.headers['X-XSRF-TOKEN'], 'current+csrf');
   assert.equal(post.options.credentials, 'same-origin');
   assert.equal(post.options.signal, undefined);
+});
+
+test('리뷰: 취소된 인증 작업과 후속 인증 실패는 이미 확인한 만료 상태를 풀지 않는다', async () => {
+  const env = setup(path => path === '/' ? {} : denied());
+  const read = () => env.window.fetch('/read');
+  await env.session.recover(read);
+  await env.session.exclusive(() => null);
+  await env.session.exclusive(() => undefined);
+  await assert.rejects(env.session.exclusive(() => { throw new Error('Login failed'); }));
+  await env.session.recover(read);
+  assert.equal(env.calls.filter(call => call.path === '/api/auth/refresh').length, 1);
+  await env.session.exclusive(() => true);
+  await env.session.recover(read);
+  assert.equal(env.calls.filter(call => call.path === '/api/auth/refresh').length, 2);
+});
+
+test('리뷰: 서버 오류나 일시 거부 응답은 만료 판정을 해제하지 않는다', async () => {
+  for (const status of [500, 503, 429, 404]) {
+    let reading = 401;
+    const env = setup(path => path === '/' ? {} : path === '/read' ? { response: { status: reading, ok: reading === 200 } } : denied());
+    const read = () => env.window.fetch('/read');
+    await env.session.recover(read);
+    reading = status; assert.equal((await env.session.recover(read)).status, status);
+    reading = 401; await env.session.recover(read);
+    assert.equal(env.calls.filter(call => call.path === '/api/auth/refresh').length, 1);
+    reading = 403; await env.session.recover(read);
+    reading = 401; await env.session.recover(read);
+    assert.equal(env.calls.filter(call => call.path === '/api/auth/refresh').length, 2);
+  }
+});
+
+test('리뷰: 홈 조회의 네트워크 실패는 원래 401로 복귀하고 다음 인증 작업을 막지 않는다', async () => {
+  const env = setup(path => { if (path === '/') throw new TypeError('Network failed'); return denied(); });
+  assert.equal((await env.session.recover(() => env.window.fetch('/read'))).status, 401);
+  assert.equal(env.calls.filter(call => call.path === '/api/auth/refresh').length, 0);
+  assert.equal(await env.session.exclusive(() => true), true);
+});
+
+test('리뷰: 첫 재검사와 마지막 재검사의 제한 시간이 끝나면 다른 문서의 로그인이 진행된다', async () => {
+  for (const hangsAt of [1, 2]) {
+    const locks = lockManager(), timers = [];
+    let reads = 0, hungSignal, mutation = false;
+    const first = setup((path, options) => {
+      if (path === '/') return {};
+      if (path !== '/read' || ++reads !== hangsAt) return denied();
+      hungSignal = options.signal;
+      return new Promise((resolve, reject) => options.signal?.addEventListener('abort', () => reject(options.signal.reason), { once: true }));
+    }, locks, { AbortSignal: { timeout(ms) { assert.equal(ms, 15000); const timer = new AbortController(); timers.push(timer); return timer.signal; } } });
+    const second = setup(() => ({}), locks);
+    const recovery = first.session.recover(signal => first.window.fetch('/read', { signal })).then(response => ({ response }), error => ({ error }));
+    await flush();
+    assert.ok(hungSignal, 'The recovery GET must receive a bounded abort signal');
+    const login = second.session.exclusive(() => { mutation = true; return true; });
+    await flush(); assert.equal(mutation, false);
+    timers.find(timer => timer.signal === hungSignal).abort(new DOMException('Timed out', 'TimeoutError'));
+    assert.equal((await recovery).error.name, 'TimeoutError');
+    await login; assert.equal(mutation, true);
+  }
+});
+
+test('리뷰: CSRF 준비 GET도 시간 초과 시 원래 401로 복귀한다', async () => {
+  const timers = []; let seedSignal;
+  const env = setup((path, options) => {
+    if (path !== '/') return denied();
+    seedSignal = options.signal;
+    return new Promise((resolve, reject) => options.signal?.addEventListener('abort', () => reject(options.signal.reason), { once: true }));
+  }, lockManager(), { AbortSignal: { timeout(ms) { assert.equal(ms, 15000); const timer = new AbortController(); timers.push(timer); return timer.signal; } } });
+  const recovery = env.session.recover(signal => env.window.fetch('/read', { signal }));
+  await flush(); assert.ok(seedSignal);
+  timers.find(timer => timer.signal === seedSignal).abort(new DOMException('Timed out', 'TimeoutError'));
+  assert.equal((await recovery).status, 401);
+  assert.equal(env.calls.filter(call => call.path === '/api/auth/refresh').length, 0);
+});
+
+test('리뷰: 회전 POST가 만료를 확인하면 마지막 GET이 503이어도 회전을 반복하지 않는다', async () => {
+  let reads = 0;
+  const env = setup(path => path === '/' ? {} : path === '/read' && ++reads === 2 ? { response: { status: 503, ok: false } } : denied());
+  const read = () => env.window.fetch('/read');
+  assert.equal((await env.session.recover(read)).status, 503);
+  assert.equal((await env.session.recover(read)).status, 401);
+  assert.equal(env.calls.filter(call => call.path === '/api/auth/refresh').length, 1);
 });
 
 test('이미 유효한 세션이나 권한 거부 응답에는 갱신 POST를 보내지 않는다', async () => {

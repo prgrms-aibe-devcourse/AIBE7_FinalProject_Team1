@@ -4,7 +4,7 @@ import { environment, deferred, flush } from './dom.mjs';
 import { lockManager } from './auth-locks.mjs';
 
 /** 실제 화면 모듈을 DOM 대역에 연결한다. 화면 크기·레이아웃은 이 시험의 검증 범위가 아니다. */
-function setup(handler, locks = lockManager()) {
+function setup(handler, locks = lockManager(), globals = {}) {
   const env = environment(handler);
   env.document.getElementById = id => env.document.querySelector('#' + id);
   const create = env.document.createElement.bind(env.document);
@@ -24,7 +24,7 @@ function setup(handler, locks = lockManager()) {
   env.document.getElementById('filters').reset = () => {};
   env.window.FormData = class { constructor(form) { this.entries = form.formEntries || []; } *[Symbol.iterator]() { yield* this.entries; } };
   env.document.getElementById('related-scope').hidden = true;
-  env.run('auth-session.js');
+  env.run('auth-session.js', globals);
   env.run('admin.js');
   env.$ = id => env.document.getElementById(id);
   return env;
@@ -36,6 +36,35 @@ const event = (overrides = {}) => ({ key: 'AUDIT:1:PURCHASE_REQUEST_ACCEPTED', a
 const timeline = (items = [event()], total = items.length, number = 0, available = true) => ({ tradeId: 41, events: { ...page(items, total), page: number }, reviewHistoryAvailable: available });
 const progress = (overrides = {}) => ({ tradeId: 41, state: 'WAITING_BOTH_CONFIRMATIONS', sellerConfirmation: 'NOT_CONFIRMED', buyerConfirmation: 'NOT_CONFIRMED', unreviewedChangeCount: 0, factsVersion: 2, sellerConfirmedVersion: null, buyerConfirmedVersion: null, ...overrides });
 const overview = (overrides = {}) => ({ total: 10, pending: 1, rejected: 1, reserved: 3, completed: 2, cancelled: 3, other: 0, cancellations: [{ category: 'MUTUAL_AGREEMENT', count: 2 }, { category: 'BEFORE_RESERVATION', count: 1 }, { category: 'UNRECORDED', count: 0 }], ...overrides });
+
+test('리뷰: 관리자 잠금 안 재조회는 읽기 제한 시간과 화면 이탈 취소를 모두 따른다', async () => {
+  for (const source of ['deadline', 'view']) {
+    let reads = 0, apiSignal;
+    const timers = [];
+    const env = setup((path, options) => {
+      if (++reads === 1) return { response: { status: 401, ok: false } };
+      apiSignal = options.signal;
+      return new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true }));
+    }, lockManager(), { AbortSignal: { any: AbortSignal.any.bind(AbortSignal), timeout(ms) { assert.equal(ms, 15000); const timer = new AbortController(); timers.push(timer); return timer.signal; } } });
+    await flush(); assert.ok(apiSignal); assert.equal(timers.length, 1);
+    if (source === 'deadline') timers[0].abort(new DOMException('Timed out', 'TimeoutError'));
+    else { env.document.hidden = true; await env.document.emit('visibilitychange'); }
+    await flush();
+    assert.equal(apiSignal.aborted, true);
+    assert.equal(timers[0].signal.aborted, source === 'deadline');
+    assert.equal(await env.window.PastportSession.exclusive(() => true), true);
+    assert.equal(env.$('rows').textContent, '');
+  }
+});
+
+test('리뷰: CSRF 준비 GET이 거절되면 관리자 기록을 비우고 로그인 복구로 이동한다', async () => {
+  const env = setup(path => { if (path === '/') throw new TypeError('Network failed'); return { response: { status: 401, ok: false } }; });
+  await flush();
+  assert.equal(env.$('rows').textContent, '');
+  assert.equal(env.$('detail-body').textContent, '');
+  assert.ok(env.navigations.includes('/?returnTo=admin'));
+  assert.equal(env.calls.filter(call => call.path === '/api/auth/refresh').length, 0);
+});
 
 test('목록·페이지 이동은 조회 요청만 보내고 실제 전체 건수를 표시한다', async () => {
   const env = setup(path => page([trade(path.includes('page=1') ? 42 : 41)], 21));

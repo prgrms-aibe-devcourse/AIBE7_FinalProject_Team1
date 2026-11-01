@@ -34,7 +34,7 @@ function setup(href, result, options = {}) {
   login.dataset.page = 'auth';
   login.click = () => env.navigations.push('auth');
   env.add('button', { 'data-page': 'landing' }).dataset.page = 'landing';
-  env.run('auth-session.js');
+  env.run('auth-session.js', options.globals || {});
   env.run('auth.js', { fetch: env.window.fetch.bind(env.window), Headers,
     CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } } });
   return env;
@@ -47,6 +47,46 @@ test('관리자 세션 복구가 성공한 경우에만 고정된 관리자 화�
   const refresh = env.calls.find(call => call.path === '/api/auth/refresh');
   assert.equal(refresh.options.method, 'POST');
   assert.equal(refresh.options.headers['X-XSRF-TOKEN'], 'csrf-test');
+});
+
+test('리뷰: 시작 회원 조회가 시간 초과되면 대기 중인 직접 로그인은 진행된다', async () => {
+  const timers = []; let meSignal;
+  const env = setup('http://test.invalid/?returnTo=admin', (path, options) => {
+    if (path === '/api/auth/me') {
+      meSignal = options.signal;
+      return new Promise((resolve, reject) => options.signal?.addEventListener('abort', () => reject(options.signal.reason), { once: true }));
+    }
+    return path === '/api/auth/login' ? { user: { id: 2, role: 'USER', nickname: '새 회원' } } : {};
+  }, { globals: { AbortSignal: { timeout(ms) { assert.equal(ms, 15000); const timer = new AbortController(); timers.push(timer); return timer.signal; } } } });
+  await flush(); assert.ok(meSignal);
+  const loggingIn = login(env); await flush();
+  assert.equal(env.calls.filter(call => call.path === '/api/auth/login').length, 0);
+  timers.find(timer => timer.signal === meSignal).abort(new DOMException('Timed out', 'TimeoutError'));
+  await loggingIn; await flush();
+  assert.match(env.header.textContent, /새 회원/);
+  assert.equal(env.navigations.includes('/admin'), false);
+  assert.equal(env.calls.find(call => call.path === '/api/auth/login').options.signal, undefined);
+});
+
+test('리뷰: 실제로 성공한 204 로그아웃은 취소된 인증 작업과 구분해 만료 판정을 해제한다', async () => {
+  let expired = false;
+  const denied = { response: { ok: false, status: 401, json: async () => ({}) } };
+  const env = setup('http://test.invalid/', path => {
+    if (path === '/') return {};
+    if (path === '/api/auth/logout') return { response: { ok: true, status: 204 } };
+    if (path === '/api/auth/me' && !expired) return { user: { id: 2, role: 'USER', nickname: '현재 회원' } };
+    return denied;
+  });
+  await flush(); expired = true;
+  assert.equal((await env.window.PastportApi.fetch('/protected')).status, 401);
+  assert.equal(env.calls.filter(call => call.path === '/api/auth/refresh').length, 1);
+  const button = env.header.querySelector('[data-auth-logout]');
+  assert.ok(button);
+  button.closest = selector => selector === '[data-auth-logout]' ? button : null;
+  await env.document.emit('click', null, { target: button }); await flush();
+  await env.window.PastportSession.recover(signal => env.window.fetch('/api/auth/me', { signal }));
+  assert.equal(env.calls.filter(call => call.path === '/api/auth/refresh').length, 2);
+  assert.doesNotMatch(env.header.textContent, /현재 회원/);
 });
 
 /** 직접 로그인과 초기 복구의 완료 순서를 제어한다. 실제 HttpOnly 쿠키 처리는 브라우저에서도 검사한다. */
