@@ -74,13 +74,12 @@
     }
     status.hidden = true;
     list.innerHTML = filtered.map((product) => `
-      <article class="product">
+      <article class="product product-card-link" data-page="passport" data-product-id="${product.productId}" role="link" tabindex="0" aria-label="${escapeHtml(product.title)} 상세 보기">
         <div class="laptop" aria-hidden="true"></div>
         <div><span class="eyebrow">내 노트북</span><h3>${escapeHtml(product.title)}</h3>
           <div class="meta">${escapeHtml(product.manufacturer)} · ${escapeHtml(product.modelName)} · 구매일 ${date(product.purchaseDate)}</div>
           <span class="chip">${productChip(product)}</span>
         </div>
-        <div class="product-action"><button type="button" data-page="passport" data-product-id="${product.productId}">상세 보기 →</button></div>
       </article>`).join('');
   };
 
@@ -234,11 +233,21 @@
     warrantyExpiresAt: form.elements.warrantyExpiresAt.value || null,
     reason: form.elements.reason.value.trim(),
   });
+  const warrantyTerms = (form) => {
+    const basis = form.querySelector('[data-product-warranty-basis]')?.value || '';
+    const extra = form.querySelector('[data-product-warranty-extra]')?.value.trim() || '';
+    if (!basis) return extra || null;
+    if (basis === '평생 보증') return extra ? `${basis} · ${extra}` : basis;
+    const duration = form.querySelector('[data-product-warranty-value]')?.value || '';
+    const unit = form.querySelector('[data-product-warranty-unit]')?.value || '';
+    const summary = duration ? `${basis} ${duration}${unit}` : basis;
+    return extra ? `${summary} · ${extra}` : summary;
+  };
   const formPayload = (form) => ({
     category: form.elements.category.value, title: form.elements.title.value.trim(), manufacturer: form.elements.manufacturer.value.trim(),
     modelName: form.elements.modelName.value.trim(), purchaseDate: form.elements.purchaseDate.value || null,
     warrantyExpiresAt: form.elements.warrantyExpiresAt.value || null,
-    warrantyTerms: valueOrNull(form.elements.warrantyTerms.value), serialNumber: form.elements.serialNumber.value.trim(),
+    warrantyTerms: warrantyTerms(form), serialNumber: form.elements.serialNumber.value.trim(),
     specifications: {
       ...specificationsPayload(form),
     },
@@ -275,7 +284,7 @@
       state.products = [];
       form.reset();
       resetRegisterWizard(form);
-      navigate('passport');
+      navigate('home');
     } catch (error) {
       if (error.status === 401) return showFormMessage(form, '로그인이 필요합니다. 로그인 후 다시 시도해 주세요.');
       showFormMessage(form, error.fieldErrors?.[0]?.message || error.message);
@@ -383,10 +392,46 @@
       document.querySelectorAll('[data-product-thumbnail]').forEach((item) => item.setAttribute('aria-pressed', String(item === thumbnail)));
     }
   }, true);
+  document.addEventListener('keydown', (event) => {
+    const card = event.target.closest?.('.product-card-link');
+    if (card && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      card.click();
+    }
+  });
   // 선택한 카테고리의 대표 제조사를 자동완성으로 제안한다. 표기를 통일해 마켓 필터에 잘 걸리게 한다.
   const fillMakerSuggestions = (form, category) => {
-    const list = form?.querySelector('#product-manufacturers');
-    if (list) list.replaceChildren(...(window.PastportCategories?.makers(category) || []).map((name) => new Option(name, name)));
+    const select = form?.querySelector('[data-product-manufacturer-choice]');
+    if (!select) return;
+    const current = select.value;
+    const makers = window.PastportCategories?.makers(category)
+      || ['Apple', 'Samsung', 'LG', 'Lenovo', 'ASUS', 'HP', 'Dell', 'MSI'];
+    select.replaceChildren(
+      new Option('제조사를 선택해 주세요', ''),
+      ...makers.map((name) => new Option(name, name)),
+      new Option('기타 (직접 입력)', 'OTHER'),
+    );
+    if ([...select.options].some((option) => option.value === current)) select.value = current;
+  };
+  const updateManufacturer = (form) => {
+    const select = form.querySelector('[data-product-manufacturer-choice]');
+    const custom = form.querySelector('[data-product-manufacturer-custom]');
+    const value = form.elements.manufacturer;
+    const isCustom = select.value === 'OTHER';
+    custom.hidden = !isCustom;
+    custom.required = isCustom;
+    value.value = isCustom ? custom.value.trim() : select.value;
+    if (isCustom) custom.focus();
+  };
+  const updateWarranty = (form) => {
+    const basis = form.querySelector('[data-product-warranty-basis]');
+    const duration = form.querySelector('[data-product-warranty-duration]');
+    const value = form.querySelector('[data-product-warranty-value]');
+    const lifetime = basis.value === '평생 보증';
+    duration.hidden = lifetime;
+    value.required = Boolean(basis.value) && !lifetime;
+    if (lifetime) value.value = '';
+    form.elements.warrantyTerms.value = warrantyTerms(form) || '';
   };
   const setRegisterStep = (form, step) => {
     form.querySelectorAll('[data-register-step]').forEach((panel) => {
@@ -449,14 +494,25 @@
     if (summary) summary.textContent = '선택된 이미지 없음';
     const selectedDocument = form.querySelector('[data-product-document-selected]');
     if (selectedDocument) selectedDocument.hidden = true;
+    form.querySelector('.product-warranty-extra')?.removeAttribute('open');
+    updateManufacturer(form);
+    updateWarranty(form);
     setRegisterStep(form, 1);
+  };
+  const initializeRegisterForm = () => {
+    const form = document.querySelector('#register [data-product-form]');
+    if (!form) return;
+    fillMakerSuggestions(form, 'LAPTOP');
+    updateManufacturer(form);
+    updateWarranty(form);
+    setRegisterStep(form, Number(form.dataset.currentStep || 1));
   };
   document.addEventListener('pastport:page-loaded', (event) => {
     if (event.detail?.id !== 'register') return;
-    const form = document.querySelector('#register [data-product-form]');
-    fillMakerSuggestions(form, 'LAPTOP');
-    if (form) setRegisterStep(form, Number(form.dataset.currentStep || 1));
+    initializeRegisterForm();
   });
+  // 페이지 조각이 빠르게 로드돼 위 이벤트보다 먼저 준비된 경우에도 등록 폼을 초기화한다.
+  initializeRegisterForm();
   document.addEventListener('click', (event) => {
     const form = event.target.closest?.('[data-product-form]');
     if (!form) return;
@@ -477,8 +533,20 @@
   });
   document.addEventListener('input', (event) => {
     if (event.target.matches?.('[data-product-search]')) renderProducts();
+    const form = event.target.closest?.('[data-product-form]');
+    if (form && event.target.matches?.('[data-product-manufacturer-custom]')) updateManufacturer(form);
+    if (form && event.target.matches?.('[data-product-warranty-value], [data-product-warranty-extra]')) updateWarranty(form);
   });
   document.addEventListener('change', async (event) => {
+    const registerForm = event.target.closest?.('[data-product-form]');
+    if (registerForm && event.target.matches?.('[data-product-manufacturer-choice]')) {
+      updateManufacturer(registerForm);
+      return;
+    }
+    if (registerForm && event.target.matches?.('[data-product-warranty-basis], [data-product-warranty-unit]')) {
+      updateWarranty(registerForm);
+      return;
+    }
     if (event.target.name === 'images') {
       const files = [...event.target.files];
       const form = event.target.closest('form');
