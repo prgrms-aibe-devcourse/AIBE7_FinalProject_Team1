@@ -1,7 +1,11 @@
 (() => {
   const API = '/api/v1/products';
   const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
-  const state = { products: [], current: null, selectedId: null, loading: null, imageUrls: [], registerImageUrls: [], documentToken: 0 };
+  const registration = window.PastportProductRegistration;
+  const state = {
+    products: [], current: null, selectedId: null, loading: null, imageUrls: [], registerImageUrls: [], documentToken: 0,
+    productListRequests: registration.createLatestRequestGate(),
+  };
 
   const escapeHtml = (value) => String(value ?? '')
     .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
@@ -41,10 +45,26 @@
 
   const loadProducts = async (force = false) => {
     if (state.loading && !force) return state.loading;
-    state.loading = api(API)
-      .then((products) => { state.products = products || []; return state.products; })
-      .finally(() => { state.loading = null; });
-    return state.loading;
+    const requestVersion = state.productListRequests.begin();
+    const request = api(API)
+      .then((products) => {
+        if (!state.productListRequests.isCurrent(requestVersion)) return false;
+        state.products = products || [];
+        return true;
+      })
+      .catch((error) => {
+        if (!state.productListRequests.isCurrent(requestVersion)) return false;
+        throw error;
+      })
+      .finally(() => { if (state.loading === request) state.loading = null; });
+    state.loading = request;
+    return request;
+  };
+
+  const invalidateProductList = () => {
+    state.productListRequests.invalidate();
+    state.loading = null;
+    state.products = [];
   };
 
   const productChip = (product) => {
@@ -103,7 +123,7 @@
     if (!status) return;
     status.hidden = false;
     status.textContent = '제품을 불러오는 중입니다.';
-    try { await loadProducts(force); renderProducts(); } catch (error) { showListError(error); }
+    try { if (await loadProducts(force)) renderProducts(); } catch (error) { showListError(error); }
   };
 
   const revokeImages = () => {
@@ -243,7 +263,7 @@
     container.replaceChildren();
     try {
       if (!state.selectedId) {
-        await loadProducts();
+        if (!(await loadProducts())) return;
         if (state.products.length > 1) {
           status.hidden = true;
           document.querySelector('[data-page="home"]')?.click();
@@ -293,24 +313,25 @@
     reason: form.elements.reason.value.trim(),
   });
   const warrantyTerms = (form) => {
-    const basis = form.querySelector('[data-product-warranty-basis]')?.value || '';
-    const extra = form.querySelector('[data-product-warranty-extra]')?.value.trim() || '';
-    if (!basis) return extra || null;
-    if (basis === '평생 보증') return extra ? `${basis} · ${extra}` : basis;
-    const duration = form.querySelector('[data-product-warranty-value]')?.value || '';
-    const unit = form.querySelector('[data-product-warranty-unit]')?.value || '';
-    const summary = duration ? `${basis} ${duration}${unit}` : basis;
-    return extra ? `${summary} · ${extra}` : summary;
+    return registration.buildWarrantyTerms({
+      basis: form.querySelector('[data-product-warranty-basis]')?.value,
+      duration: form.querySelector('[data-product-warranty-value]')?.value,
+      unit: form.querySelector('[data-product-warranty-unit]')?.value,
+      extra: form.querySelector('[data-product-warranty-extra]')?.value,
+    });
   };
-  const formPayload = (form) => ({
-    category: form.elements.category.value, title: form.elements.title.value.trim(), manufacturer: form.elements.manufacturer.value.trim(),
-    modelName: form.elements.modelName.value.trim(), purchaseDate: form.elements.purchaseDate.value || null,
-    warrantyExpiresAt: form.elements.warrantyExpiresAt.value || null,
-    warrantyTerms: warrantyTerms(form), serialNumber: form.elements.serialNumber.value.trim(),
-    specifications: {
-      ...specificationsPayload(form),
-    },
-  });
+  const formPayload = (form) => {
+    const warrantyBasis = form.querySelector('[data-product-warranty-basis]')?.value;
+    return {
+      category: form.elements.category.value, title: form.elements.title.value.trim(), manufacturer: form.elements.manufacturer.value.trim(),
+      modelName: form.elements.modelName.value.trim(), purchaseDate: form.elements.purchaseDate.value || null,
+      warrantyExpiresAt: registration.warrantyExpiresAt(warrantyBasis, form.elements.warrantyExpiresAt.value),
+      warrantyTerms: warrantyTerms(form), serialNumber: form.elements.serialNumber.value.trim(),
+      specifications: {
+        ...specificationsPayload(form),
+      },
+    };
+  };
 
   const showFormMessage = (form, message, kind = 'error') => {
     const box = form.querySelector('[data-product-form-message]');
@@ -334,13 +355,13 @@
     try {
       const product = await api(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formPayload(form)) });
       state.selectedId = product.productId;
+      invalidateProductList();
       try {
         if (files.length) await uploadImages(product.productId, files);
         toast('제품 등록이 완료되었습니다.');
       } catch (imageUploadError) {
         toast(`제품은 등록됐지만 일부 이미지를 올리지 못했습니다. ${imageUploadError.message}`, 'error');
       }
-      state.products = [];
       form.reset();
       resetRegisterWizard(form);
       navigate('home');
@@ -494,10 +515,18 @@
     const basis = form.querySelector('[data-product-warranty-basis]');
     const duration = form.querySelector('[data-product-warranty-duration]');
     const value = form.querySelector('[data-product-warranty-value]');
+    const unit = form.querySelector('[data-product-warranty-unit]');
     const lifetime = basis.value === '평생 보증';
+    const unitless = !registration.usesDurationUnit(basis.value);
     duration.hidden = lifetime;
+    duration.classList.toggle('unitless', unitless);
+    unit.hidden = lifetime || unitless;
+    unit.disabled = lifetime || unitless;
     value.required = Boolean(basis.value) && !lifetime;
-    if (lifetime) value.value = '';
+    if (lifetime) {
+      value.value = '';
+      form.elements.warrantyExpiresAt.value = '';
+    }
     form.elements.warrantyTerms.value = warrantyTerms(form) || '';
   };
   const setRegisterStep = (form, step) => {
