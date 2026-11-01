@@ -1,57 +1,86 @@
 <div class="register product-register">
   <div class="register-bar"><b>제품 등록</b><button type="button" data-page="home">나가기</button></div>
   <div class="register-body">
-    <div class="page-title">
-      <div><h1>새 노트북 등록</h1><p>필수 식별 정보와 알고 있는 사양만 입력해 주세요.</p></div>
+    <div class="page-title product-register-title">
+      <div><span class="eyebrow">PRODUCT PASSPORT</span><h1>새 제품 등록</h1><p>기본 정보부터 제품 사진까지 순서대로 등록해 주세요.</p></div>
+      <span class="product-register-progress" data-product-register-progress>1 / 3</span>
     </div>
 
+    <ol class="product-register-steps" aria-label="제품 등록 단계">
+      <li class="active" data-register-step-indicator="1"><span>1</span><div><b>기본 정보</b><small>제품 종류와 식별 정보</small></div></li>
+      <li data-register-step-indicator="2"><span>2</span><div><b>상세 정보</b><small>노트북 사양과 문서</small></div></li>
+      <li data-register-step-indicator="3"><span>3</span><div><b>외관 이미지</b><small>사진 확인 후 등록</small></div></li>
+    </ol>
+
     <form data-product-form novalidate>
-      <div class="product-form-grid">
-        <section class="form-card">
-          <div class="product-card-heading"><span class="product-step">1</span><div><h3>기본 정보</h3><p>제품을 식별하는 필수 정보입니다.</p></div></div>
-          <div class="field"><label for="product-category">카테고리 <b>*</b></label><select id="product-category" name="category" data-product-category><option value="LAPTOP">노트북</option><option value="MOBILE">스마트폰·태블릿</option><option value="DISPLAY">TV·모니터</option><option value="LARGE_APPLIANCE">냉장고·세탁기</option><option value="CLEANING_AIR">청소기·공기청정기</option><option value="CLIMATE">에어컨·난방</option><option value="KITCHEN">주방가전</option><option value="AUDIO_GAME">오디오·게임기</option></select></div>
-          <div class="field"><label for="product-title">제품 제목 <b>*</b></label><input id="product-title" name="title" required maxlength="200" placeholder="예: 업무용 노트북"></div>
-          <div class="field-row">
-            <div class="field"><label for="product-manufacturer">제조사 <b>*</b></label><input id="product-manufacturer" name="manufacturer" required maxlength="100" list="product-manufacturers" placeholder="예: Samsung"><datalist id="product-manufacturers"></datalist></div>
-            <div class="field"><label for="product-model">모델명 <b>*</b></label><input id="product-model" name="modelName" required maxlength="100" placeholder="예: NT960X"></div>
+      <section class="product-register-panel active" data-register-step="1" aria-labelledby="register-step-1-title">
+        <div class="product-register-layout">
+          <div class="form-card product-register-main-card">
+            <div class="product-card-heading"><span class="product-step">1</span><div><h2 id="register-step-1-title">기본 정보 작성</h2><p>제품을 구분하고 식별하는 필수 정보입니다.</p></div></div>
+            <div class="field product-category-field">
+              <label for="product-category-display">제품 종류 <b>*</b></label>
+              <select id="product-category-display" data-product-category-display disabled aria-describedby="product-category-help"><option value="LAPTOP">노트북</option></select>
+              <input type="hidden" name="category" value="LAPTOP">
+              <p class="product-help" id="product-category-help">현재 MVP에서는 노트북 등록만 지원합니다. 추후 스마트폰, TV, 생활가전 등으로 확대할 예정입니다.</p>
+            </div>
+            <div class="field"><label for="product-title">제품 이름 <b>*</b></label><input id="product-title" name="title" required maxlength="200" placeholder="예: 업무용 맥북 프로"></div>
+            <div class="field-row">
+              <div class="field"><label for="product-manufacturer">제조사 <b>*</b></label><input id="product-manufacturer" name="manufacturer" required maxlength="100" list="product-manufacturers" placeholder="예: Apple"><datalist id="product-manufacturers"></datalist></div>
+              <div class="field"><label for="product-model">모델명 <b>*</b></label><input id="product-model" name="modelName" required maxlength="100" placeholder="예: MacBook Pro 14"></div>
+            </div>
+            <div class="field"><label for="product-serial">시리얼 번호 <b>*</b></label><input id="product-serial" name="serialNumber" required minlength="4" maxlength="64" autocomplete="off" placeholder="제품 본체의 시리얼 번호"></div>
+            <p class="product-help">시리얼 번호는 중복 확인과 암호화 저장에만 사용되며 등록 후 화면에 표시되지 않습니다.</p>
+            <div class="field-row">
+              <div class="field"><label for="product-purchase-date">구매일</label><input id="product-purchase-date" name="purchaseDate" type="date"></div>
+              <div class="field"><label for="product-warranty-date">보증 만료일</label><input id="product-warranty-date" name="warrantyExpiresAt" type="date"></div>
+            </div>
+            <div class="field"><label for="product-warranty-terms">보증 조건</label><input id="product-warranty-terms" name="warrantyTerms" maxlength="500" placeholder="예: 구매 후 2년"></div>
           </div>
-          <div class="field"><label for="product-serial">시리얼 번호 <b>*</b></label><input id="product-serial" name="serialNumber" required minlength="4" maxlength="64" autocomplete="off" placeholder="제품 본체의 시리얼 번호"></div>
-          <p class="product-help">시리얼 번호는 중복 확인과 암호화 저장에만 사용되며 등록 후 화면에 표시되지 않습니다.</p>
-          <div class="field-row">
-            <div class="field"><label for="product-purchase-date">구매일</label><input id="product-purchase-date" name="purchaseDate" type="date"></div>
-            <div class="field"><label for="product-warranty-date">보증 만료일</label><input id="product-warranty-date" name="warrantyExpiresAt" type="date"></div>
-          </div>
-          <div class="field"><label for="product-warranty-terms">보증 조건</label><input id="product-warranty-terms" name="warrantyTerms" maxlength="500" placeholder="예: 구매 후 2년"></div>
-        </section>
-
-        <section class="form-card" data-product-specs>
-          <div class="product-card-heading"><span class="product-step">2</span><div><h3>노트북 사양</h3><p>모르는 항목은 비워 두어도 됩니다.</p></div></div>
-          <div class="field-row">
-            <div class="field"><label for="product-cpu">CPU</label><input id="product-cpu" name="cpu" maxlength="100" placeholder="예: Apple M3 Pro"></div>
-            <div class="field"><label for="product-gpu">GPU</label><input id="product-gpu" name="gpu" maxlength="100" placeholder="예: 18코어 GPU"></div>
-          </div>
-          <div class="field-row product-spec-row">
-            <div class="field"><label for="product-ram">RAM (GB)</label><input id="product-ram" name="ramGb" type="number" min="1" inputmode="numeric" placeholder="16"></div>
-            <div class="field"><label for="product-storage">저장 용량 (GB)</label><input id="product-storage" name="storageGb" type="number" min="1" inputmode="numeric" placeholder="512"></div>
-            <div class="field"><label for="product-storage-type">저장 방식</label><select id="product-storage-type" name="storageType"><option value="">선택 안 함</option><option value="SSD">SSD</option><option value="HDD">HDD</option><option value="MIXED">혼합</option></select></div>
-          </div>
-          <div class="field-row">
-            <div class="field"><label for="product-display">디스플레이</label><input id="product-display" name="display" maxlength="100" placeholder="예: 14인치 3024×1964"></div>
-            <div class="field"><label for="product-os">운영체제</label><input id="product-os" name="os" maxlength="50" placeholder="예: macOS"></div>
-          </div>
-          <div class="field"><label for="product-battery">배터리 상태 (%)</label><input id="product-battery" name="batteryHealthPercent" type="number" min="0" max="100" inputmode="numeric" placeholder="예: 92"></div>
-        </section>
-      </div>
-
-      <section class="product-image-field">
-        <div><strong>제품 이미지</strong><p>선택 사항 · JPG, PNG, WEBP · 장당 최대 5MB · 최대 10장</p></div>
-        <label class="button" for="product-images">이미지 선택</label>
-        <input id="product-images" name="images" type="file" accept="image/jpeg,image/png,image/webp" multiple>
-        <span data-product-file-summary>선택된 이미지 없음</span>
+          <aside class="product-register-guide">
+            <span class="product-register-guide-icon" aria-hidden="true">⌁</span><h3>제품 여권의 시작</h3>
+            <p>입력한 기본 정보는 수리 이력과 증빙 문서를 한 제품에 안전하게 연결하는 기준이 됩니다.</p>
+            <ul><li>제품명은 나중에 수정할 수 있어요.</li><li>시리얼 번호는 안전하게 암호화돼요.</li><li>모르는 날짜는 비워 두어도 괜찮아요.</li></ul>
+          </aside>
+        </div>
+        <div class="product-step-actions"><button class="button" type="button" data-page="home">취소</button><button class="button primary" type="button" data-register-next>상세 정보 작성 →</button></div>
       </section>
 
-      <div class="product-form-message" data-product-form-message role="alert" hidden></div>
-      <div class="product-form-actions"><button class="button" type="button" data-page="home">취소</button><button class="button primary" type="submit" data-product-submit>제품 등록</button></div>
+      <section class="product-register-panel" data-register-step="2" aria-labelledby="register-step-2-title" hidden>
+        <div class="product-form-grid product-detail-step-grid">
+          <div class="form-card" data-product-specs>
+            <div class="product-card-heading"><span class="product-step">2</span><div><h2 id="register-step-2-title">노트북 상세 정보</h2><p>모르는 항목은 비워 두어도 됩니다.</p></div></div>
+            <div class="field-row"><div class="field"><label for="product-cpu">CPU</label><input id="product-cpu" name="cpu" maxlength="100" placeholder="예: Apple M3 Pro"></div><div class="field"><label for="product-gpu">GPU</label><input id="product-gpu" name="gpu" maxlength="100" placeholder="예: 18코어 GPU"></div></div>
+            <div class="field-row product-spec-row">
+              <div class="field"><label for="product-ram">RAM (GB)</label><input id="product-ram" name="ramGb" type="number" min="1" inputmode="numeric" placeholder="16"></div>
+              <div class="field"><label for="product-storage">저장 용량 (GB)</label><input id="product-storage" name="storageGb" type="number" min="1" inputmode="numeric" placeholder="512"></div>
+              <div class="field"><label for="product-storage-type">저장 방식</label><select id="product-storage-type" name="storageType"><option value="">선택 안 함</option><option value="SSD">SSD</option><option value="HDD">HDD</option><option value="MIXED">혼합</option></select></div>
+            </div>
+            <div class="field-row"><div class="field"><label for="product-display">디스플레이</label><input id="product-display" name="display" maxlength="100" placeholder="예: 14인치 3024×1964"></div><div class="field"><label for="product-os">운영체제</label><input id="product-os" name="os" maxlength="50" placeholder="예: macOS"></div></div>
+            <div class="field"><label for="product-battery">배터리 상태 (%)</label><input id="product-battery" name="batteryHealthPercent" type="number" min="0" max="100" inputmode="numeric" placeholder="예: 92"></div>
+          </div>
+
+          <aside class="product-document-assist">
+            <div class="product-card-heading"><span class="product-step document">▧</span><div><h2>문서로 자동 입력</h2><p>영수증이나 보증서에서 제품 정보를 불러올 수 있어요.</p></div></div>
+            <label class="product-document-drop" for="product-document"><input id="product-document" type="file" accept="image/jpeg,image/png" data-product-document><span aria-hidden="true">＋</span><b>문서 이미지 선택</b><small>JPG, PNG · 원본은 아직 서버로 전송되지 않습니다.</small></label>
+            <div class="product-document-selected" data-product-document-selected hidden><span>▧</span><div><b data-product-document-name></b><small>마스킹과 정보 추출을 연결할 준비가 됐어요.</small></div><button type="button" data-product-document-clear aria-label="선택한 문서 제거">×</button></div>
+            <button class="button product-document-extract" type="button" disabled>개인정보 마스킹 후 자동 입력</button>
+            <div class="product-document-notice"><b>기능 연동 안내</b><p>문서 마스킹은 제품 등록 후 사용할 수 있습니다. 제품 정보 자동 추출 API가 연결되면 이 단계에서 바로 내용을 채울 수 있도록 준비된 영역입니다.</p></div>
+          </aside>
+        </div>
+        <div class="product-step-actions"><button class="button" type="button" data-register-prev>← 기본 정보</button><button class="button primary" type="button" data-register-next>외관 이미지 등록 →</button></div>
+      </section>
+
+      <section class="product-register-panel" data-register-step="3" aria-labelledby="register-step-3-title" hidden>
+        <div class="form-card product-image-step">
+          <div class="product-card-heading"><span class="product-step">3</span><div><h2 id="register-step-3-title">제품 외관 이미지</h2><p>제품의 앞면, 뒷면, 모서리와 흠집이 잘 보이는 사진을 등록해 주세요.</p></div></div>
+          <label class="product-image-drop" for="product-images"><input id="product-images" name="images" type="file" accept="image/jpeg,image/png,image/webp" multiple><span class="product-image-drop-icon" aria-hidden="true">▧</span><b>사진을 선택하거나 이곳으로 가져오세요</b><small>선택 사항 · JPG, PNG, WEBP · 장당 최대 5MB · 최대 10장</small><em>이미지 선택</em></label>
+          <div class="product-image-summary"><span data-product-file-summary>선택된 이미지 없음</span><small>첫 번째 사진이 대표 이미지로 사용됩니다.</small></div>
+          <div class="product-image-previews" data-product-image-previews aria-live="polite"></div>
+          <div class="product-register-review"><span>✓</span><div><b>입력 내용을 한 번 더 확인해 주세요.</b><p>등록 후에도 제품명, 구매일, 보증 정보와 제품 이미지는 수정할 수 있습니다.</p></div></div>
+        </div>
+        <div class="product-form-message" data-product-form-message role="alert" hidden></div>
+        <div class="product-step-actions"><button class="button" type="button" data-register-prev>← 상세 정보</button><button class="button primary" type="submit" data-product-submit>제품 등록</button></div>
+      </section>
     </form>
   </div>
 </div>
