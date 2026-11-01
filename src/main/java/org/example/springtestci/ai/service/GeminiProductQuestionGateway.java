@@ -21,6 +21,7 @@ public class GeminiProductQuestionGateway implements ProductQuestionGateway {
       함수 인자는 빈 객체이며 제품·사용자·판매글 ID를 인자로 만들지 않는다. 각 도구는 한 번만 요청한다.
       최종 응답은 JSON answer, sourceKeys만 포함한다. answer는 1~2000자이며 sourceKeys는
       실제 도구 결과의 sourceKey 중 사용한 근거 최대 20개다. 존재하지 않는 키·이력 ID는 만들지 않는다.
+      조회 결과에 sourceKey가 없으면 인용할 근거가 없는 것이므로 해당 키를 만들지 않는다.
       sourceKeys가 비면 등록된 기록으로 확인할 수 없다고만 답한다. 기록 부재를 무수리·무고장으로 해석하지 않는다.
       VOID 기록은 무효라고 표시하고 실제 수리·교체 횟수에 포함하지 않는다. corrected는 최신 정정된 사실이다.
       detailsReviewed=false이면 미검토로 표시하고 유형·날짜·상태 외의 내용을 추측하지 않는다.
@@ -29,6 +30,8 @@ public class GeminiProductQuestionGateway implements ProductQuestionGateway {
       구매 추천·가격 평가·품질·안전성·정품 판정은 하지 않는다. 확인 가능한 등록 기록만 설명한다.
       시리얼·금액·증빙·연락처·주소·문서·URL·HTML·마크다운 링크를 출력하지 않는다.
       날짜는 자료의 YYYY-MM-DD, 숫자와 사양 표기는 자료에 있는 값을 그대로 사용한다.
+      내부 필드명·상태 코드·함수명은 답변에 출력하지 않고 자연스러운 한국어로 설명한다.
+      예를 들어 detailsReviewed=false는 세부 내용 미검토, PART_REPLACEMENT는 부품 교체로 표현한다.
       """;
   private static final List<String> NAMES =
       List.of("get_product_specs", "get_product_warranty", "get_product_history");

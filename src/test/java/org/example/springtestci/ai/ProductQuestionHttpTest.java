@@ -211,6 +211,37 @@ class ProductQuestionHttpTest {
   }
 
   @Test
+  void voidEvidenceNeedsVoidNoticeWithoutRequiringPendingDetailsBoilerplate() throws Exception {
+    TOOLS.set(List.of("get_product_history"));
+    jdbc.update("UPDATE product_events SET status='VOID' WHERE id=501");
+    ANSWER.set(
+        new ProductQuestionGateway.Answer(
+            "이 기록은 무효 처리되어 실제 수리 사실로 볼 수 없습니다.", List.of("event:501")));
+    var response = post(PRODUCT, "1", "무효 수리 기록은?");
+    assertEquals(200, response.statusCode(), response.body());
+    assertEquals("VOID", data(response).at("/sources/0/facts/status").asString());
+    assertFalse(data(response).at("/sources/0/facts").has("content"));
+    ANSWER.set(new ProductQuestionGateway.Answer("등록된 수리 기록입니다.", List.of("event:501")));
+    assertError(502, "AI_003", post(PRODUCT, "1", "수리 기록은?"));
+  }
+
+  @Test
+  void missingWarrantyDoesNotAdvertiseAnUnusableCitationKey() throws Exception {
+    TOOLS.set(List.of("get_product_warranty"));
+    jdbc.update("UPDATE products SET warranty_expires_at=NULL WHERE id=101");
+    ANSWER.set(new ProductQuestionGateway.Answer("등록된 보증일을 확인할 수 없습니다.", List.of()));
+    var response = post(PRODUCT, "1", "보증은 유효한가요?");
+    assertEquals(200, response.statusCode(), response.body());
+    assertEquals(ProductQuestionService.NO_RECORD, data(response).path("answer").asString());
+    var tool = JSON.readTree(INPUT.get()).get(0);
+    assertFalse(tool.has("sourceKey"));
+    assertFalse(tool.path("data").has("warrantyExpiresOn"));
+    assertFalse(tool.path("data").path("asOf").asString().isBlank());
+    ANSWER.set(new ProductQuestionGateway.Answer("보증이 유효합니다.", List.of("warranty")));
+    assertError(502, "AI_003", post(PRODUCT, "1", "보증은 유효한가요?"));
+  }
+
+  @Test
   void missingEvidenceUsesSafeUnknownAnswerInsteadOfUnsubstantiatedModelText() throws Exception {
     TOOLS.set(List.of("get_product_history"));
     jdbc.update("DELETE FROM product_events");

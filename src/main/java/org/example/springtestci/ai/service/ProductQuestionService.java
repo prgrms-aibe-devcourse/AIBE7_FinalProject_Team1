@@ -91,10 +91,12 @@ public class ProductQuestionService {
                       new ListingSuggestionGateway.Suggestion("제품 기록 답변", answer.answer()),
                       session.deliveredJson.toString())
                   .description();
-      // 무효·미검토 기록을 근거로 쓸 때도 실제 수리·교체 사실처럼 단정하지 않도록 표시를 요구한다.
+      // 무효 기록은 무효 표시로 충분하다. 유효하지만 미검토인 기록만 별도의 확인 불가 안내를 요구한다.
       for (var item : evidence) {
-        if ("VOID".equals(item.facts().get("status")) && !text.contains("무효")) invalid();
-        if (Boolean.FALSE.equals(item.facts().get("detailsReviewed"))
+        boolean voided = "VOID".equals(item.facts().get("status"));
+        if (voided && !text.contains("무효")) invalid();
+        if (!voided
+            && Boolean.FALSE.equals(item.facts().get("detailsReviewed"))
             && !text.contains("미검토")
             && !text.contains("확인할 수 없")) invalid();
       }
@@ -167,8 +169,12 @@ public class ProductQuestionService {
               && !product.path("warrantyExpiresAt").isMissingNode()) {
             facts.put("warrantyExpiresOn", product.get("warrantyExpiresAt").asString());
             delivered.put("warranty", new Evidence("warranty", "WARRANTY", "등록된 보증 만료일", facts));
+            payload = Map.of("sourceKey", "warranty", "data", facts);
+          } else {
+            // 실제 근거가 없는 경우 모델에도 인용할 키를 주지 않아 확인 불가 답변이 가짜 근거로 거부되지 않게 한다.
+            payload =
+                Map.of("data", facts, "note", "등록된 보증 만료일이 없어 인용할 근거가 없다. sourceKeys는 빈 배열로 답한다.");
           }
-          payload = Map.of("sourceKey", "warranty", "data", facts);
         }
         default -> {
           List<Map<String, Object>> events = new ArrayList<>();
