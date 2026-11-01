@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import org.example.springtestci.history.dto.CorrectHistoryEventRequest;
@@ -108,6 +109,31 @@ class HistoryRepositoryTest {
         2L,
         jdbc.queryForObject(
             "SELECT facts_version FROM products WHERE id = ?", Long.class, productId));
+  }
+
+  @Test
+  void onlyAnUnexpiredPendingDirectTransferBlocksNewHistory() {
+    long productId = insertProduct(109L, "history-fingerprint-transfer-block");
+    jdbc.update(
+        "INSERT INTO users(id,email,password_hash,nickname,role,created_at,updated_at) VALUES(109,'history-transfer@fixture.invalid','unused','hist109','USER',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)");
+    jdbc.update(
+        """
+        INSERT INTO ownership_transfers
+            (product_id, from_user_id, token_hash, status, transfer_type, expires_at, pending_slot)
+        VALUES (?, ?, ?, 'PENDING', 'DIRECT', ?, 1)
+        """,
+        productId,
+        109L,
+        "history-pending-direct-token",
+        OffsetDateTime.now().plusDays(1));
+
+    assertTrue(historyRepository.hasPendingDirectTransfer(productId));
+
+    jdbc.update(
+        "UPDATE ownership_transfers SET expires_at = ? WHERE product_id = ?",
+        OffsetDateTime.now().minusDays(1),
+        productId);
+    assertFalse(historyRepository.hasPendingDirectTransfer(productId));
   }
 
   @Test

@@ -1,7 +1,7 @@
 (() => {
   const API = '/api/v1/products';
   const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
-  const state = { products: [], current: null, selectedId: null, loading: null, imageUrls: [], registerImageUrls: [] };
+  const state = { products: [], current: null, selectedId: null, loading: null, imageUrls: [], registerImageUrls: [], documentToken: 0 };
 
   const escapeHtml = (value) => String(value ?? '')
     .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
@@ -53,6 +53,12 @@
     return values.length ? values.map(escapeHtml).join(' · ') : '상세 사양 미입력';
   };
 
+  const warrantyLabel = (status) => ({ ACTIVE: '보증 중', EXPIRED: '보증 만료', UNKNOWN: '보증 미확인' }[status] || '보증 미확인');
+  const historySummary = (product) => {
+    const recent = product.recentHistory;
+    return `${warrantyLabel(product.warrantyStatus)} · 이력 ${product.historyCount || 0}건${recent ? ` · 최근 ${escapeHtml(recent.title)} (${date(recent.occurredOn)})` : ''}`;
+  };
+
   const renderProducts = () => {
     const root = document.querySelector('#home');
     const list = root?.querySelector('[data-product-list]');
@@ -79,6 +85,7 @@
         <div><span class="eyebrow">내 노트북</span><h3>${escapeHtml(product.title)}</h3>
           <div class="meta">${escapeHtml(product.manufacturer)} · ${escapeHtml(product.modelName)} · 구매일 ${date(product.purchaseDate)}</div>
           <span class="chip">${productChip(product)}</span>
+          <span class="chip">${historySummary(product)}</span>
         </div>
       </article>`).join('');
   };
@@ -118,6 +125,52 @@
   };
 
   const specItem = (label, value, suffix = '') => `<div class="product-spec-item"><span>${label}</span><b>${text(value)}${value == null || value === '' ? '' : escapeHtml(suffix)}</b></div>`;
+  const documentSize = (bytes) => bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)}MB` : `${Math.max(1, Math.round(bytes / 1024))}KB`;
+  const documentKind = (contentType) => contentType === 'application/pdf' ? 'PDF' : contentType?.startsWith('image/') ? '이미지' : '파일';
+
+  const hydrateDocuments = async (productId) => {
+    const section = document.querySelector('[data-product-documents]');
+    const list = section?.querySelector('[data-product-document-list]');
+    const status = section?.querySelector('[data-product-document-status]');
+    if (!list || !status) return;
+    const token = ++state.documentToken;
+    status.hidden = false;
+    status.textContent = '증빙 문서를 불러오는 중입니다.';
+    try {
+      const documents = await api(`${API}/${productId}/documents`) || [];
+      if (token !== state.documentToken || productId !== state.selectedId) return;
+      list.replaceChildren();
+      status.hidden = documents.length > 0;
+      status.textContent = documents.length ? '' : '등록된 증빙 문서가 없습니다.';
+      status.classList.remove('is-error');
+      documents.forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'product-document-row';
+        const info = document.createElement('div');
+        const title = document.createElement('b');
+        title.textContent = `${documentKind(item.contentType)} 문서 #${item.id}`;
+        const meta = document.createElement('small');
+        meta.textContent = `${documentSize(item.byteSize)} · v${item.version}`;
+        info.append(title, meta);
+        const privacy = document.createElement('span');
+        privacy.className = item.redactionRequired ? 'product-document-private' : 'product-document-safe';
+        privacy.textContent = item.redactionRequired ? '재마스킹 필요' : '마스킹 확인 완료';
+        const open = document.createElement('button');
+        open.className = 'button small';
+        open.type = 'button';
+        open.dataset.productDocumentOpen = item.id;
+        open.disabled = item.redactionRequired;
+        open.textContent = '보기';
+        row.append(info, privacy, open);
+        list.append(row);
+      });
+    } catch (error) {
+      if (token !== state.documentToken) return;
+      status.hidden = false;
+      status.textContent = error.message;
+      status.classList.add('is-error');
+    }
+  };
   const editForm = (product) => {
     return `<form class="product-edit-form" data-product-edit-form hidden novalidate>
       <div class="product-edit-heading"><div><h2>제품 정보 수정</h2><p>제품명과 구매·보증 정보를 수정하면 변경 기록이 남습니다.</p></div><button type="button" data-product-edit-cancel aria-label="수정 닫기">×</button></div>
@@ -167,11 +220,17 @@
         ${specItem('디스플레이', specs.display)}${specItem('배터리 상태', specs.batteryHealthPercent, '%')}${specItem('운영체제', specs.os)}${specItem('저장 방식', specs.storageType)}
       </div></section>
       ${editForm(product)}
+      <section class="product-document-card" data-product-documents>
+        <div class="product-document-heading"><div><h2>증빙 문서</h2><p>제품 이력과 함께 보관된 마스킹 문서를 확인합니다.</p></div><button class="button primary" type="button" data-page="docmask" data-docmask-product-id="${escapeHtml(product.productId)}">문서 올리기</button></div>
+        <p class="product-document-status" data-product-document-status role="status">증빙 문서를 불러오는 중입니다.</p>
+        <div data-product-document-list></div>
+      </section>
       <section class="history-mount" data-history-root data-product-id="${product.productId}" aria-label="제품 이력"></section>
       ${images.length ? `<section class="product-image-manager"><h2>제품 이미지 관리</h2>${images.map((image, index) => `<div class="product-image-row"><span>${index + 1}번 이미지 ${image.primary ? '· 대표' : ''}</span><div><button class="button" type="button" data-image-move="up" data-image-id="${image.imageId}" ${index === 0 ? 'disabled' : ''}>앞으로</button><button class="button" type="button" data-image-move="down" data-image-id="${image.imageId}" ${index === images.length - 1 ? 'disabled' : ''}>뒤로</button><button class="button" type="button" data-image-primary data-image-id="${image.imageId}" ${image.primary ? 'disabled' : ''}>대표 지정</button><button class="button danger" type="button" data-image-delete data-image-id="${image.imageId}">삭제</button></div></div>`).join('')}</section>` : ''}
       <section class="product-detail-upload"><div><h2>제품 이미지 추가</h2><p>JPG, PNG, WEBP · 장당 최대 5MB · 제품당 최대 10장</p></div><label class="button primary" for="product-detail-images">＋ 이미지 추가</label><input id="product-detail-images" type="file" accept="image/jpeg,image/png,image/webp" multiple data-product-detail-images></section>
       <section class="ph" data-product-history data-product-id="${escapeHtml(product.productId)}"></section>`;
     hydrateImages(container);
+    hydrateDocuments(product.productId);
     document.dispatchEvent(new CustomEvent('pastport:product-detail-rendered', { detail: { product } }));
   };
 
@@ -338,6 +397,14 @@
     if (product) state.selectedId = Number(product.dataset.productId);
     if (event.target.closest?.('[data-product-retry]')) openHome(true);
     if (event.target.closest?.('[data-product-detail-retry]')) openDetail();
+    const documentOpen = event.target.closest?.('[data-product-document-open]');
+    if (documentOpen) {
+      try {
+        const file = await api(`/api/v1/documents/${documentOpen.dataset.productDocumentOpen}/file-url`);
+        window.open(file.url, '_blank', 'noopener');
+      } catch (error) { toast(error.message, 'error'); }
+      return;
+    }
     if (event.target.closest?.('[data-product-edit-open]')) {
       const form = document.querySelector('[data-product-edit-form]');
       if (form) { form.hidden = false; form.querySelector('input')?.focus(); form.scrollIntoView({ behavior: 'smooth', block: 'start' }); }

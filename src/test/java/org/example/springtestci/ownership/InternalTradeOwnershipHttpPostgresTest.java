@@ -18,9 +18,11 @@ import org.example.springtestci.ai.repository.ListingSummaryRepository;
 import org.example.springtestci.ai.service.*;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.security.RequestRateLimiter;
+import org.example.springtestci.history.repository.HistoryRepository;
 import org.example.springtestci.ownership.repository.InternalTradeOwnershipRepository;
 import org.example.springtestci.ownership.service.InternalTradeOwnershipService;
 import org.example.springtestci.ownership.service.OwnershipTransferService;
+import org.example.springtestci.product.service.SerialNumberProtector;
 import org.example.springtestci.trade.repository.*;
 import org.example.springtestci.trade.service.*;
 import org.flywaydb.core.Flyway;
@@ -118,20 +120,28 @@ class InternalTradeOwnershipHttpPostgresTest {
         }
 
         @Override
-        public void insertTransferEvent(long product, long transfer, LocalDate date, Instant at) {
-          super.insertTransferEvent(product, transfer, date, at);
-          fail("history");
-        }
-
-        @Override
         public void protectDocuments(long product, Instant at) {
           super.protectDocuments(product, at);
           fail("documents");
         }
+      };
+    }
+
+    @Bean
+    @Primary
+    HistoryRepository faultHistory(JdbcTemplate jdbc) {
+      return new HistoryRepository(jdbc) {
+        @Override
+        public long insertTransferEvent(
+            long product, long transfer, LocalDate date, OffsetDateTime at) {
+          long id = super.insertTransferEvent(product, transfer, date, at);
+          fail("history");
+          return id;
+        }
 
         @Override
-        public void makeHistoryPrivate(long product) {
-          super.makeHistoryPrivate(product);
+        public void makeAllPrivate(long product) {
+          super.makeAllPrivate(product);
           fail("history-publication");
         }
       };
@@ -355,6 +365,38 @@ class InternalTradeOwnershipHttpPostgresTest {
   }
 
   @Test
+  void pendingExternalTransferBlocksNewUserHistoryUntilItIsCancelled() throws Exception {
+    jdbc.update("UPDATE listings SET status='CANCELLED',active_slot=NULL WHERE id=11");
+    var created =
+        send("POST", "/api/v1/ownership/transfers", 1, "{\"productId\":101,\"toUserId\":2}");
+    assertEquals(201, created.statusCode(), created.body());
+    long transferId = data(created).path("transferId").asLong();
+
+    var blocked =
+        send(
+            "POST",
+            "/api/v1/products/101/events",
+            1,
+            "{\"eventType\":\"INSPECTION\",\"occurredOn\":\"2026-10-21\",\"title\":\"transfer pending inspection\"}");
+    assertEquals(409, blocked.statusCode(), blocked.body());
+    assertEquals("HISTORY_004", JSON.readTree(blocked.body()).path("code").asText());
+    assertEquals(0, count("product_events", "title='transfer pending inspection'"));
+
+    assertEquals(
+        200,
+        send("POST", "/api/v1/ownership/transfers/" + transferId + "/cancel", 1, null)
+            .statusCode());
+    assertEquals(
+        201,
+        send(
+                "POST",
+                "/api/v1/products/101/events",
+                1,
+                "{\"eventType\":\"INSPECTION\",\"occurredOn\":\"2026-10-21\",\"title\":\"transfer cancelled inspection\"}")
+            .statusCode());
+  }
+
+  @Test
   void bothPartiesCompleteAndPublicAccessEndsWhileTheNewOwnerKeepsHistoryAndDocuments()
       throws Exception {
     reserve();
@@ -387,6 +429,22 @@ class InternalTradeOwnershipHttpPostgresTest {
         404,
         send("POST", "/api/v1/products/101/ai/questions", 1, "{\"question\":\"현재 메모리는?\"}")
             .statusCode());
+    jdbc.update(
+        "UPDATE products SET serial_number_ciphertext=? WHERE id=101",
+        context.getBean(SerialNumberProtector.class).encrypt("HANDOVER-SERIAL-101"));
+    var updated =
+        send(
+            "PATCH",
+            "/api/v1/products/101",
+            2,
+            "{\"title\":\"buyer owned laptop\",\"purchaseDate\":\"2026-10-01\",\"warrantyExpiresAt\":\"2027-10-01\",\"reason\":\"ownership handover check\"}");
+    assertEquals(200, updated.statusCode(), updated.body());
+    assertEquals("buyer owned laptop", data(updated).path("title").asText());
+    assertEquals(
+        2L,
+        jdbc.queryForObject(
+            "SELECT author_id FROM product_field_authors WHERE product_id=101 AND field_name='TITLE'",
+            Long.class));
     assertEquals(
         201,
         send("POST", DRAFT, 2, "{\"title\":\"buyer fresh draft\",\"selectedImageIds\":[301]}")
@@ -591,6 +649,7 @@ class InternalTradeOwnershipHttpPostgresTest {
   void lateAiSummaryAndQuestionCannotPublishResultsAfterTheRealTransfer() throws Exception {
     reserve();
     var pending = new ListingSummaryRepository.Pending(11, UUID.randomUUID());
+    Instant queuedAt = Instant.now();
     context
         .getBean(ListingSummaryRepository.class)
         .queue(
@@ -598,9 +657,9 @@ class InternalTradeOwnershipHttpPostgresTest {
             7,
             jdbc.queryForObject("SELECT content_version FROM listings WHERE id=11", Long.class),
             pending.attemptId(),
-            Instant.now(),
+            queuedAt.minusSeconds(1),
             false,
-            Instant.now());
+            queuedAt);
     var job = context.getBean(ListingSummaryStore.class).claim(pending);
     assertNotNull(job);
     var entered = new CountDownLatch(1);

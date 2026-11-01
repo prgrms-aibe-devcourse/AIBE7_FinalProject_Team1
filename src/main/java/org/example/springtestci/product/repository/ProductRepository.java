@@ -23,6 +23,16 @@ public class ProductRepository {
              CASE WHEN p.warranty_expires_at IS NULL THEN 'UNKNOWN'
                   WHEN p.warranty_expires_at >= CURRENT_DATE THEN 'ACTIVE'
                   ELSE 'EXPIRED' END AS warranty_status,
+             (SELECT COUNT(*) FROM product_events pe WHERE pe.product_id = p.id) AS history_count,
+             (SELECT pe.event_type FROM product_events pe WHERE pe.product_id = p.id
+               ORDER BY pe.occurred_on DESC, pe.created_at DESC, pe.id DESC
+               FETCH FIRST 1 ROW ONLY) AS recent_history_type,
+             (SELECT pe.title FROM product_events pe WHERE pe.product_id = p.id
+               ORDER BY pe.occurred_on DESC, pe.created_at DESC, pe.id DESC
+               FETCH FIRST 1 ROW ONLY) AS recent_history_title,
+             (SELECT pe.occurred_on FROM product_events pe WHERE pe.product_id = p.id
+               ORDER BY pe.occurred_on DESC, pe.created_at DESC, pe.id DESC
+               FETCH FIRST 1 ROW ONLY) AS recent_history_occurred_on,
              l.cpu_spec, l.gpu_spec, l.ram_gb, l.storage_gb, l.storage_type,
              l.display_spec, l.battery_health_percent, l.os_name
         FROM products p LEFT JOIN laptop_details l ON l.product_id = p.id
@@ -114,6 +124,17 @@ public class ProductRepository {
             fieldName)
         .stream()
         .findFirst();
+  }
+
+  /** 승계 후 현재 소유자가 값을 고치면 해당 필드의 최신 작성 책임도 현재 소유자로 넘긴다. */
+  public void replaceFieldAuthor(long productId, String fieldName, long authorId) {
+    int updated =
+        jdbc.update(
+            "UPDATE product_field_authors SET author_id = ? WHERE product_id = ? AND field_name = ?",
+            authorId,
+            productId,
+            fieldName);
+    if (updated == 0) insertFieldAuthor(productId, fieldName, authorId);
   }
 
   public void insertLaptopDetails(long productId, CreateProductRequest.Specifications specs) {
@@ -218,7 +239,7 @@ public class ProductRepository {
 
   public void updateOwner(long productId, long newOwnerId) {
     jdbc.update(
-        "UPDATE products SET owner_id = ?, updated_at = NOW() WHERE id = ? AND archived_at IS NULL",
+        "UPDATE products SET owner_id = ?, facts_version = facts_version + 1, updated_at = NOW() WHERE id = ? AND archived_at IS NULL",
         newOwnerId,
         productId);
   }
@@ -422,7 +443,14 @@ public class ProductRepository {
             row.getObject("battery_health_percent", Integer.class),
             row.getString("os_name")),
         List.of(),
-        row.getObject("created_at", java.time.OffsetDateTime.class));
+        row.getObject("created_at", java.time.OffsetDateTime.class),
+        row.getLong("history_count"),
+        row.getString("recent_history_title") == null
+            ? null
+            : new ProductResponse.RecentHistory(
+                row.getString("recent_history_type"),
+                row.getString("recent_history_title"),
+                row.getObject("recent_history_occurred_on", java.time.LocalDate.class)));
   }
 
   public record ProductImageRecord(
