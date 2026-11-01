@@ -1,7 +1,7 @@
 (() => {
   const API = '/api/v1/products';
   const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
-  const state = { products: [], current: null, selectedId: null, loading: null, imageUrls: [] };
+  const state = { products: [], current: null, selectedId: null, loading: null, imageUrls: [], registerImageUrls: [] };
 
   const escapeHtml = (value) => String(value ?? '')
     .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
@@ -274,6 +274,7 @@
       }
       state.products = [];
       form.reset();
+      resetRegisterWizard(form);
       navigate('passport');
     } catch (error) {
       if (error.status === 401) return showFormMessage(form, '로그인이 필요합니다. 로그인 후 다시 시도해 주세요.');
@@ -387,16 +388,92 @@
     const list = form?.querySelector('#product-manufacturers');
     if (list) list.replaceChildren(...(window.PastportCategories?.makers(category) || []).map((name) => new Option(name, name)));
   };
+  const setRegisterStep = (form, step) => {
+    form.querySelectorAll('[data-register-step]').forEach((panel) => {
+      const active = Number(panel.dataset.registerStep) === step;
+      panel.hidden = !active;
+      panel.classList.toggle('active', active);
+    });
+    const register = form.closest('.product-register');
+    register?.querySelectorAll('[data-register-step-indicator]').forEach((indicator) => {
+      const number = Number(indicator.dataset.registerStepIndicator);
+      indicator.classList.toggle('active', number === step);
+      indicator.classList.toggle('done', number < step);
+    });
+    const progress = register?.querySelector('[data-product-register-progress]');
+    if (progress) progress.textContent = `${step} / 3`;
+    form.dataset.currentStep = String(step);
+    form.querySelector(`[data-register-step="${step}"] h2`)?.focus?.({ preventScroll: true });
+    register?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const validateRegisterStep = (form, step) => {
+    if (step === 1) {
+      const purchaseDate = form.elements.purchaseDate.value;
+      const warrantyDate = form.elements.warrantyExpiresAt.value;
+      form.elements.warrantyExpiresAt.setCustomValidity(
+        purchaseDate && warrantyDate && warrantyDate < purchaseDate ? '보증 만료일은 구매일보다 빠를 수 없습니다.' : '',
+      );
+    }
+    const invalid = form.querySelector(`[data-register-step="${step}"] :invalid`);
+    if (!invalid) return true;
+    invalid.reportValidity();
+    invalid.focus();
+    return false;
+  };
+  const clearRegisterImagePreviews = () => {
+    state.registerImageUrls.forEach((url) => URL.revokeObjectURL(url));
+    state.registerImageUrls = [];
+  };
+  const renderRegisterImagePreviews = (form, files) => {
+    clearRegisterImagePreviews();
+    const previews = form.querySelector('[data-product-image-previews]');
+    if (!previews) return;
+    previews.replaceChildren(...files.map((file, index) => {
+      const url = URL.createObjectURL(file);
+      state.registerImageUrls.push(url);
+      const item = document.createElement('figure');
+      item.className = 'product-image-preview';
+      const image = document.createElement('img');
+      image.src = url;
+      image.alt = `${index + 1}번째 제품 이미지 미리보기`;
+      const caption = document.createElement('figcaption');
+      caption.textContent = index === 0 ? '대표 이미지' : `${index + 1}번째 이미지`;
+      item.append(image, caption);
+      return item;
+    }));
+  };
+  const resetRegisterWizard = (form) => {
+    clearRegisterImagePreviews();
+    form.querySelector('[data-product-image-previews]')?.replaceChildren();
+    const summary = form.querySelector('[data-product-file-summary]');
+    if (summary) summary.textContent = '선택된 이미지 없음';
+    const selectedDocument = form.querySelector('[data-product-document-selected]');
+    if (selectedDocument) selectedDocument.hidden = true;
+    setRegisterStep(form, 1);
+  };
   document.addEventListener('pastport:page-loaded', (event) => {
-    if (event.detail?.id === 'register') fillMakerSuggestions(document.querySelector('#register form'), 'LAPTOP');
+    if (event.detail?.id !== 'register') return;
+    const form = document.querySelector('#register [data-product-form]');
+    fillMakerSuggestions(form, 'LAPTOP');
+    if (form) setRegisterStep(form, Number(form.dataset.currentStep || 1));
   });
-  // 노트북이 아닌 제품은 노트북 사양 입력란을 숨긴다.
-  document.addEventListener('change', (event) => {
-    if (!event.target.matches?.('[data-product-category]')) return;
-    const form = event.target.closest('form');
-    const specs = form?.querySelector('[data-product-specs]');
-    if (specs) specs.hidden = event.target.value !== 'LAPTOP';
-    fillMakerSuggestions(form, event.target.value);
+  document.addEventListener('click', (event) => {
+    const form = event.target.closest?.('[data-product-form]');
+    if (!form) return;
+    if (event.target.closest?.('[data-register-next]')) {
+      const current = Number(form.dataset.currentStep || 1);
+      if (validateRegisterStep(form, current)) setRegisterStep(form, Math.min(3, current + 1));
+      return;
+    }
+    if (event.target.closest?.('[data-register-prev]')) {
+      setRegisterStep(form, Math.max(1, Number(form.dataset.currentStep || 1) - 1));
+      return;
+    }
+    if (event.target.closest?.('[data-product-document-clear]')) {
+      const input = form.querySelector('[data-product-document]');
+      if (input) input.value = '';
+      form.querySelector('[data-product-document-selected]').hidden = true;
+    }
   });
   document.addEventListener('input', (event) => {
     if (event.target.matches?.('[data-product-search]')) renderProducts();
@@ -404,8 +481,22 @@
   document.addEventListener('change', async (event) => {
     if (event.target.name === 'images') {
       const files = [...event.target.files];
-      const summary = event.target.closest('form')?.querySelector('[data-product-file-summary]');
+      const form = event.target.closest('form');
+      const error = validateImages(files);
+      if (error) { toast(error, 'error'); event.target.value = ''; renderRegisterImagePreviews(form, []); return; }
+      const summary = form?.querySelector('[data-product-file-summary]');
       if (summary) summary.textContent = files.length ? `${files.length}장 선택됨` : '선택된 이미지 없음';
+      renderRegisterImagePreviews(form, files);
+      return;
+    }
+    if (event.target.matches?.('[data-product-document]')) {
+      const file = event.target.files[0];
+      const form = event.target.closest('form');
+      const selected = form?.querySelector('[data-product-document-selected]');
+      if (!selected) return;
+      selected.hidden = !file;
+      const name = selected.querySelector('[data-product-document-name]');
+      if (name) name.textContent = file?.name || '';
       return;
     }
     if (!event.target.matches?.('[data-product-detail-images]')) return;

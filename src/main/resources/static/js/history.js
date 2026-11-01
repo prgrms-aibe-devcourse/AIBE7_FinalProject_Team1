@@ -101,6 +101,11 @@
         <div class="history-field history-wide" data-history-part-field><label>교체 부품</label><input name="replacedPart" maxlength="200" value="${escapeHtml(event?.replacedPart || '')}" placeholder="예: 배터리, SSD"></div>
       </div>
       ${specFields(specs)}
+      ${editing ? '' : `<div class="history-document-field">
+        <div><b>증빙 문서</b><span>영수증, 보증서, 수리 내역서를 이력에 연결할 수 있습니다.</span></div>
+        <button class="button" type="button" data-history-document-select>증빙 문서 선택</button>
+        <div class="history-document-selection" data-history-document-selection aria-live="polite" hidden></div>
+      </div>`}
       ${editing ? '<div class="history-field history-reason"><label>정정 사유 <b>*</b></label><input name="reason" required maxlength="500" placeholder="예: 서비스 명세서 내용으로 바로잡음"></div>' : ''}
       <div class="history-form-message" data-history-form-message role="alert" hidden></div>
       <div class="history-form-actions"><button class="button" type="button" data-history-cancel>취소</button><button class="button primary" type="submit">${editing ? '정정 내용 저장' : '이력 등록'}</button></div>
