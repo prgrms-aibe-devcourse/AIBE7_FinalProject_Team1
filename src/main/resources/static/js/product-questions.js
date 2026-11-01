@@ -24,7 +24,7 @@
       parts.push(facts.status === 'VOID' ? '무효 기록 · 실제 사건 집계 제외' : '유효 기록');
       if (facts.corrected) parts.push('정정 반영');
       if (facts.previousOwner) parts.push('이전 소유자 기록');
-      if (!facts.detailsReviewed) parts.push('세부 내용 미검토');
+      if (!facts.detailsReviewed) parts.push('공개된 세부 내용 없음');
       if (facts.title) parts.push(facts.title);
       if (facts.content) parts.push(facts.content);
       if (facts.replacedPart) parts.push('교체 부품: ' + facts.replacedPart);

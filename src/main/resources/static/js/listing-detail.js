@@ -20,9 +20,11 @@
       item.append(meta, element('h4', '', event.title));
       if (event.content) item.append(element('p', 'sl-publication-content', event.content));
       if (event.serviceProvider || event.replacedPart) item.append(element('p', '', [event.serviceProvider, event.replacedPart].filter(Boolean).join(' · ')));
-      if (event.detailsStatus === 'REVIEW_PENDING') item.append(element('p', '', '공개 정보 확인 중 · 상세 내용은 표시하지 않아요.'));
+      if (event.detailsStatus === 'REVIEW_PENDING') item.append(element('p', '', '상세 정보 연결 전 · 이력 유형과 날짜는 확인할 수 있어요.'));
+      if (event.detailsStatus === 'EXCLUDED') item.append(element('p', '', '공개 가능한 상세 내용이 없어요. 이력 유형과 날짜는 확인할 수 있어요.'));
       event.corrections.forEach(correction => item.append(element('p', 'sl-publication-correction',
-        (event.status === 'VOID' ? '무효·정정 사유: ' : '정정 사유: ') + (correction.reason || '공개 정보 확인 중'))));
+        (event.status === 'VOID' ? '무효·정정 사유: ' : '정정 사유: ') + (correction.reason ||
+          (correction.detailsStatus === 'EXCLUDED' ? '공개 제외 정보가 포함되어 표시하지 않아요.' : '상세 정보 연결 전')))));
       if (event.status === 'VOID' && !event.corrections.length) item.append(element('p', '', '무효 사유 확인 중'));
       container.append(item);
     });

@@ -29,8 +29,10 @@ public record ListingPublicationResponse(Product product, History history) {
   public record Page(int number, int size, long totalElements, int totalPages, boolean hasNext) {}
 
   public enum DetailsStatus {
+    // REVIEWED는 자동 공개 검사 완료를 뜻한다. ADMIN 승인 여부가 아니다.
     REVIEWED,
-    REVIEW_PENDING
+    REVIEW_PENDING,
+    EXCLUDED
   }
 
   public record Event(

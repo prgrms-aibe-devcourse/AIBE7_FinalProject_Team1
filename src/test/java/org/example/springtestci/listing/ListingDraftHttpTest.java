@@ -1035,7 +1035,9 @@ class ListingDraftHttpTest {
     assertEquals("REVIEW_PENDING", items.get(1).get("detailsStatus").asText());
     assertEquals("제품 수리", items.get(1).get("title").asText());
     assertTrue(items.get(1).get("content").isNull());
-    assertEquals("REVIEW_PENDING", items.get(2).get("detailsStatus").asText());
+    assertEquals("REVIEWED", items.get(2).get("detailsStatus").asText());
+    assertEquals("점검", items.get(2).get("title").asText());
+    assertTrue(items.get(2).get("content").isNull());
     assertEquals("소유권 이전 완료", items.get(3).get("title").asText());
     assertTrue(items.get(3).get("systemGenerated").asBoolean());
     for (String excluded :

@@ -61,7 +61,7 @@ public class ProductQuestionSource {
       contentVersion = listing.getContentVersion();
       listingState = listing.getStatus().name();
     }
-    // 소유자 질문도 같은 허용 목록을 사용한다. 시리얼·금액·증빙·미검토 본문은 AI에 넘기지 않는다.
+    // 소유자 질문도 같은 공개 필드 자동 검사를 사용한다. 시리얼·금액·증빙·제외된 본문은 넘기지 않는다.
     var source = sources.capture(productId, ownerId);
     LocalDate asOf = LocalDate.now(clock);
     String fingerprint =
