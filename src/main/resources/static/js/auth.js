@@ -590,6 +590,15 @@ const auth = (() => {
     if (slot) slot.outerHTML = await artHtml.catch(() => '');
   });
 
+  // 로그인한 뒤 뒤로 가기·앞으로 가기로 로그인·회원가입 화면이 열리면 안내하고 메인 화면으로 보낸다.
+  // 기록이 늘지 않도록 현재 기록의 화면 이름을 먼저 홈으로 바꿔, 뒤로 가기를 다시 눌러도 이 화면에 갇히지 않게 한다.
+  document.addEventListener('pastport:page-shown', (event) => {
+    if (!user || !['auth', 'signup'].includes(event.detail?.id)) return;
+    window.history.replaceState({ ...window.history.state, page: 'landing' }, '', window.location.href);
+    goto('landing');
+    alert('이미 로그인되어 있습니다.');
+  });
+
   // 새로고침 후 HttpOnly refresh 쿠키가 남아 있으면 세션을 복구한다.
   const startupVersion = sessionVersion;
   refresh().then(() => { if (startupVersion === sessionVersion) returnToAdmin(); }).catch(() => {

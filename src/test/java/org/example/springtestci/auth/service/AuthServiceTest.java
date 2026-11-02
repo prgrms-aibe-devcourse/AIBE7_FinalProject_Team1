@@ -216,41 +216,6 @@ class AuthServiceTest {
     verifyNoInteractions(jwtTokenProvider);
   }
 
-  /** 같은 브라우저의 본인 토큰이 함께 오면 재로그인으로 보고 이전 토큰을 폐기한 뒤 다시 발급한다. */
-  @Test
-  void loginFromTheSameBrowserReplacesItsOwnSession() throws Exception {
-    User user = user(7L, "user@example.com", "hashed");
-    when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
-    when(passwordEncoder.matches("Passw0rd!", "hashed")).thenReturn(true);
-    when(refreshTokenStore.peekOwner("mine")).thenReturn(Optional.of(7L));
-    when(refreshTokenStore.startSession(7L)).thenReturn(true);
-    when(jwtTokenProvider.createAccessToken(user)).thenReturn("access");
-    when(jwtTokenProvider.accessTokenExpiresInSeconds()).thenReturn(900L);
-    when(refreshTokenStore.issue(7L)).thenReturn("refresh");
-
-    AuthTokens tokens =
-        authService.login(new LoginRequest("user@example.com", "Passw0rd!"), IP, "mine");
-
-    assertEquals("refresh", tokens.refreshToken());
-    verify(refreshTokenStore).revoke("mine");
-  }
-
-  /** 다른 회원의 토큰이 함께 와도 내 계정의 중복 로그인 확인을 건너뛰지 않는다. */
-  @Test
-  void anotherUsersTokenDoesNotBypassTheDuplicateLoginCheck() throws Exception {
-    User user = user(7L, "user@example.com", "hashed");
-    when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
-    when(passwordEncoder.matches("Passw0rd!", "hashed")).thenReturn(true);
-    when(refreshTokenStore.peekOwner("theirs")).thenReturn(Optional.of(8L));
-    when(refreshTokenStore.startSession(7L)).thenReturn(false);
-
-    assertThrows(
-        CommonException.class,
-        () -> authService.login(new LoginRequest("user@example.com", "Passw0rd!"), IP, "theirs"));
-
-    verify(refreshTokenStore, never()).revoke("theirs");
-  }
-
   /** 틀린 비밀번호는 거부하고 토큰을 발급하지 않는다. */
   @Test
   void loginRejectsAWrongPassword() throws Exception {

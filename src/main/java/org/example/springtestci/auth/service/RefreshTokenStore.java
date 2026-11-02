@@ -87,22 +87,6 @@ public class RefreshTokenStore {
     return true;
   }
 
-  /** 이 Refresh Token의 소유 회원을 토큰을 지우지 않고 조회한다. 같은 브라우저의 재로그인을 알아보는 데 쓴다. */
-  public Optional<Long> peekOwner(String token) {
-    if (token == null || token.isBlank()) {
-      return Optional.empty();
-    }
-    String userId = redisTemplate.opsForValue().get(key(token));
-    if (userId == null) {
-      return Optional.empty();
-    }
-    try {
-      return Optional.of(Long.parseLong(userId));
-    } catch (NumberFormatException exception) {
-      return Optional.empty();
-    }
-  }
-
   /** 회원의 로그인 중 표시와 현재 토큰을 지운다. 로그아웃하거나 로그인 시작이 실패했을 때 쓴다. */
   public void endSession(long userId) {
     String current = redisTemplate.opsForValue().getAndDelete(CURRENT_PREFIX + userId);

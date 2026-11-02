@@ -98,16 +98,11 @@ public class AuthService {
   }
 
   /** 로그인한다. 제한 중이면 거부하고, 실패는 기록하며, 미인증 계정은 인증 여부를 확인한 뒤에만 허용한다. 인증 여부 확인이 외부 호출이라 트랜잭션으로 묶지 않는다. */
-  public AuthTokens login(LoginRequest request, String clientIp) {
-    return login(request, clientIp, null);
-  }
-
   /**
-   * 한 계정은 한 곳에서만 로그인할 수 있다. 이미 로그인 중이면 새 로그인을 {@code ALREADY_LOGGED_IN}으로 거부한다. 비밀번호가 맞은 뒤에만 확인해 틀린
-   * 비밀번호로는 로그인 여부를 알 수 없다. 이 요청이 가져온 Refresh Token이 같은 회원의 것이면(같은 브라우저의 재로그인) 막지 않고 이전 토큰을 폐기한 뒤 새로
-   * 발급한다.
+   * 한 계정은 한 곳에서만 로그인할 수 있다. 이미 로그인 중이면 같은 브라우저든 다른 기기든 새 로그인을 {@code ALREADY_LOGGED_IN}으로 거부한다.
+   * 비밀번호가 맞은 뒤에만 확인해 틀린 비밀번호로는 로그인 여부를 알 수 없다.
    */
-  public AuthTokens login(LoginRequest request, String clientIp, String currentRefreshToken) {
+  public AuthTokens login(LoginRequest request, String clientIp) {
     String email = normalizeEmail(request.email());
     // 제한 중에는 비밀번호를 비교하지 않고 바로 거부한다.
     loginRateLimiter.checkAllowed(email, clientIp);
@@ -127,15 +122,7 @@ public class AuthService {
       user.markEmailVerified();
       userRepository.save(user);
     }
-    boolean sameBrowser =
-        refreshTokenStore
-            .peekOwner(currentRefreshToken)
-            .filter(owner -> owner.equals(user.getId()))
-            .isPresent();
-    if (sameBrowser) {
-      refreshTokenStore.revoke(currentRefreshToken);
-    }
-    // 동시에 로그인해도 시작 표시를 원자적으로 만들 수 있는 한 곳만 통과한다.
+    // 동시에 로그인해도 시작 표시를 원자적으로 만들 수 있는 한 곳만 통과한다. 이미 로그인 중이면 예외 없이 거부한다.
     if (!refreshTokenStore.startSession(user.getId())) {
       throw new CommonException(ErrorCode.ALREADY_LOGGED_IN);
     }

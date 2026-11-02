@@ -121,16 +121,6 @@ class RefreshTokenStoreTest {
   }
 
   @Test
-  void peekOwnerReadsTheOwnerWithoutRemovingTheToken() {
-    when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-    when(valueOperations.get(anyString())).thenReturn("7");
-
-    assertEquals(Optional.of(7L), store.peekOwner("token"));
-    assertEquals(Optional.empty(), store.peekOwner(null));
-    verify(valueOperations, org.mockito.Mockito.never()).getAndDelete(anyString());
-  }
-
-  @Test
   void endSessionRemovesTheLeaseAndTheCurrentToken() {
     when(redisTemplate.opsForValue()).thenReturn(valueOperations);
     when(valueOperations.getAndDelete("auth:session-token:7")).thenReturn("auth:refresh:cur");
