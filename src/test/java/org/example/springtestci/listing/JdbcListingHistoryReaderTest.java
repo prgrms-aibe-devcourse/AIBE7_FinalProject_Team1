@@ -10,6 +10,8 @@ import java.util.UUID;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
 import org.example.springtestci.listing.repository.JdbcListingHistoryReader;
+import org.example.springtestci.listing.service.ListingHistoryReader;
+import org.example.springtestci.listing.service.ListingHistoryReader.ChangeAction;
 import org.example.springtestci.listing.service.ListingHistoryReader.State;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,7 +23,7 @@ import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 class JdbcListingHistoryReaderTest {
   private SingleConnectionDataSource source;
   private JdbcTemplate jdbc;
-  private JdbcListingHistoryReader reader;
+  private ListingHistoryReader reader;
   private String schema;
   private static final OffsetDateTime CREATED = OffsetDateTime.parse("2026-10-01T09:00:00+09:00");
 
@@ -48,7 +50,11 @@ class JdbcListingHistoryReaderTest {
         "CREATE TABLE product_events(id BIGINT PRIMARY KEY,product_id BIGINT,author_id BIGINT,event_type VARCHAR(30),occurred_on DATE,status VARCHAR(20),created_at TIMESTAMP WITH TIME ZONE)");
     jdbc.execute(
         "CREATE TABLE audit_logs(id BIGINT PRIMARY KEY,product_id BIGINT,event_id BIGINT,action VARCHAR(50),created_at TIMESTAMP WITH TIME ZONE)");
-    reader = new JdbcListingHistoryReader(jdbc);
+    reader = createReader(jdbc);
+  }
+
+  protected ListingHistoryReader createReader(JdbcTemplate jdbc) {
+    return new JdbcListingHistoryReader(jdbc);
   }
 
   @AfterEach
@@ -117,6 +123,12 @@ class JdbcListingHistoryReaderTest {
     var changes = reader.read(101).events().get(0).corrections();
     assertEquals(
         List.of(13L, 12L, 11L), changes.stream().map(value -> value.correctionId()).toList());
+    assertEquals(
+        List.of(
+            ChangeAction.HISTORY_VOIDED,
+            ChangeAction.HISTORY_CORRECTED,
+            ChangeAction.HISTORY_CORRECTED),
+        changes.stream().map(value -> value.action()).toList());
     assertEquals(CREATED.plusSeconds(13).toInstant(), changes.get(0).correctedAt());
     assertTrue(changes.stream().allMatch(value -> value.reason() == null && !value.reviewed()));
   }
@@ -165,9 +177,80 @@ class JdbcListingHistoryReaderTest {
     assertUnavailable(() -> reader.read(-1));
   }
 
+  @Test
+  void databaseReviewBooleansCannotBypassAutomaticPublicFieldChecks() {
+    jdbc.execute("ALTER TABLE product_events ADD COLUMN title VARCHAR(200)");
+    jdbc.execute("ALTER TABLE product_events ADD COLUMN content VARCHAR(2000)");
+    jdbc.execute("ALTER TABLE product_events ADD COLUMN service_provider VARCHAR(200)");
+    jdbc.execute("ALTER TABLE product_events ADD COLUMN replaced_part VARCHAR(200)");
+    jdbc.execute("ALTER TABLE product_events ADD COLUMN public_text_reviewed BOOLEAN DEFAULT TRUE");
+    jdbc.execute("ALTER TABLE audit_logs ADD COLUMN reason VARCHAR(500)");
+    jdbc.execute("ALTER TABLE audit_logs ADD COLUMN public_reason_reviewed BOOLEAN DEFAULT TRUE");
+    event(1, 101, 1L, "REPAIR", "VALID");
+    change(11, 101, 1, "HISTORY_CORRECTED");
+    String privateText = "PRIVATE_OWNER_TEXT private@fixture.invalid";
+    jdbc.update(
+        "UPDATE product_events SET title=?,content=?,service_provider=?,replaced_part=? WHERE id=1",
+        privateText,
+        privateText,
+        privateText,
+        privateText);
+    jdbc.update("UPDATE audit_logs SET reason=? WHERE id=11", privateText);
+    var snapshot = reader.read(101);
+    assertEquals(State.READY, snapshot.state());
+    assertFalse(snapshot.toString().contains("PRIVATE_OWNER_TEXT"));
+    assertTrue(snapshot.events().get(0).text().reviewed());
+    assertNull(snapshot.events().get(0).text().content());
+    assertTrue(snapshot.events().get(0).corrections().get(0).reviewed());
+    assertNull(snapshot.events().get(0).corrections().get(0).reason());
+    assertEquals(
+        privateText,
+        jdbc.queryForObject("SELECT content FROM product_events WHERE id=1", String.class));
+    assertEquals(
+        privateText,
+        jdbc.queryForObject("SELECT reason FROM audit_logs WHERE id=11", String.class));
+  }
+
+  @Test
+  void exposesCurrentAndPreviousOwnerDetailsAndReasonsWithoutStoredApprovals() {
+    jdbc.execute("ALTER TABLE product_events ADD COLUMN title VARCHAR(200)");
+    jdbc.execute("ALTER TABLE product_events ADD COLUMN content VARCHAR(2000)");
+    jdbc.execute("ALTER TABLE product_events ADD COLUMN service_provider VARCHAR(200)");
+    jdbc.execute("ALTER TABLE product_events ADD COLUMN replaced_part VARCHAR(200)");
+    jdbc.execute(
+        "ALTER TABLE product_events ADD COLUMN public_text_reviewed BOOLEAN DEFAULT FALSE");
+    jdbc.execute("ALTER TABLE audit_logs ADD COLUMN reason VARCHAR(500)");
+    jdbc.execute("ALTER TABLE audit_logs ADD COLUMN public_reason_reviewed BOOLEAN DEFAULT FALSE");
+    event(1, 101, 2L, "PART_REPLACEMENT", "VALID");
+    event(2, 101, 1L, "REPAIR", "VOID");
+    event(3, 101, null, "TRANSFER", "VALID");
+    jdbc.update(
+        "UPDATE product_events SET title='배터리 교체', content='교체 후 충전 동작 확인', service_provider='공식 서비스센터', replaced_part='배터리'");
+    change(11, 101, 1, "HISTORY_CORRECTED");
+    change(12, 101, 2, "HISTORY_VOIDED");
+    jdbc.update("UPDATE audit_logs SET reason='발생일 오기입 정정' WHERE id=11");
+    jdbc.update("UPDATE audit_logs SET reason='중복 등록으로 무효 처리' WHERE id=12");
+    var events = reader.read(101).events();
+    assertNull(events.get(0).text().content());
+    assertEquals("중복 등록으로 무효 처리", events.get(1).corrections().get(0).reason());
+    var previous = events.get(2);
+    assertEquals(2L, previous.authorId());
+    assertEquals("배터리 교체", previous.text().title());
+    assertEquals("교체 후 충전 동작 확인", previous.text().content());
+    assertEquals("공식 서비스센터", previous.text().serviceProvider());
+    assertEquals("배터리", previous.text().replacedPart());
+    assertEquals("발생일 오기입 정정", previous.corrections().get(0).reason());
+    assertFalse(
+        jdbc.queryForObject(
+            "SELECT public_text_reviewed FROM product_events WHERE id=1", Boolean.class));
+    assertFalse(
+        jdbc.queryForObject(
+            "SELECT public_reason_reviewed FROM audit_logs WHERE id=11", Boolean.class));
+  }
+
   private void event(long id, long product, Long author, String type, String status) {
     jdbc.update(
-        "INSERT INTO product_events VALUES(?,?,?,?,?,?,?)",
+        "INSERT INTO product_events(id,product_id,author_id,event_type,occurred_on,status,created_at) VALUES(?,?,?,?,?,?,?)",
         id,
         product,
         author,
@@ -179,7 +262,7 @@ class JdbcListingHistoryReaderTest {
 
   private void change(long id, long product, long event, String action) {
     jdbc.update(
-        "INSERT INTO audit_logs VALUES(?,?,?,?,?)",
+        "INSERT INTO audit_logs(id,product_id,event_id,action,created_at) VALUES(?,?,?,?,?)",
         id,
         product,
         event,

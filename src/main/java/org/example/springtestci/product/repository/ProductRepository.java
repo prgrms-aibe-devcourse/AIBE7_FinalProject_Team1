@@ -255,6 +255,7 @@ public class ProductRepository {
         .findFirst();
   }
 
+  /** 제품 잠금을 보유한 DIRECT 완료에서 소유자와 사실 버전을 같은 트랜잭션으로 갱신한다. */
   public void updateOwner(long productId, long newOwnerId) {
     jdbc.update(
         "UPDATE products SET owner_id = ?, facts_version = facts_version + 1, updated_at = NOW() WHERE id = ? AND archived_at IS NULL",

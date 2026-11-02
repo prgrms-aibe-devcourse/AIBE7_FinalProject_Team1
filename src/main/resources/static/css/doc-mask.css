@@ -22,3 +22,16 @@
 #docmask .dm-check input{margin-top:3px;width:16px;height:16px;accent-color:var(--blue)}
 #docmask .dm-steps-list{margin:0;padding-left:18px;font-size:13px;line-height:1.8;color:#44464a}
 #docmask .sc-note[hidden]{display:none}
+/* 반응형: 왼쪽 메뉴가 있는 폭에서도 카드가 눌리지 않도록 2단을 일찍 접고, 입력·문구가 카드를 넘지 않게 한다. */
+#docmask .dm>*{min-width:0}
+#docmask .dm-field select,#docmask .dm-field input{width:100%;min-width:0;max-width:100%;text-overflow:ellipsis}
+#docmask .dm-drop b,#docmask .dm-drop span{max-width:100%;word-break:keep-all;overflow-wrap:anywhere}
+#docmask .dm-tool-group{max-width:100%}
+@media(max-width:1100px){#docmask .dm{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:640px){
+  #docmask .dm-stage{padding:12px}
+  #docmask .sc-card{padding:16px}
+  #docmask .dm-drop{padding:28px 12px}
+  #docmask .dm-actions .sc-btn{flex:1 1 auto}
+  #docmask .dm-count{margin-left:0;width:100%}
+}

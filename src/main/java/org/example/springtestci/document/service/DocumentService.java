@@ -14,8 +14,10 @@ import org.example.springtestci.common.storage.FileStorage;
 import org.example.springtestci.document.dto.FileUrlResponse;
 import org.example.springtestci.document.entity.Document;
 import org.example.springtestci.document.entity.DocumentExtraction;
+import org.example.springtestci.document.entity.DocumentReplacement;
 import org.example.springtestci.document.entity.ExtractionStatus;
 import org.example.springtestci.document.repository.DocumentExtractionRepository;
+import org.example.springtestci.document.repository.DocumentReplacementRepository;
 import org.example.springtestci.document.repository.DocumentRepository;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
@@ -38,6 +40,7 @@ public class DocumentService {
 
   private final DocumentRepository documentRepository;
   private final DocumentExtractionRepository extractionRepository;
+  private final DocumentReplacementRepository replacementRepository;
   private final ObjectProvider<FileStorage> fileStorage;
   private final DocumentFileValidator fileValidator;
   private final ProductOwnerReader productOwnerReader;
@@ -103,10 +106,30 @@ public class DocumentService {
         fileValidator.validate(uploadedFilename, contentType, content);
 
     String oldObjectKey = document.getObjectKey();
+    // 교체 전 상태를 먼저 잡아 둔다. replaceFile이 값을 바꾸기 때문이다.
+    int fromVersion = document.getVersion();
+    String oldContentType = document.getContentType();
+    long oldByteSize = document.getByteSize();
+    boolean wasProtected = document.isProtected();
     String newObjectKey = store(document.getProductId(), kind.extension(), content);
     try {
-      document.replaceFile(newObjectKey, kind.contentType(), content.length, clock.instant());
+      Instant now = clock.instant();
+      document.replaceFile(newObjectKey, kind.contentType(), content.length, now);
       documentRepository.save(document);
+      // 문서 번호와 이력 연결이 그대로라 다른 파일로 바뀐 사실을 나중에 확인할 수 있도록 같은 트랜잭션에서 남긴다.
+      replacementRepository.save(
+          DocumentReplacement.record(
+              documentId,
+              fromVersion,
+              document.getVersion(),
+              userId,
+              wasProtected,
+              oldContentType,
+              kind.contentType(),
+              oldByteSize,
+              content.length,
+              sha256(content),
+              now));
       rejectPendingExtractions(documentId);
     } catch (RuntimeException exception) {
       deleteStoredFile(newObjectKey);
@@ -114,6 +137,16 @@ public class DocumentService {
     }
     deleteStoredFileAfterCommit(oldObjectKey);
     return document;
+  }
+
+  private static String sha256(byte[] content) {
+    try {
+      return java.util.HexFormat.of()
+          .formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(content));
+    } catch (java.security.NoSuchAlgorithmException exception) {
+      // 모든 JVM이 SHA-256을 제공하므로 도달하지 않는다.
+      throw new IllegalStateException(exception);
+    }
   }
 
   private void rejectPendingExtractions(Long documentId) {
@@ -142,6 +175,22 @@ public class DocumentService {
     Instant expiresAt = clock.instant().plus(FILE_URL_TTL);
     return new FileUrlResponse(
         storage().createTemporaryUrl(document.getObjectKey(), expiresAt), expiresAt);
+  }
+
+  /**
+   * 임시 URL로 실제 다운로드하는 시점에 요청자가 그 파일이 속한 제품의 현재 소유자인지 다시 확인한다. URL 발급 뒤 소유권이 이전되거나 파일이 교체된 경우 거부된다.
+   * 존재 여부를 알려 주지 않도록 모두 RESOURCE_NOT_FOUND로 응답한다.
+   */
+  @Transactional(readOnly = true)
+  public void requireCurrentOwnerOfFile(String objectKey, Long userId) {
+    Document document =
+        documentRepository
+            .findByObjectKey(objectKey)
+            .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND));
+    Long ownerId = productOwnerReader.findOwnerId(document.getProductId()).orElse(null);
+    if (!userId.equals(ownerId)) {
+      throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
+    }
   }
 
   /**

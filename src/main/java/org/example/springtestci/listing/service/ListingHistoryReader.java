@@ -5,8 +5,8 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * 이력 기능이 제공할 판매용 읽기 계약. 호출자는 제품 행 잠금과 현재 소유권 검사를 마친다. 구현체는 같은 제품의 누적 핵심 이력 전체를 반환하고, 개인정보를 제거·검토한
- * 텍스트만 reviewed=true로 표시한다. 비용·시리얼·문서·계정 정보 및 감사 로그 원문은 이 계약에 포함하지 않는다.
+ * 이력 기능이 제공할 판매용 읽기 계약. 호출자는 제품 행 잠금과 현재 소유권 검사를 마친다. 구현체는 같은 제품의 누적 핵심 이력 전체를 반환하고 공개 필드를 자동 검사한다.
+ * 비용·시리얼·문서·계정 정보 및 감사 로그 전후 원문은 이 계약에 포함하지 않는다.
  */
 public interface ListingHistoryReader {
 
@@ -42,6 +42,11 @@ public interface ListingHistoryReader {
     VOID
   }
 
+  enum ChangeAction {
+    HISTORY_CORRECTED,
+    HISTORY_VOIDED
+  }
+
   /** authorId는 이전 소유자 여부 계산에만 사용하며 판매용 응답으로 내보내지 않는다. */
   record Event(
       long eventId,
@@ -58,14 +63,32 @@ public interface ListingHistoryReader {
     }
   }
 
-  /** reviewed는 공개용 텍스트에 대한 개인정보 검토 완료 여부다. 미검토 텍스트는 출력하지 않는다. */
+  /** reviewed는 공개 필드 검사 가능 여부이며 ADMIN 승인 상태가 아니다. 실제 문자열은 필드별로 다시 검사한다. */
   record PublicText(
-      String title,
-      String content,
-      String serviceProvider,
-      String replacedPart,
-      boolean reviewed) {}
+      String title, String content, String serviceProvider, String replacedPart, boolean reviewed) {
+    public PublicText {
+      // 공급자가 DB의 과거 플래그만 믿어도 개인정보가 그대로 통과하지 않도록 읽기 경계에서 처리한다.
+      title = reviewed ? PublicHistoryTextPolicy.clean(title, 200) : null;
+      content = reviewed ? PublicHistoryTextPolicy.clean(content, 2000) : null;
+      serviceProvider = reviewed ? PublicHistoryTextPolicy.clean(serviceProvider, 200) : null;
+      replacedPart = reviewed ? PublicHistoryTextPolicy.clean(replacedPart, 200) : null;
+    }
+  }
 
-  /** 사유도 별도로 검토한다. 변경 전후 원문·처리자 계정·증빙 정보는 전달하지 않는다. */
-  record Correction(long correctionId, Instant correctedAt, String reason, boolean reviewed) {}
+  /** 정정·무효 사유에도 같은 자동 제외 규칙을 적용한다. 감사 전후 원문·수행자·증빙은 전달하지 않는다. */
+  record Correction(
+      long correctionId,
+      Instant correctedAt,
+      String reason,
+      boolean reviewed,
+      ChangeAction action) {
+    public Correction {
+      reason = reviewed ? PublicHistoryTextPolicy.clean(reason, 500) : null;
+    }
+
+    /** 기존 공급자의 유형 없는 기록은 현재 이력 상태로 정정·무효 여부를 추측하지 않는다. */
+    public Correction(long correctionId, Instant correctedAt, String reason, boolean reviewed) {
+      this(correctionId, correctedAt, reason, reviewed, null);
+    }
+  }
 }

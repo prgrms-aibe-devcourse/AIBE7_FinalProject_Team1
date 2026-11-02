@@ -282,6 +282,7 @@
           <div class="product-document-actions"><button class="button primary" type="button" data-page="docmask" data-docmask-product-id="${escapeHtml(product.productId)}">증빙 문서 올리기</button><button class="button" type="button" data-product-documents-show>등록 문서 보기</button></div>
         </section>
       </div>
+      <section class="product-spec-card" data-ownership-root aria-label="외부 소유권 이전"></section>
       <section class="product-spec-card"><h2>노트북 사양</h2><div class="product-spec-list">
         ${specItem('CPU', specs.cpu)}${specItem('GPU', specs.gpu)}${specItem('RAM', specs.ramGb, 'GB')}${specItem('저장 용량', specs.storageGb, `GB ${specs.storageType || ''}`)}
         ${specItem('디스플레이', specs.display)}${specItem('배터리 상태', specs.batteryHealthPercent, '%')}${specItem('운영체제', specs.os)}${specItem('저장 방식', specs.storageType)}
@@ -470,6 +471,10 @@
     if (event.detail?.id === 'home') openHome();
     if (event.detail?.id === 'passport') openDetail();
   });
+  document.addEventListener('click', (event) => {
+    const product = event.target.closest?.('[data-product-id]');
+    if (product) state.selectedId = Number(product.dataset.productId);
+  }, true);
   document.addEventListener('click', async (event) => {
     const product = event.target.closest?.('[data-product-id]');
     if (product) state.selectedId = Number(product.dataset.productId);

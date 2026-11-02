@@ -1,10 +1,11 @@
-const pageNames={home:'내 제품',passport:'제품 여권',register:'새 제품 등록',documents:'문서 보관함',ai:'AI 이력 검색',market:'중고 거래',sell:'판매글 작성',auth:'로그인',signup:'회원가입',mypage:'마이페이지',docmask:'문서 마스킹 확인',detail:'판매글 상세',deals:'내 거래',receive:'이전 받기',trade:'거래 · 소유권 이전'};
+const pageNames={home:'제품 여권',passport:'제품 여권',register:'새 제품 등록',documents:'문서 보관함',ai:'AI 이력 검색',market:'중고 거래',sell:'판매글 작성',auth:'로그인',signup:'회원가입',mypage:'마이페이지',docmask:'문서 마스킹 확인',detail:'판매글 상세',deals:'내 거래',receive:'이전 받기',trade:'거래 · 소유권 이전'};
 pageNames.landing='홈';
-pageNames['my-listings']='내 판매글';
+pageNames['my-listings']='내 거래';
 
 const pendingPages = new Set(['ai', 'trade']);
 
-const show=(name)=>{
+// mode: 'push'(기본) 새 기록 추가 / 'replace' 현재 기록 교체(새로고침 복원) / 'pop' 뒤로·앞으로 가기라 기록을 건드리지 않음.
+const show=(name,mode='push')=>{
   if (pendingPages.has(name)) {
     alert(`[${pageNames[name] || name}] 기능은 현재 준비 중입니다.\n현재 구현된 기능(내 제품, 새 제품 등록, 문서 보관함, 문서 마스킹, 중고 거래, 판매글 작성, 로그인)을 이용해 주세요.`);
     return;
@@ -14,10 +15,14 @@ const show=(name)=>{
   document.querySelectorAll('.page').forEach(page=>page.classList.toggle('active',page.id===target));
   document.querySelectorAll('[data-page]').forEach(button=>button.classList.toggle('active',button.dataset.page===name));
   document.querySelector('#crumb').textContent=pageNames[name];
-  document.querySelector('#side-crumb').textContent=pageNames[name];
   document.querySelector('#side').classList.remove('open');
   window.scrollTo(0,0);
   try{sessionStorage.setItem('pastport.page',name);}catch{}
+  if(mode!=='pop'){
+    // 주소(검색 조건 등)는 그대로 두고 화면 이름만 기록에 남긴다. 같은 화면을 다시 누르면 기록을 늘리지 않는다.
+    if(mode==='replace'||window.history.state?.page===name)window.history.replaceState({...window.history.state,page:name},'',window.location.href);
+    else window.history.pushState({page:name},'',window.location.href);
+  }
   document.dispatchEvent(new CustomEvent('pastport:page-shown',{detail:{id:target}}));
 };
 
@@ -31,7 +36,7 @@ const restorePage=(()=>{
   if(!saved||deepLink||saved==='landing'||pendingPages.has(saved)||!pageNames[saved])return null;
   return saved;
 })();
-if(restorePage)document.addEventListener('pastport:page-loaded',event=>{if(event.detail.id===restorePage)show(restorePage);},{once:false});
+if(restorePage)document.addEventListener('pastport:page-loaded',event=>{if(event.detail.id===restorePage)show(restorePage,'replace');},{once:false});
 
 async function loadLandingListings() {
   const container = document.querySelector('[data-landing-items]');
@@ -140,4 +145,9 @@ document.addEventListener('keydown',(event)=>{
 });
 
 document.addEventListener('click',(event)=>{const target=event.target.closest('[data-page]');if(target)show(target.dataset.page)});
-document.querySelector('#menu').addEventListener('click',()=>document.querySelector('#side').classList.toggle('open'));
+// 브라우저 뒤로가기·앞으로가기: 기록에 담긴 화면을 다시 연다. 첫 기록에도 화면 이름을 심어 둔다.
+window.history.replaceState({...window.history.state,page:window.history.state?.page||'landing'},'',window.location.href);
+window.addEventListener('popstate',(event)=>{
+  const page=event.state?.page;
+  if(page&&pageNames[page]&&!pendingPages.has(page))show(page,'pop');
+});

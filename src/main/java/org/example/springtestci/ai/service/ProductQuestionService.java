@@ -109,7 +109,7 @@ public class ProductQuestionService {
                               : grounded.text()),
                       session.deliveredJson.toString())
                   .description();
-      // 서버가 구성한 무효 안내와 유효하지만 미검토인 기록의 안내가 유지되는지도 확인한다.
+      // 서버가 구성한 무효 안내를 유지하고 공개되지 않은 유효 이력의 상세도 단정하지 않게 한다.
       for (var item : evidence) {
         boolean voided = "VOID".equals(item.facts().get("status"));
         if (voided && !text.contains("무효")) invalid();
@@ -263,7 +263,7 @@ public class ProductQuestionService {
                   "events",
                   events,
                   "note",
-                  "VOID는 실제 사건 집계에서 제외. detailsReviewed=false는 유형·날짜·상태만 확인 가능.");
+                  "VOID는 실제 사건 집계에서 제외. detailsReviewed=false는 공개 상세를 확인할 수 없으며 유형·날짜·상태만 사용. 관리자 검토 대기가 아님.");
         }
       }
       String value = payload.toString();

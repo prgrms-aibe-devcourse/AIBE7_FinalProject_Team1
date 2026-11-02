@@ -1,0 +1,24 @@
+/* 상단의 전체 분류와 현재 분류의 하위 메뉴를 구분한다. 메뉴 명칭과 순서는 같은 데이터에서 가져온다. */
+.app:not(.has-section-nav)>.side,#side[hidden]{display:none}
+.app:not(.has-section-nav)>.main{margin-left:0}
+.app:not(.has-section-nav)>.main>.top{display:none}
+.site-header .landing-nav .nav-item>button:after{transform:scaleX(0);transition:none}
+.site-header .landing-nav .nav-item>button.active:after{transform:scaleX(1)}
+#side{padding:28px 12px 104px;overflow-y:auto}
+.side-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin:0 12px 20px}
+.side-section-head p{margin:0 0 8px;font-size:12px;line-height:1.5;color:#5f6368}
+.side-section-head h2{margin:0;font-size:20px;line-height:1.4;font-weight:600;letter-spacing:-.5px;color:var(--ink)}
+.side-section-head button{display:none}
+#side .nav{display:grid;gap:4px}
+#side .nav button{min-height:44px;padding:10px 12px;border-radius:6px;font-size:14px;line-height:1.6;color:#4f5156}
+#side .nav button:hover{background:#f3f5f7}
+#side .nav button.active{background:#eef0f2;color:var(--ink);font-weight:600}
+@media(max-width:780px){
+  #side{width:min(280px,calc(100vw - 48px));z-index:19;transition:transform .2s ease}
+  #side:not(.open){visibility:hidden}
+  #side.open{visibility:visible}
+  .side-section-head{margin-right:0}
+  .side-section-head button{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;margin-top:-8px;font-size:13px;color:#4f5156}
+  .mobile-menu{min-height:44px;padding:8px 4px;font-size:14px;font-weight:600;color:var(--ink)}
+}
+@media(prefers-reduced-motion:reduce){#side{transition:none}}

@@ -103,6 +103,6 @@ public class OwnershipTransfer {
   }
 
   public boolean isExpired(Instant now) {
-    return now.isAfter(expiresAt);
+    return !now.isBefore(expiresAt);
   }
 }

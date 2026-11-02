@@ -285,10 +285,9 @@ class ListingCancelIntegrationPostgresTest {
         "구매자와 취소하기로 합의했습니다",
         value("SELECT reason FROM audit_logs WHERE action='LISTING_CANCELLED'"));
     var verified = send("GET", "/api/v1/ownership/transfers/verify?token=" + RAW_TOKEN, "2", null);
-    assertEquals(200, verified.statusCode(), verified.body());
-    assertFalse(data(verified).get("canAccept").asBoolean());
+    assertEquals(404, verified.statusCode(), verified.body());
     assertEquals(
-        410,
+        409,
         send("POST", "/api/v1/ownership/transfers/accept", "2", Map.of("token", RAW_TOKEN))
             .statusCode());
     assertPublicClosedAndOwnerHistoryPreserved();

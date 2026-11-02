@@ -13,6 +13,7 @@ import java.util.regex.Pattern;
 import org.example.springtestci.ai.entity.ListingSummaryState;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
+import org.example.springtestci.listing.service.PublicHistoryTextPolicy;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -62,6 +63,7 @@ public class ListingSummaryTextPolicy {
     }
     String text = String.join(" ", sentences);
     if (text.length() > ListingSummaryState.CARD_MAX_LENGTH
+        || PublicHistoryTextPolicy.clean(text, ListingSummaryState.CARD_MAX_LENGTH) == null
         || containsProcessInstructions(text)
         || !referencesProductFact(text, input)) invalid();
     // 제목·본문 제안과 같은 개인정보·금지 표현·미등록 숫자 검사도 요약에 재사용한다.
@@ -75,11 +77,12 @@ public class ListingSummaryTextPolicy {
     return text != null && PROCESS_INSTRUCTIONS.matcher(text).find();
   }
 
-  /** 조회 때는 저장된 카드의 형식만 재확인한다. 원문 사실 검증이나 AI 호출을 새로 실행하지 않는다. */
+  /** 저장된 카드에도 현재 공개 제외 규칙을 적용한다. 원문 사실 검증이나 AI 호출을 새로 실행하지 않는다. */
   public boolean reusableStored(String text) {
     return text != null
         && !text.isBlank()
         && text.length() <= ListingSummaryState.CARD_MAX_LENGTH
+        && PublicHistoryTextPolicy.clean(text, ListingSummaryState.CARD_MAX_LENGTH) != null
         && !text.contains("\n")
         && !text.contains("\r")
         && text.matches("(?s).*[.!?。！？]$")

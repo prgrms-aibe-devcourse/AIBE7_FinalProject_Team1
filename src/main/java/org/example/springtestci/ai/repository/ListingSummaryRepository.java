@@ -122,8 +122,9 @@ public class ListingSummaryRepository {
   /** 커밋 직후 이벤트를 놓쳐도 버전 차이가 남은 기존 요약은 주기적으로 접수를 복구한다. */
   public List<Long> staleListings() {
     return jdbc.queryForList(
-        "SELECT l.id FROM listings l JOIN products p ON p.id=l.product_id WHERE l.status IN ('ACTIVE','RESERVED') AND p.owner_id=l.seller_id AND p.archived_at IS NULL AND l.summary_status IS NOT NULL AND (l.summary_source_product_version<>p.facts_version OR l.summary_source_listing_version<>l.content_version OR (l.summary_status='READY' AND l.summary_format_version<>1)) ORDER BY l.id LIMIT 10",
-        Long.class);
+        "SELECT l.id FROM listings l JOIN products p ON p.id=l.product_id WHERE l.status IN ('ACTIVE','RESERVED') AND p.owner_id=l.seller_id AND p.archived_at IS NULL AND l.summary_status IS NOT NULL AND (l.summary_source_product_version<>p.facts_version OR l.summary_source_listing_version<>l.content_version OR (l.summary_status='READY' AND l.summary_format_version<>?)) ORDER BY l.id LIMIT 10",
+        Long.class,
+        ListingSummaryState.CARD_FORMAT_VERSION);
   }
 
   public record Pending(long listingId, UUID attemptId) {}

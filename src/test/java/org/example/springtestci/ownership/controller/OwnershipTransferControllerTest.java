@@ -94,10 +94,13 @@ class OwnershipTransferControllerTest {
             TransferStatus.PENDING,
             false,
             true);
-    given(service.verifyTransfer("test-token")).willReturn(response);
+    given(service.verifyTransfer(2L, "test-token")).willReturn(response);
 
     mockMvc
-        .perform(get("/api/v1/ownership/transfers/verify").param("token", "test-token"))
+        .perform(
+            get("/api/v1/ownership/transfers/verify")
+                .principal(authentication(2L))
+                .param("token", "test-token"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
         .andExpect(jsonPath("$.data.transferId").value(1))

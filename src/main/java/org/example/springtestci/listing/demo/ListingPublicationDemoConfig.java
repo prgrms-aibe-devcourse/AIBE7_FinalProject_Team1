@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import org.example.springtestci.listing.service.ListingHistoryReader;
+import org.example.springtestci.listing.service.ListingHistoryReader.ChangeAction;
 import org.example.springtestci.listing.service.ListingHistoryReader.Correction;
 import org.example.springtestci.listing.service.ListingHistoryReader.Event;
 import org.example.springtestci.listing.service.ListingHistoryReader.EventStatus;
@@ -59,7 +60,8 @@ public class ListingPublicationDemoConfig {
                                 801,
                                 Instant.parse("2025-05-22T08:00:00Z"),
                                 "점검 발생일 오입력을 정정했습니다.",
-                                true))),
+                                true,
+                                ChangeAction.HISTORY_CORRECTED))),
                     event(
                         504,
                         2L,
@@ -73,7 +75,8 @@ public class ListingPublicationDemoConfig {
                                 802,
                                 Instant.parse("2025-04-03T08:00:00Z"),
                                 "같은 작업이 중복 등록되어 무효 처리했습니다.",
-                                true)))))
+                                true,
+                                ChangeAction.HISTORY_VOIDED)))))
             : new Snapshot(State.READY, true, List.of());
   }
 

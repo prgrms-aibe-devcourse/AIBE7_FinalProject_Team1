@@ -11,7 +11,8 @@
 .pq-actions{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
 .product-questions .pq-message{margin:12px 0 0}.product-questions .is-error{color:#a12219}
 .product-questions .pq-output{margin-top:20px;padding-top:20px;border-top:1px solid var(--line)}
-.pq-answer{font-size:15px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 16px}
+.pq-question,.pq-answer{font-size:15px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 16px}
+.pq-question{margin-bottom:20px}
 .pq-output summary{font-size:14px;font-weight:600;cursor:pointer;min-height:32px}
 .pq-output ul{margin:8px 0 0;padding-left:20px}.pq-output li{padding:8px 0;font-size:13px;line-height:1.6;overflow-wrap:anywhere}
 .pq-output li p{margin:4px 0 0;color:#5f6368;white-space:pre-wrap}

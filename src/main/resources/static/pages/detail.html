@@ -1,16 +1,24 @@
-<div class="sc-head"><div><span class="eyebrow">기록상회 마켓</span><h1>판매글 상세</h1></div><div class="listing-head-actions"><button type="button" class="sc-btn" data-page="my-listings">내 판매글</button><button type="button" class="sc-btn" data-page="market">마켓 목록</button></div></div>
+<div class="listing-page-head"><div><button type="button" class="listing-back" data-page="market">‹ 중고거래 목록</button><h1>판매글 상세</h1></div></div>
 <p class="sub" role="status" aria-live="polite" data-listing-status>게시된 판매글을 선택해 주세요.</p>
 <button type="button" class="sc-btn" data-listing-retry>다시 불러오기</button>
 <button type="button" class="sc-btn primary" data-listing-login hidden>로그인하고 상세 보기</button>
-<button type="button" class="sc-btn" data-listing-manage hidden>내 판매글 관리</button>
-<button type="button" class="sc-btn" data-listing-delete-button hidden style="color:var(--warn,#e53e3e);border-color:var(--warn,#e53e3e)">판매글 삭제</button>
-<button type="button" class="sc-btn primary" data-listing-chat hidden>판매자에게 채팅 문의하기</button>
+<div data-listing-content></div>
+<button type="button" class="sc-btn sl-drafts-more" data-listing-more hidden>공개 이력 더 보기</button>
 <section class="sc-card" data-listing-chats hidden aria-labelledby="listing-chats-heading">
   <h2 id="listing-chats-heading">이 판매글의 채팅</h2>
   <div data-listing-chat-rooms aria-live="polite"></div>
 </section>
-<div data-listing-content></div>
-<button type="button" class="sc-btn sl-drafts-more" data-listing-more hidden>공개 이력 더 보기</button>
+<button type="button" class="sc-btn listing-delete-link" data-listing-delete-button hidden>판매글 삭제</button>
+<div class="listing-actionbar" data-listing-actionbar hidden>
+  <div class="listing-actionbar-inner">
+    <div class="listing-actionbar-price"><span data-listing-action-state></span><strong data-listing-action-price></strong></div>
+    <div class="listing-actionbar-buttons">
+      <button type="button" class="sc-btn primary" data-listing-chat hidden>판매자에게 채팅 문의하기</button>
+      <button type="button" class="sc-btn primary" data-listing-manage hidden>내 판매글 관리</button>
+      <button type="button" class="sc-btn" data-listing-chats-open hidden>받은 채팅 보기</button>
+    </div>
+  </div>
+</div>
 <section class="listing-management sc-card" data-listing-editor hidden aria-labelledby="listing-editor-heading">
   <div class="sl-section-head"><h2 id="listing-editor-heading">내 판매글 관리</h2><button type="button" class="sc-btn" data-listing-edit-close>상세로 돌아가기</button></div>
   <p class="sub" data-listing-edit-state></p>
