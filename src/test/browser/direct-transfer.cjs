@@ -185,7 +185,9 @@ async function decodeSharedQr(page, sharedLink) {
     step = 'current-registration-three-step-navigation';
     await receiver.page.evaluate(() => show('register'));
     await receiver.page.locator('#register.active [data-register-step="1"]:not([hidden])').waitFor();
-    for (const [name, value] of Object.entries({ title: 'browser regression laptop', manufacturer: 'maker', modelName: 'model', serialNumber: 'BROWSER-REGRESSION-105' })) {
+    await receiver.page.locator('#register [data-product-manufacturer-choice]').selectOption('OTHER');
+    await receiver.page.locator('#register [data-product-manufacturer-custom]').fill('maker');
+    for (const [name, value] of Object.entries({ title: 'browser regression laptop', modelName: 'model', serialNumber: 'BROWSER-REGRESSION-105' })) {
       await receiver.page.locator(`#register [name="${name}"]`).fill(value);
     }
     await receiver.page.locator('#register [data-register-step="1"] [data-register-next]').click();
