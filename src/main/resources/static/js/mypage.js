@@ -76,9 +76,10 @@
         rows(list('listings'), data.items, item => ({ page: 'my-listings', cells: [cell(item.title || '판매글', true), cell(statusLabel[item.status] || '종료'), cell(won(item.price))] }));
       }, list('listings'), '판매글 목록을 불러오지 못했어요.'),
       section(signal, async () => {
-        const data = await get('/api/v1/products', signal);
+        const data = await get(`/api/v1/products?page=0&size=${LIMIT}`, signal);
         if (stale()) return;
-        const products = Array.isArray(data) ? data : [];
+        if (!Array.isArray(data?.items) || data.items.some(item => !item || typeof item !== 'object')) throw new Error('invalid product page');
+        const products = data.items;
         if (!products.length) {
           message(list('products'), '아직 등록한 제품이 없어요. 내 노트북의 기록을 한 곳에서 관리해 보세요.', { page: 'register', label: '제품 등록하러 가기' });
           message(list('documents'), '제품을 등록하면 문서를 함께 보관할 수 있어요.', { page: 'register', label: '제품 등록하러 가기' });
@@ -101,7 +102,9 @@
 
   document.addEventListener('pastport:page-shown', event => { if (event.detail?.id === 'mypage') load(); });
   document.addEventListener('pastport:auth-changed', event => {
-    if (!root.classList.contains('active')) return;
-    if (event.detail?.signedIn) load(); else generation++;
+    generation++; current?.abort();
+    ['chats', 'listings', 'products'].forEach(key => list(key)?.replaceChildren());
+    if (root.classList.contains('active') && event.detail?.signedIn) load();
   });
+  document.addEventListener('pastport:page-shown', event => { if (event.detail?.id !== 'mypage') { generation++; current?.abort(); } });
 })();

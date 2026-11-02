@@ -15,6 +15,7 @@ import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -22,6 +23,11 @@ import org.springframework.stereotype.Component;
 
 @Component
 @Profile({"local", "test"})
+@ConditionalOnProperty(
+    prefix = "app.storage",
+    name = "type",
+    havingValue = "local",
+    matchIfMissing = true)
 public class LocalFileStorage implements FileStorage {
 
   public static final String TEMPORARY_URL_PATH = "/local-files";
