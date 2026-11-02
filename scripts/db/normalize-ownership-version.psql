@@ -1,0 +1,12 @@
+-- psql -v expected_database=실제DB명 -v expected_schema=public -f 이파일
+\set ON_ERROR_STOP on
+BEGIN;
+SELECT set_config('pastport.expected_database', :'expected_database', TRUE);
+SELECT set_config('pastport.expected_schema', :'expected_schema', TRUE);
+SELECT set_config('search_path', quote_ident(:'expected_schema'), TRUE);
+\ir normalize-ownership-version.sql
+SELECT version, script, checksum, success
+FROM flyway_schema_history
+WHERE version IN ('2026102702', '2026102707', '2026102803', '2026102804')
+ORDER BY installed_rank;
+COMMIT;
