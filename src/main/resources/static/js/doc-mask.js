@@ -126,7 +126,7 @@
     fail('');
     if (!file) return;
     // 제품을 고르기 전에는 마스킹 화면으로 넘어가지 않는다. 같은 파일을 다시 고를 수 있도록 선택값은 비운다.
-    if (!find('[data-dm-product]').value) {
+    if (!replaceId && !find('[data-dm-product]').value) {
       find('[data-dm-file]').value = '';
       fail('먼저 증빙을 연결할 제품을 선택해 주세요.');
       return;
@@ -414,7 +414,8 @@
   function messageFor(status, body) {
     if (status === 401) return '문서를 저장하려면 먼저 로그인해 주세요.';
     if (status === 403) return '이 제품의 소유자만 문서를 저장할 수 있어요.';
-    if (status === 404) return '제품을 찾을 수 없어요. 제품 번호를 확인해 주세요.';
+    // 교체 모드의 요청은 문서 번호로 보내므로 404는 문서가 없거나 내 문서가 아니라는 뜻이다.
+    if (status === 404) return replaceId ? '교체할 문서를 찾을 수 없어요. 문서 보관함에서 다시 선택해 주세요.' : '제품을 찾을 수 없어요. 제품 번호를 확인해 주세요.';
     if (status === 413) return '사본이 10MB를 넘어 저장할 수 없어요.';
     if (status === 503) return '파일 저장소를 아직 사용할 수 없어요. 잠시 후 다시 시도해 주세요.';
     return body?.message || '저장하지 못했어요. 잠시 후 다시 시도해 주세요.';

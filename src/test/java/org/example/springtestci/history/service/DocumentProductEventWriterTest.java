@@ -39,27 +39,10 @@ class DocumentProductEventWriterTest {
   }
 
   private static HistoryEventResponse response(long eventId) {
-    return new HistoryEventResponse(
-        eventId,
-        PRODUCT,
-        HistoryEventType.PURCHASE,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        false,
-        List.of(),
-        null,
-        null,
-        null,
-        null,
-        null);
+    // 이력 응답 record의 구성이 바뀌어도 깨지지 않도록 생성자 대신 mock으로 만든다.
+    HistoryEventResponse response = org.mockito.Mockito.mock(HistoryEventResponse.class);
+    when(response.eventId()).thenReturn(eventId);
+    return response;
   }
 
   @Test
@@ -123,25 +106,37 @@ class DocumentProductEventWriterTest {
   }
 
   @Test
-  void 제품명이_없으면_제목은_구매이고_너무_긴_내용은_잘라낸다() {
-    var longText = "가".repeat(2000);
+  void 제품명이_없으면_제목은_구매다() {
     var requests =
         DocumentProductEventWriter.plan(
             new ExtractedFields(
-                null, "M".repeat(150), LocalDate.of(2026, 3, 1), null, null, 36, null, longText),
+                null, "M".repeat(150), LocalDate.of(2026, 3, 1), null, null, 36, null, null),
             DOCUMENT);
 
     assertEquals("구매", requests.get(0).title());
-    assertEquals(2000, requests.get(0).content().length());
-    assertEquals(
-        true, requests.get(0).content().startsWith("모델명: " + "M".repeat(150) + "\n보증기간: 36개월\n"));
+    assertEquals("모델명: " + "M".repeat(150) + "\n보증기간: 36개월", requests.get(0).content());
+  }
+
+  @Test
+  void 내용이_길이_제한을_넘으면_잘라내지_않고_거부한다() {
+    var tooLong =
+        new ExtractedFields(
+            "갤럭시북4", "NT960XGQ", LocalDate.of(2026, 3, 1), null, null, 12, null, "가".repeat(2000));
+
+    var error =
+        assertThrows(
+            CommonException.class, () -> DocumentProductEventWriter.plan(tooLong, DOCUMENT));
+
+    assertEquals(ErrorCode.DOCUMENT_EVENT_CONTENT_TOO_LONG, error.errorCode());
   }
 
   @Test
   void 기록은_이력_서비스를_거치고_처음_만든_이력_ID를_돌려준다() {
     var writer = new DocumentProductEventWriter(historyService);
-    when(historyService.create(anyLong(), anyLong(), any()))
-        .thenReturn(response(100L), response(101L));
+    // mock 안에서 다시 when()을 쓰므로 thenReturn 인자 밖에서 먼저 만든다.
+    var first = response(100L);
+    var second = response(101L);
+    when(historyService.create(anyLong(), anyLong(), any())).thenReturn(first, second);
 
     Long eventId =
         writer.recordFromDocument(

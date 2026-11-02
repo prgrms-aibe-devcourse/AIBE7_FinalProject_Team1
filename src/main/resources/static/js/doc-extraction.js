@@ -37,7 +37,7 @@
   // item: 문서 응답. 반환한 element를 문서 행 아래에 붙이고, 펼칠 때 load()를 부른다.
   function panel(item, { onChanged } = {}) {
     const element = create('div', null, 'doc-extract'); element.hidden = true;
-    let loaded = false; let polls = 0; let timer = null;
+    let polls = 0; let timer = null;
 
     const message = (text, kind = '') => {
       const note = create('p', text, 'doc-extract-note' + (kind ? ' ' + kind : '')); note.setAttribute('role', kind === 'is-error' ? 'alert' : 'status');
@@ -69,6 +69,8 @@
             json({ consented: true, consentNoticeVersion: NOTICE_VERSION, documentType: type.value }));
           polls = 0; render(extraction);
         } catch (error) {
+          // 409는 이 문서에 이미 진행 중이거나 완료된 추출이 있다는 뜻이다. 이 폼에는 반려 버튼이 없으니 기존 추출 상태를 불러온다.
+          if (error.status === 409) { load(); return; }
           feedback.replaceChildren(message(error.message, 'is-error'));
           submit.textContent = 'AI로 정보 추출'; submit.disabled = !box.checked;
         }
@@ -155,15 +157,20 @@
     }
 
     // 진행 중인 추출은 상태가 바뀔 때까지 주기적으로 확인한다. 패널이 화면에서 사라지면 멈춘다.
-    function waiting(extraction) {
-      const note = message('AI가 문서를 읽는 중이에요. 잠시만 기다려 주세요…');
-      element.replaceChildren(note);
+    function waiting(extraction, note = message('AI가 문서를 읽는 중이에요. 잠시만 기다려 주세요…')) {
+      if (!note.isConnected) element.replaceChildren(note);
       stopPolling();
+      // 응답이 패널을 접은 뒤에 도착해도 새 확인을 예약하지 않는다. 다시 펼치면 load()가 상태를 새로 읽는다.
+      if (element.hidden) return;
       timer = setTimeout(async () => {
-        if (!element.isConnected) return;
+        if (!element.isConnected || element.hidden) return;
         if (++polls > POLL_LIMIT) { note.textContent = '시간이 오래 걸리고 있어요. 잠시 후 문서를 다시 열어 확인해 주세요.'; return; }
         try { render(await api('/api/v1/documents/' + item.id + '/extractions/' + extraction.id)); }
-        catch (error) { note.textContent = error.message; note.classList.add('is-error'); }
+        catch (error) {
+          // 일시적인 네트워크 오류나 5xx에서 확인을 멈추지 않는다. 오류를 보여 주면서 한도까지 다시 확인한다.
+          note.textContent = error.message + ' 잠시 후 다시 확인해요…'; note.classList.add('is-error');
+          waiting(extraction, note);
+        }
       }, POLL_MS);
     }
 
@@ -182,8 +189,7 @@
       toggle() {
         element.hidden = !element.hidden;
         if (element.hidden) stopPolling();
-        else if (!loaded) { loaded = true; load(); }
-        else load();
+        else { polls = 0; load(); }
         return !element.hidden;
       },
     };
@@ -203,10 +209,12 @@
     for (const field of FIELDS.filter(item => item.type === 'number')) {
       const value = data[field.key];
       if (value == null) continue;
-      if (!Number.isInteger(value) || value < field.min || (field.max && value > field.max)) return field.label + ' 값을 확인해 주세요.';
+      if (!Number.isSafeInteger(value) || value < field.min || (field.max && value > field.max)) return field.label + ' 값을 확인해 주세요.';
     }
     // 날짜를 임의로 채우지 않으므로 구매일이나 수리일이 있어야 이력을 만들 수 있다.
     if (!data.purchaseDate && !data.repairDate) return '이력을 만들려면 구매일 또는 수리일이 필요해요. 날짜를 입력해 주세요.';
+    // 서버는 이력 내용이 2000자를 넘으면 잘라 저장하지 않고 거부한다. 제품 정보 줄까지 합친 길이로 미리 확인한다.
+    if (previewEvents(data).some(event => event.content.length > 2000)) return '이력에 남길 내용이 너무 길어요. 수리 내용을 줄여 주세요.';
     return '';
   }
 

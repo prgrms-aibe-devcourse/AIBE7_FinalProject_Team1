@@ -24,7 +24,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class DocumentProductEventWriter implements ProductEventWriter {
 
-  private static final int TITLE_MAX = 200;
   private static final int CONTENT_MAX = 2000;
 
   private final HistoryService historyService;
@@ -65,8 +64,8 @@ public class DocumentProductEventWriter implements ProductEventWriter {
           new CreateHistoryEventRequest(
               HistoryEventType.PURCHASE,
               fields.purchaseDate(),
-              limit(fields.productName() == null ? "구매" : fields.productName() + " 구매", TITLE_MAX),
-              limit(content(fields, !repair), CONTENT_MAX),
+              fields.productName() == null ? "구매" : fields.productName() + " 구매",
+              requireWithinLimit(content(fields, !repair)),
               fields.vendor(),
               fields.price(),
               null,
@@ -81,7 +80,7 @@ public class DocumentProductEventWriter implements ProductEventWriter {
               HistoryEventType.REPAIR,
               fields.repairDate(),
               "수리",
-              limit(repairContent(fields, carryProductInfo), CONTENT_MAX),
+              requireWithinLimit(repairContent(fields, carryProductInfo)),
               carryProductInfo ? fields.vendor() : null,
               carryProductInfo ? fields.price() : null,
               null,
@@ -114,8 +113,11 @@ public class DocumentProductEventWriter implements ProductEventWriter {
     return lines;
   }
 
-  private static String limit(String text, int max) {
-    if (text == null || text.length() <= max) return text;
-    return text.substring(0, max);
+  /** 이력 내용의 길이 제한을 넘으면 거부한다. 잘라서 저장하면 미리보기에서 본 내용과 저장된 내용이 달라지고, 확정한 수리 내용의 뒷부분이 사라진다. */
+  private static String requireWithinLimit(String content) {
+    if (content != null && content.length() > CONTENT_MAX) {
+      throw new CommonException(ErrorCode.DOCUMENT_EVENT_CONTENT_TOO_LONG);
+    }
+    return content;
   }
 }

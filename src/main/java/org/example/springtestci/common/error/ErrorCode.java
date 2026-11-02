@@ -81,6 +81,8 @@ public enum ErrorCode {
       HttpStatus.SERVICE_UNAVAILABLE, "DOC_011", "이력 기능을 아직 사용할 수 없습니다. 잠시 후 다시 시도해 주세요."),
   DOCUMENT_EVENT_DATE_REQUIRED(
       HttpStatus.BAD_REQUEST, "DOC_012", "이력을 만들려면 구매일 또는 수리일이 필요합니다. 날짜를 입력한 뒤 다시 확정해 주세요."),
+  DOCUMENT_EVENT_CONTENT_TOO_LONG(
+      HttpStatus.BAD_REQUEST, "DOC_013", "이력에 남길 내용이 너무 깁니다. 수리 내용을 줄인 뒤 다시 확정해 주세요."),
   PRODUCT_DUPLICATE_SERIAL(
       HttpStatus.CONFLICT, "PRODUCT_001", "이미 등록된 제품입니다. 현재소유자에게 소유권 이전을 요청하세요."),
   INVALID_PRODUCT_IMAGE(
