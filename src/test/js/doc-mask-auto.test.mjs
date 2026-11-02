@@ -177,3 +177,30 @@ test('같은 줄에 부품번호와 일련번호가 함께 있으면 일련번�
   assert.deepEqual(kinds(boxes), ['일련번호']);
   assert.ok(boxes[0].x >= words[3].x0 - 4);
 });
+
+test('라벨은 읽혔는데 값이 깨져 읽힌 일련번호는 라벨 오른쪽을 통째로 가린다', () => {
+  const { findPiiBoxes, groupLines } = load();
+  // "일련번호: CXV5J3Y2RD"가 "일 련 민호 521"처럼 읽힌 경우. 값 규칙에는 걸리지 않는다.
+  const words = row(100, [['일', 0], ['련', 2], ['민호', 2], ['521', 8], ['ㅣ', 6]]);
+  const boxes = findPiiBoxes(groupLines(words));
+  assert.deepEqual(kinds(boxes), ['일련번호']);
+  const label = words[2];
+  assert.ok(boxes[0].x >= label.x1 - 1, '라벨은 가리지 않는다');
+  assert.ok(boxes[0].x + boxes[0].w >= words[3].x1, '읽힌 값 조각을 덮는다');
+});
+
+test('라벨 오른쪽에 읽힌 글자가 없어도 글자 높이 8배 폭은 가린다', () => {
+  const { findPiiBoxes, groupLines } = load();
+  const words = row(100, [['일련번호', 0]]);
+  const boxes = findPiiBoxes(groupLines(words));
+  assert.equal(boxes.length, 1);
+  assert.ok(boxes[0].w >= 22 * 8);
+});
+
+test('다음 칸이 멀리 떨어져 있으면 라벨 옆 덩어리까지만 가린다', () => {
+  const { findPiiBoxes, groupLines } = load();
+  const words = row(100, [['일련번호', 0], ['K8', 8], ['반품날짜', 400]]);
+  const boxes = findPiiBoxes(groupLines(words));
+  assert.equal(boxes.length, 1);
+  assert.ok(boxes[0].x + boxes[0].w <= words[2].x0);
+});

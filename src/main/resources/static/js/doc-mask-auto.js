@@ -23,7 +23,7 @@
   const ID_LABEL = label(['주문번호', '승인번호', '결제번호', '송장번호', '운송장번호', '거래번호']);
   // 부품번호·모델번호는 제품 종류를 나타낼 뿐 개인을 특정하지 않아 가리지 않는다. 일련번호와 모양이 비슷해서 단독 토큰 규칙에서 따로 뺀다.
   const PART_LABEL = '(?:' + label(['부품번호', '모델번호', '품번']) + '|[Pp][Aa][Rr][Tt]\\s*(?:[Nn][Oo]\\.?|[Nn]umber)?)';
-  const SERIAL_LABEL = '(?:' + label(['일련번호', '시리얼번호', '시리얼']) + '|련\\s*[번빈]?\\s*호|serial\\s*(?:no\\.?|number)?|s\\/n)';
+  const SERIAL_LABEL = '(?:' + label(['시리얼번호', '시리얼']) + '|일?\\s*련\\s*[번빈민]?\\s*호|serial\\s*(?:no\\.?|number)?|s\\/n)';
   const DATE_LIKE = /^(?:19|20)\d{2}-\d{1,2}-\d{1,2}$/;
 
   // group은 가릴 부분이 정규식의 몇 번째 묶음인지(0이면 일치한 전체). accept가 false를 돌려주면 건너뛴다.
@@ -59,6 +59,32 @@
     return (text.match(/[AEIOU]/g) || []).length / text.length <= 0.3;
   }
 
+  // 저해상도 사진은 라벨("일련번호")은 읽히는데 값(CXV5J3Y2RD)은 깨져 읽혀서 값 규칙이 못 잡는다. 라벨은 있고 값을 못 읽은 줄은 라벨 오른쪽의
+  // 글자 덩어리(글자 높이의 4배 넘게 벌어지기 전까지)를 가리고, 덩어리가 좁거나 없으면 글자 높이 8배 폭까지 넓힌다. 놓치는 것보다 더 가리는 쪽이 안전하다.
+  function labelOnlySerial(text, spans) {
+    const found = [];
+    for (const match of text.matchAll(new RegExp(SERIAL_LABEL, 'dgi'))) {
+      // 영어 라벨("Serial number printed on back" 같은 문장)은 값이 없으면 안내 문구일 수 있어 한글 라벨일 때만 쓴다.
+      if (/^[a-z]/i.test(match[0])) continue;
+      const [from, to] = match.indices[0];
+      const label = spans.filter((span) => span.start < to && span.end > from).map((span) => span.word);
+      if (!label.length) continue;
+      const height = Math.max(...label.map((word) => word.y1 - word.y0));
+      const labelRight = Math.max(...label.map((word) => word.x1));
+      const tail = [];
+      let right = labelRight;
+      for (const span of spans.filter((item) => item.start >= to)) {
+        if (span.word.x0 - right > height * 4) break;
+        tail.push(span.word);
+        right = Math.max(right, span.word.x1);
+      }
+      const base = union(tail.length ? tail : label, '일련번호');
+      const left = tail.length ? base.x : labelRight;
+      found.push({ x: left, y: base.y, w: Math.max(base.x + base.w - left, height * 8), h: base.h, kind: '일련번호' });
+    }
+    return found;
+  }
+
   // lines: [{ words: [{ text, x0, y0, x1, y1 }] }] → 가릴 영역 [{ x, y, w, h, kind }]
   function findPiiBoxes(lines) {
     const boxes = [];
@@ -74,6 +100,7 @@
         return { word, start, end: text.length };
       });
       let hasEmail = false;
+      const before = boxes.length;
       for (const rule of RULES) {
         for (const match of text.matchAll(rule.pattern)) {
           const group = rule.group || 0;
@@ -86,6 +113,8 @@
           if (rule.kind === '이메일') hasEmail = true;
         }
       }
+      // 값이 못 읽힌 일련번호는 라벨 오른쪽을 통째로 가린다(labelOnlySerial).
+      if (!boxes.slice(before).some((box) => box.kind === '일련번호')) boxes.push(...labelOnlySerial(text, spans));
       // 이메일 바로 위 줄에 라벨 없이 적힌 이름은 구매자 이름으로 본다. 윗줄이 한글 2~4자뿐일 때만 가리고, 줄 간격이 벌어지면 건너뛴다.
       if (hasEmail && previous && BARE_NAME.test(previous.text) && Math.min(...words.map((w) => w.y0)) - previous.bottom < previous.height * 1.5) {
         boxes.push(union(previous.words, '이름'));
