@@ -1,0 +1,21 @@
+<div class="sc-head">
+  <div><h1>외부 소유권 이전 보내기</h1><p>직접 인계할 제품을 선택하고, 받는 사람에게 링크나 QR을 공유하세요.</p></div>
+</div>
+<p class="external-transfer-note">서비스 안에서 진행한 거래는 양측 거래 완료 확인 시 자동으로 이전됩니다. 외부 이전은 판매 중이거나 예약 중인 제품에는 사용할 수 없습니다.</p>
+<div class="external-transfer-layout">
+  <section class="external-transfer-picker" aria-labelledby="external-products-title">
+    <div class="external-transfer-heading"><h2 id="external-products-title">보낼 제품 선택 <span data-external-count></span></h2><button type="button" class="button" data-external-refresh>새로고침</button></div>
+    <label class="external-transfer-search">내 제품 검색<input type="search" placeholder="제품명, 제조사, 모델 검색" data-external-search></label>
+    <p data-external-status role="status" aria-live="polite">내 제품을 불러오고 있습니다.</p>
+    <div class="ownership-actions">
+      <button type="button" class="button primary" data-external-login hidden>로그인하기</button>
+      <button type="button" class="button" data-external-retry hidden>다시 시도</button>
+      <button type="button" class="button primary" data-page="register" data-external-register hidden>제품 여권 등록</button>
+    </div>
+    <div data-external-products aria-label="이전할 내 제품 목록"></div>
+  </section>
+  <section class="external-transfer-review" aria-label="선택한 제품의 외부 이전">
+    <div data-external-placeholder><h2>보낼 제품을 선택해 주세요</h2><p>선택한 제품의 이전 상태를 확인하고 일회용 링크·QR을 발급할 수 있습니다.</p></div>
+    <div data-external-selected hidden><p class="external-transfer-caption">선택한 제품</p><h2 data-external-product-title tabindex="-1"></h2><div data-ownership-root></div></div>
+  </section>
+</div>

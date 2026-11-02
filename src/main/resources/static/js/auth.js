@@ -397,6 +397,7 @@ const auth = (() => {
       setSession(data);
       if (returnToAdmin()) return;
       if (window.PastportReceive?.resumeAfterLogin()) return;
+      if (window.PastportOwnershipSend?.resumeAfterLogin()) return;
       const listingId = new URL(window.location.href).searchParams.get('listingId');
       if (/^[1-9]\d*$/.test(listingId || '') && window.PastportPublishedListing) window.PastportPublishedListing.open(listingId);
       else if (new URL(window.location.href).searchParams.get('myListings') === '1') goto('my-listings');

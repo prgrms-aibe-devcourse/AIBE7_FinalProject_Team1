@@ -71,8 +71,8 @@ async function ownerProduct(page) {
   step = 'owner-product-101-list-card';
   await page.locator('#home [data-product-id="101"]').click();
   step = 'owner-product-101-detail-panel';
-  await page.locator('[data-ownership-root]').waitFor({ state: 'visible' });
-  await page.waitForFunction(() => !document.querySelector('[data-ownership-message]')?.textContent.includes('불러오는'));
+  await page.locator('#passport [data-ownership-root]').waitFor({ state: 'visible' });
+  await page.waitForFunction(() => !document.querySelector('#passport [data-ownership-root] button')?.disabled);
 }
 async function noStoredSecret(page, token) {
   const clean = await page.evaluate(secret => [localStorage, sessionStorage].every(storage =>

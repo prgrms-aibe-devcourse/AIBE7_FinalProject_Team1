@@ -1,27 +1,117 @@
-document.querySelector('#trade').innerHTML=`
-  <div class="handover-screen">
-    <div class="handover-bar"><b>Pastport</b><span>도움말</span></div>
-    <div class="handover-body">
-      <div class="handover-title"><h1>소유권 이전</h1><p>제품의 이력은 이어가고, 이전 소유자의 개인정보는 안전하게 분리합니다.</p></div>
-      <div class="handover-grid">
-        <section class="handover-panel">
-          <h2>이전할 제품</h2>
-          <div class="transfer-product"><div class="laptop"></div><div><span class="eyebrow">여권 인증 완료</span><strong>MacBook Pro 14″ M3 Pro</strong><span>DFP-81A-7D39 · 보유 중</span></div></div>
-          <div class="check-title">전달되는 정보</div>
-          <div class="check-line">제품 기본 정보와 공개된 이력</div>
-          <div class="check-line">공개 문서와 보증 기간</div>
-          <div class="check-line">제품 사용·관리 이력</div>
-          <div class="check-title">전달되지 않는 정보</div>
-          <div class="meta">이전 소유자의 이름, 연락처, 결제 정보와 비공개 문서는 전달되지 않습니다.</div>
-        </section>
-        <section class="handover-panel">
-          <h2>일회성 인계 QR</h2>
-          <div class="qr-box" aria-label="소유권 이전 QR 코드">
-            <svg viewBox="0 0 150 150" width="112" height="112" aria-hidden="true"><rect width="150" height="150" fill="#fff"/><g fill="#25262d"><path d="M10 10h38v38H10zM17 17h24v24H17zM24 24h10v10H24zM102 10h38v38h-38zM109 17h24v24h-24zM116 24h10v10h-10zM10 102h38v38H10zM17 109h24v24H17zM24 116h10v10H24zM62 12h10v11H62zM78 20h11v10H78zM56 35h12v12H56zM74 42h10v10H74zM88 54h12v12H88zM56 62h10v10H56zM70 66h12v12H70zM88 74h10v10H88zM106 58h11v11h-11zM122 66h10v10h-10zM56 86h12v12H56zM72 94h10v10H72zM88 90h12v12H88zM106 86h12v12h-12zM122 102h10v12h-10zM56 110h10v10H56zM72 118h12v12H72zM92 110h10v12H92zM108 122h10v10h-10z"/></g></svg>
-          </div>
-          <div class="qr-copy">30분 후 만료 · 1회 사용<br><button class="button small" style="margin-top:7px">QR 코드 다시 생성</button></div>
-        </section>
-      </div>
-      <div class="handover-footer"><button class="button primary">안전하게 소유권 이전</button></div>
-    </div>
-  </div>`;
+// 외부 이전 보내기: 소유 제품을 선택해 기존 DIRECT 발급 패널을 연다. 내부 거래 완료는 거래 화면에서 처리한다.
+(() => {
+  let request = null, products = [], selectedId = null, returnAfterLogin = false;
+  const root = () => document.querySelector('#trade');
+  const find = selector => root()?.querySelector(selector);
+  const active = () => Boolean(document.querySelector('#trade.active'));
+  const create = (tag, text, className = '') => {
+    const node = document.createElement(tag); node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  };
+
+  /** 화면·계정 전환 시 이전 사용자의 제품 목록과 공유 링크를 지우고 진행 중인 조회를 취소한다. */
+  function clear() {
+    request?.abort(); request = null; products = []; selectedId = null;
+    window.PastportOwnership?.clear(find('[data-ownership-root]'));
+    find('[data-external-products]')?.replaceChildren();
+    const selected = find('[data-external-selected]'); if (selected) selected.hidden = true;
+    const empty = find('[data-external-placeholder]'); if (empty) empty.hidden = false;
+    const title = find('[data-external-product-title]'); if (title) title.textContent = '';
+    const count = find('[data-external-count]'); if (count) count.textContent = '';
+    const search = find('[data-external-search]'); if (search) search.value = '';
+  }
+
+  /** 서버가 반환한 현재 소유 제품만 선택하고, 발급 전 상태 조회를 기존 외부 이전 패널에 위임한다. */
+  function selectProduct(product) {
+    if (!active() || !products.includes(product)) return;
+    selectedId = String(product.productId);
+    const title = find('[data-external-product-title]'); title.textContent = product.title;
+    find('[data-external-selected]').hidden = false;
+    find('[data-external-placeholder]').hidden = true;
+    find('[data-external-products]').querySelectorAll('button').forEach(button => {
+      const selected = button.dataset.externalProductId === selectedId;
+      button.setAttribute('aria-pressed', String(selected));
+      button.querySelector('small').textContent = selected ? '선택한 제품' : '이 제품 선택';
+    });
+    window.PastportOwnership.mount(find('[data-ownership-root]'), product.productId);
+    title.style.scrollMarginTop = (document.querySelector('.site-header')?.getBoundingClientRect().height || 0) + 16 + 'px';
+    title.focus({ preventScroll: true }); title.scrollIntoView({ block: 'nearest' });
+  }
+
+  /** 입력된 검색어로 목록만 좁힌다. 검색으로 선택한 제품의 발급 상태를 바꾸지는 않는다. */
+  function renderProducts() {
+    const list = find('[data-external-products]');
+    const query = find('[data-external-search]').value.trim().toLocaleLowerCase('ko-KR');
+    list.replaceChildren();
+    const matches = products.filter(product => [product.title, product.manufacturer, product.modelName]
+      .some(value => String(value || '').toLocaleLowerCase('ko-KR').includes(query)));
+    for (const product of matches) {
+      const button = create('button', null, 'external-product'); button.type = 'button';
+      button.dataset.externalProductId = String(product.productId);
+      button.setAttribute('aria-pressed', String(String(product.productId) === selectedId));
+      button.append(create('strong', product.title), create('span', [product.manufacturer, product.modelName].filter(Boolean).join(' · ')), create('small', String(product.productId) === selectedId ? '선택한 제품' : '이 제품 선택'));
+      button.addEventListener('click', () => selectProduct(product)); list.append(button);
+    }
+    find('[data-external-status]').textContent = !products.length ? '외부 이전을 보낼 제품이 없습니다. 먼저 제품 여권을 등록해 주세요.'
+      : !matches.length ? '검색 결과가 없습니다. 다른 제품명이나 제조사로 검색해 주세요.' : '';
+    find('[data-external-register]').hidden = products.length > 0;
+  }
+
+  /** 로그인한 사용자의 제품을 조회한다. 지연 응답은 현재 화면·요청과 일치할 때만 반영한다. */
+  async function loadProducts() {
+    if (!active() || !find('[data-external-products]')) return;
+    clear();
+    const controller = new AbortController(); request = controller;
+    const current = () => request === controller && !controller.signal.aborted && active();
+    const status = find('[data-external-status]'); status.textContent = '내 제품을 불러오고 있습니다.';
+    find('[data-external-login]').hidden = true;
+    find('[data-external-retry]').hidden = true;
+    find('[data-external-register]').hidden = true;
+    find('[data-external-refresh]').disabled = true;
+    find('[data-external-search]').disabled = true;
+    find('[data-external-products]').setAttribute('aria-busy', 'true');
+    try {
+      const response = await window.PastportApi.fetch('/api/v1/products', { cache: 'no-store', signal: controller.signal });
+      const payload = await response.json().catch(() => null);
+      if (!current()) return;
+      if (!response.ok) {
+        status.textContent = response.status === 401 ? '로그인 후 외부 이전을 보낼 제품을 선택해 주세요.' : '내 제품을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+        find('[data-external-login]').hidden = response.status !== 401;
+        find('[data-external-retry]').hidden = response.status === 401;
+        return;
+      }
+      if (!Array.isArray(payload?.data)) throw new Error('Invalid product list');
+      products = payload.data.filter(product => /^[1-9]\d*$/.test(String(product.productId)));
+      find('[data-external-count]').textContent = products.length + '개'; renderProducts();
+    } catch {
+      if (current()) { status.textContent = '내 제품을 불러오지 못했습니다. 연결 상태를 확인하고 다시 시도해 주세요.'; find('[data-external-retry]').hidden = false; }
+    } finally {
+      if (current()) {
+        request = null;
+        find('[data-external-refresh]').disabled = false;
+        find('[data-external-search]').disabled = false;
+        find('[data-external-products]').setAttribute('aria-busy', 'false');
+      }
+    }
+  }
+
+  document.addEventListener('click', event => {
+    if (event.target.closest?.('[data-external-refresh], [data-external-retry]')) loadProducts();
+    if (event.target.closest?.('[data-external-login]')) { returnAfterLogin = true; show('auth'); }
+  });
+  document.addEventListener('input', event => { if (event.target.matches?.('[data-external-search]')) renderProducts(); });
+  document.addEventListener('pastport:page-loaded', event => { if (event.detail.id === 'trade') loadProducts(); });
+  document.addEventListener('pastport:page-shown', event => {
+    if (event.detail.id === 'trade') loadProducts(); else clear();
+    if (!['trade', 'auth', 'signup'].includes(event.detail.id)) returnAfterLogin = false;
+  });
+  document.addEventListener('pastport:auth-changed', () => { clear(); if (active()) loadProducts(); });
+  document.addEventListener('pastport:logout', () => { returnAfterLogin = false; clear(); });
+  window.addEventListener('pagehide', () => { returnAfterLogin = false; clear(); });
+  window.PastportOwnershipSend = Object.freeze({ resumeAfterLogin() {
+    if (!returnAfterLogin) return false;
+    returnAfterLogin = false; show('trade'); return true;
+  } });
+  if (active() && find('[data-external-products]')) loadProducts();
+})();

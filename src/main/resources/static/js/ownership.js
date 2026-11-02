@@ -7,7 +7,8 @@
   let busy = false;
   let timer = null;
   let accountId = auth.user?.id == null ? null : String(auth.user.id);
-  const root = () => document.querySelector('[data-ownership-root]');
+  let panel = null;
+  const root = () => panel;
   const api = async (path, options = {}) => {
     const response = await window.PastportApi.fetch(path, { ...options, cache: 'no-store' });
     const payload = await response.json().catch(() => null);
@@ -20,7 +21,7 @@
     return payload.data;
   };
   const clearShare = () => { shareUrl = null; root()?.querySelector('[data-ownership-share]')?.replaceChildren(); };
-  const reset = () => { version += 1; clearInterval(timer); timer = null; clearShare(); productId = null; transfer = null; busy = false; root()?.replaceChildren(); };
+  const reset = () => { version += 1; clearInterval(timer); timer = null; clearShare(); productId = null; transfer = null; busy = false; root()?.replaceChildren(); panel = null; };
   const button = (label, action, disabled = false) => {
     const element = document.createElement('button');
     element.type = 'button'; element.className = 'button'; element.textContent = label;
@@ -31,7 +32,7 @@
   const message = (text) => { const target = root()?.querySelector('[data-ownership-message]'); if (target) target.textContent = text; };
   const render = () => {
     const target = root();
-    if (!target || !productId) return;
+    if (!target?.isConnected || !productId) return;
     target.replaceChildren();
     const heading = document.createElement('h2'); heading.textContent = '외부 소유권 이전';
     const note = document.createElement('p');
@@ -50,7 +51,7 @@
     }
     actions.append(button('상태 새로고침', () => load()));
     if (pending) actions.append(button('이전 요청 취소', () => cancel()), button('취소 후 새 링크 발급', () => reissue()));
-    else actions.append(button('새 링크 · QR 발급', () => issue()));
+    else { const issueButton = button('새 링크 · QR 발급', () => issue()); issueButton.classList.add('primary'); actions.append(issueButton); }
     const share = document.createElement('div'); share.dataset.ownershipShare = '';
     target.append(heading, note, status, actions, share);
     if (pending && !shareUrl) {
@@ -72,10 +73,12 @@
       image.src = code.createDataURL(5, 20); target.append(image);
     } catch { message('QR 생성에 실패했습니다. 표시된 링크는 사용할 수 있습니다.'); }
   };
-  const load = async () => {
+  // 수동·최초 조회만 버튼을 잠그고 안내한다. 수신자 수락을 기다리는 주기 조회는 화면을 흔들지 않는다.
+  const load = async ({ silent = false } = {}) => {
     if (!productId || busy) return;
     const requestVersion = ++version;
     const selected = productId;
+    if (!silent) { busy = true; render(); message('외부 이전 상태를 확인하고 있습니다.'); }
     try {
       const result = await api(`${API}/product/${selected}`);
       if (requestVersion !== version || selected !== productId) return;
@@ -88,6 +91,8 @@
         if (error.status !== 404) message(error.message);
       }
       else { render(); message(error.message); }
+    } finally {
+      if (requestVersion === version && selected === productId) { busy = false; root()?.querySelectorAll('button').forEach(element => { element.disabled = false; }); }
     }
   };
   const mutate = async (operation) => {
@@ -140,11 +145,17 @@
     if (!confirm('기존 요청을 취소하고 새 링크를 발급할까요?')) return;
     mutate(async (selected, requestVersion) => { await cancelRequest(selected, requestVersion); if (requestVersion === version && selected === productId) await issueRequest(selected, requestVersion); });
   };
+  /** 현재 표시 중인 제품 상세·외부 보내기 화면에 패널을 연결하며 이전 제품의 공유 정보를 이어받지 않는다. */
+  const mount = (container, id) => {
+    if (!container?.isConnected || !container.closest('.page')?.classList.contains('active') || !/^[1-9]\d*$/.test(String(id))) return;
+    reset(); panel = container; productId = Number(id); render(); load();
+    timer = setInterval(() => { if (transfer?.status === 'PENDING') load({ silent: true }); }, 5000);
+  };
   document.addEventListener('pastport:product-detail-rendered', (event) => {
-    reset(); productId = event.detail.product.productId; render(); load();
-    timer = setInterval(() => { if (transfer?.status === 'PENDING') load(); }, 5000);
+    const container = document.querySelector('#passport.active [data-ownership-root]');
+    if (container) mount(container, event.detail.product.productId);
   });
-  document.addEventListener('pastport:page-shown', (event) => { if (event.detail.id !== 'passport') reset(); });
+  document.addEventListener('pastport:page-shown', () => { if (panel && !panel.closest('.page')?.classList.contains('active')) reset(); });
   document.addEventListener('pastport:logout', reset);
   document.addEventListener('pastport:auth-changed', () => {
     const nextAccount = auth.user?.id == null ? null : String(auth.user.id);
@@ -152,4 +163,5 @@
     accountId = nextAccount;
   });
   window.addEventListener('pagehide', reset);
+  window.PastportOwnership = Object.freeze({ mount, clear(container) { if (container && container === panel) reset(); } });
 })();
