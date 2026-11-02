@@ -66,7 +66,7 @@ INTERNAL/PENDING 이전 취소
 → 감사 기록
 ```
 
-모든 단계는 같은 Spring 트랜잭션에 참여한다. `InternalTransferCancellationPort`의 운영 구현은 아직 없으며 시험 대역은 연동 완료 근거가 아니다.
+모든 단계는 같은 Spring 트랜잭션에 참여한다. `InternalTransferCancellationPort`의 정식 운영 구현은 `ownership/repository/JdbcInternalTransferCancellation.java`이며, P3 활성화 환경에서 `MANDATORY` 트랜잭션에 참여한다.
 
 `TradeListingCanceller.cancel()`은 R07 판매 중지 트랜잭션에 `MANDATORY`로 참여한다. RESERVED 판매글을 중지할 때 선택 거래와 나머지 PENDING 요청을 정리하지만 이미 CANCELLED인 판매글을 ACTIVE로 복구하지 않는다.
 
