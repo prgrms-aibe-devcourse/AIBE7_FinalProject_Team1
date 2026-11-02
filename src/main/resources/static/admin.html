@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="same-origin">
+  <title>거래·취소 기록 · PastPort 관리자</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20261031-brand">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/spoqa/spoqa-han-sans@latest/css/SpoqaHanSansNeo.css">
+  <link rel="stylesheet" href="/css/admin.css">
+  <link rel="stylesheet" href="/css/brand.css?v=20261031">
+  <script defer src="/js/auth-session.js?v=20261101-bounded"></script>
+  <script defer src="/js/admin.js?v=20261101-bounded"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">본문으로 이동</a>
+  <aside class="sidebar" aria-label="관리자 메뉴">
+    <a class="brand pastport-admin-brand" href="/" aria-label="PastPort 홈"><img class="pastport-logo" src="/images/brand/pastport-logo-v1.png" alt="PastPort" width="2172" height="724"><span class="pastport-admin-label">관리자</span></a>
+    <div class="nav-label">운영 기록</div>
+    <nav aria-label="관리 조회 종류">
+      <button type="button" id="trades-tab" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>거래·취소 기록</button>
+      <button type="button" id="audits-tab"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6v18h12V7ZM14 3v5h4M9 12h6M9 16h6"/></svg>업무 변경 기록</button>
+    </nav>
+    <div class="sidebar-bottom"><p>조회 전용 관리자</p><span>제품과 거래의 변경 경위를<br>기록으로 확인해요.</span><a href="/">← 서비스로 돌아가기</a></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar"><span>관리자 <span class="separator">/</span> <span id="breadcrumb">거래·취소 기록</span></span><span class="readonly"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10h12v11H6ZM8 10V6a4 4 0 0 1 8 0v4M12 14v3"/></svg>조회 전용</span></header>
+    <main id="main" tabindex="-1">
+      <div class="title"><div><h1 id="page-title">거래·취소 기록</h1><p id="page-description">제품별 거래 진행 상황과 취소 내역을 확인해요.</p></div><button id="refresh" class="refresh" type="button" aria-label="기록 새로고침"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 5v5h-5M4 19v-5h5M5 9a7 7 0 0 1 12-4l3 5M4 14l3 5a7 7 0 0 0 12-4"/></svg>새로고침</button></div>
+      <section id="filter-panel" class="filter-panel" aria-labelledby="filter-title">
+        <h2 id="filter-title">검색 조건</h2>
+        <form id="filters">
+          <label>제품 검색<input name="productQuery" type="search" maxlength="200" placeholder="제품명·제조사·모델명"></label>
+          <label><span id="actor-label">거래 회원 검색</span><input name="memberQuery" type="search" maxlength="254" placeholder="닉네임·이메일"></label>
+          <label id="status-field">거래 상태<select id="trade-status" name="status"><option value="">전체 상태</option><option value="PENDING">구매 요청</option><option value="REJECTED">요청 거절</option><option value="RESERVED">예약</option><option value="COMPLETED">완료</option><option value="CANCELLED">취소</option></select></label>
+          <label id="action-field" hidden>업무 유형<select name="action"><option value="">전체 업무</option><optgroup label="제품·이력"><option value="PRODUCT_INFO_CORRECTED">제품 기본 정보 정정</option><option value="HISTORY_CORRECTED">이력 정정</option><option value="HISTORY_VOIDED">이력 무효</option><option value="HISTORY_VISIBILITY_CHANGED">이력 공개 범위 변경</option><option value="LISTING_PUBLISHED">판매글 게시</option><option value="LISTING_UPDATED">판매글 수정</option><option value="LISTING_CANCELLED">판매글 판매 종료</option></optgroup><optgroup label="거래"><option value="PURCHASE_REQUEST_ACCEPTED">구매 요청 수락</option><option value="PURCHASE_REQUEST_CANCELLED">구매 요청 취소</option><option value="PURCHASE_REQUEST_REJECTED">구매 요청 거절</option><option value="TRADE_RESERVATION_CANCELLED">예약 취소</option><option value="TRADE_COMPLETED">거래 완료</option></optgroup><optgroup label="소유권"><option value="OWNERSHIP_TRANSFER_CREATED">소유권 이전 요청</option><option value="OWNERSHIP_TRANSFERRED">소유권 이전 완료</option><option value="OWNERSHIP_TRANSFER_CANCELLED">소유권 이전 취소</option></optgroup></select></label>
+          <div class="date-range"><label><span id="date-label">예약일 시작 (KST)</span><input name="from" type="date"></label><span class="date-divider" aria-hidden="true">~</span><label>종료일 (KST)<input name="to" type="date"></label></div>
+          <div class="filter-actions"><button id="reset-filters" type="button">초기화</button><button class="primary" type="submit">조회하기</button></div>
+        </form>
+      </section>
+      <section id="trade-overview" class="trade-overview" aria-labelledby="overview-title" hidden>
+        <h2 id="overview-title">검색 범위 현황</h2>
+        <p id="overview-message" class="overview-note" role="status"></p>
+        <div id="overview-statuses" class="overview-statuses"></div>
+        <div id="overview-requests" class="overview-requests"></div>
+        <div class="overview-reasons"><h3>취소 유형별</h3><div id="overview-cancellations"></div></div>
+        <p class="overview-note">제품·회원·예약일 검색 범위의 전체 상태를 집계해요. 건수 버튼을 누르면 해당 목록으로 이동해요.</p>
+        <p id="overview-dates" class="overview-note" hidden>예약일(KST) 기준이에요. 날짜 조건이 있으면 예약 시각이 없는 요청은 제외돼요.</p>
+      </section>
+      <section class="results" aria-label="조회 결과" aria-busy="true" id="results" tabindex="-1">
+        <div id="related-scope" class="related-scope" hidden><div><strong id="related-product"></strong><p>이 제품 전체의 업무 기록을 보고 있어요. 다른 거래의 기록도 포함될 수 있어요.</p></div><button id="clear-related" type="button">전체 제품 보기</button></div>
+        <div id="cancel-scope" class="cancel-scope" hidden><span id="cancel-scope-label"></span><button id="clear-cancel" type="button">취소 유형 해제</button></div>
+        <div class="result-head"><div class="result-heading"><h2 id="result-title">거래 목록</h2><span id="count"></span></div><span id="updated" class="updated" aria-live="polite"></span></div>
+        <p class="scope-note" id="scope-note">예약·완료 시각은 처리 기록 기준이에요. 저장된 시각이 없으면 ‘—’로 표시해요.</p>
+        <p id="message" class="message" role="status" aria-live="polite">기록을 불러오는 중이에요.</p>
+        <div class="table-wrap" tabindex="0" aria-label="기록 목록"><table id="records-table"><thead id="columns"></thead><tbody id="rows"></tbody></table></div>
+        <div class="paging"><span id="range"></span><div><button type="button" id="previous" disabled>‹ 이전</button><button type="button" id="next" disabled>다음 ›</button></div></div>
+      </section>
+      <footer><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6ZM9 12l2 2 4-4"/></svg><p>업무 기록은 조회만 가능해요. 비공개 증빙 사본과 채팅 본문은 조회 범위에 포함되지 않아요.</p></footer>
+    </main>
+  </div>
+  <dialog id="detail" class="detail" hidden aria-labelledby="detail-title" tabindex="-1">
+    <div class="detail-heading"><h2 id="detail-title">거래 상세</h2><button type="button" id="close-detail" class="icon-button" aria-label="상세 닫기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></div>
+    <div id="detail-body" class="detail-body"></div>
+    <div class="detail-footer">기록에 저장된 내용을 기준으로 표시해요.</div>
+  </dialog>
+</body>
+</html>

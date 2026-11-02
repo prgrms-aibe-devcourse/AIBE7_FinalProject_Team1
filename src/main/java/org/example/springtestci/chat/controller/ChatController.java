@@ -18,6 +18,7 @@ import org.example.springtestci.common.response.ApiResponse;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -98,6 +99,14 @@ public class ChatController {
     return ApiResponse.success(
         chatService.updateMyReadPosition(
             roomId, actorId(authentication), request.lastReadMessageId()));
+  }
+
+  /** 인증 참여자가 채팅방을 나간다. 본인 목록에서 사라지고 상대방에게는 나갔다는 안내가 남는다. */
+  @DeleteMapping("/chat-rooms/{roomId}")
+  public ApiResponse<Void> leaveRoom(
+      @PathVariable @Positive Long roomId, Authentication authentication) {
+    chatService.leaveRoom(roomId, actorId(authentication));
+    return ApiResponse.success(null);
   }
 
   /** Spring Security 인증 이름을 회원 ID로 변환하며 인증 누락·비숫자 주체는 401로 거부한다. */

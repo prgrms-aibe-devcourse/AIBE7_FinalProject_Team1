@@ -50,15 +50,18 @@
   function mount(root, { listingId = null, onSelect }) {
     let generation = 0, request = null, disposed = false, busy = false;
     let items = [], page = null, selected = null;
-    const empty = listingId ? '아직 이 판매글에 들어온 문의가 없습니다' : '아직 나눈 채팅이 없습니다';
+    const empty = listingId ? '아직 이 판매글에 들어온 문의가 없어요' : '아직 나눈 채팅이 없어요';
     function render() {
       root.replaceChildren(...items.map(room => row(room, selected, onSelect)));
       if (!items.length) {
-        const text = document.createElement('p'); text.className = 'sub'; text.textContent = empty; root.append(text);
+        const box = document.createElement('div'); box.className = 'dl-empty';
+        const text = document.createElement('b'); text.textContent = empty; box.append(text);
         if (!listingId) {
-          const market = document.createElement('button'); market.className = 'sc-btn';
-          market.dataset.page = 'market'; market.textContent = '마켓 둘러보기'; root.append(market);
+          const hint = document.createElement('p'); hint.textContent = '마음에 드는 상품을 찾아 판매자에게 문의해 보세요.';
+          const market = document.createElement('button'); market.type = 'button'; market.className = 'sc-btn primary';
+          market.dataset.page = 'market'; market.textContent = '마켓 둘러보기'; box.append(hint, market);
         }
+        root.append(box);
       }
       if (page?.hasNext) {
         const more = document.createElement('button');
@@ -85,15 +88,20 @@
         if (!valid()) return;
         busy = false;
         if (append) render(); else root.replaceChildren();
-        const message = document.createElement('p');
+        // 빈 목록과 같은 카드 모양(.dl-empty)으로 보여 주어 화면이 한결같게 한다.
+        const box = document.createElement('div'); box.className = 'dl-empty';
+        const message = document.createElement('b');
         message.setAttribute('role', 'status');
         message.textContent = error.status === 401 ? '로그인이 필요한 서비스입니다.' : '대화방 목록을 불러오지 못했습니다.';
+        const hint = document.createElement('p');
+        hint.textContent = error.status === 401 ? '로그인하면 판매자·구매자와 나눈 채팅을 볼 수 있어요.' : '잠시 후 다시 시도해 주세요.';
         const retry = document.createElement('button');
-        retry.type = 'button'; retry.className = 'sc-btn';
+        retry.type = 'button'; retry.className = 'sc-btn primary';
         retry.textContent = error.status === 401 ? '로그인하기' : '다시 시도';
         if (error.status === 401) retry.dataset.page = 'auth';
         else retry.addEventListener('click', () => load(append));
-        root.append(message, retry);
+        box.append(message, hint, retry);
+        root.append(box);
       }
     }
     return {

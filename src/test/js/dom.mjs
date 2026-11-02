@@ -28,6 +28,7 @@ export class Node {
   }
   append(...children) { for (const child of children) { child.parent = this; this.children.push(child); } }
   appendChild(child) { this.append(child); }
+  after(node) { const index = this.parent.children.indexOf(this); node.parent = this.parent; this.parent.children.splice(index + 1, 0, node); }
   remove() { if (this.parent) this.parent.children = this.parent.children.filter(x => x !== this); this.parent = null; }
   contains(child) { return !!child && (child === this || this.children.some(x => x.contains(child))); }
   setAttribute(key, value) { this.attributes.set(key, String(value)); }
@@ -45,8 +46,10 @@ export class Node {
     for (let node = previous; node; node = node.parent) node.emit('focusout', { target: previous, relatedTarget: this });
   }
   getBoundingClientRect() { return this.rect; }
+  scrollIntoView(options) { this.lastScroll = options; }
   /** 이 시험에서 쓰는 태그·클래스·속성 선택자만 지원한다. */
   matches(selector) {
+    if (selector.includes(',')) return selector.split(',').some(value => this.matches(value.trim()));
     if (selector.startsWith('#')) {
       const [id, className] = selector.slice(1).split('.');
       return this.id === id && (!className || this.classList.contains(className));
@@ -59,6 +62,7 @@ export class Node {
     }
     return this.tagName === selector;
   }
+  closest(selector) { return this.matches(selector) ? this : this.parent?.closest(selector) || null; }
   /** 자식 트리를 탐색해 실제 모듈이 그린 버튼·메시지를 검사한다. */
   querySelectorAll(selector) {
     if (selector === ':scope > button') return this.children.filter(x => x.tagName === 'button');
@@ -84,6 +88,7 @@ export function environment(handler = () => ({})) {
     createElement(tag) { return new Node(tag, document); },
     createTextNode(text) { const node = this.createElement('#text'); node.text = text; return node; },
     addEventListener(type, fn) { if (!events.has(type)) events.set(type, []); events.get(type).push(fn); },
+    removeEventListener(type, fn) { events.set(type, (events.get(type) || []).filter(x => x !== fn)); },
     async emit(type, detail, event = {}) { await Promise.all((events.get(type) || []).map(fn => fn({ detail, ...event }))); },
     querySelector(selector) {
       const space = selector.indexOf(' ');
@@ -131,7 +136,7 @@ export function environment(handler = () => ({})) {
       }
       parent.append(node); return node;
     },
-    run(file) { vm.runInContext(fs.readFileSync('src/main/resources/static/js/' + file, 'utf8'), context, { filename: file }); }
+    run(file, globals = {}) { Object.assign(context, globals); vm.runInContext(fs.readFileSync('src/main/resources/static/js/' + file, 'utf8'), context, { filename: file }); }
   };
 }
 

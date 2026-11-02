@@ -24,7 +24,7 @@
       parts.push(facts.status === 'VOID' ? '무효 기록 · 실제 사건 집계 제외' : '유효 기록');
       if (facts.corrected) parts.push('정정 반영');
       if (facts.previousOwner) parts.push('이전 소유자 기록');
-      if (!facts.detailsReviewed) parts.push('세부 내용 미검토');
+      if (!facts.detailsReviewed) parts.push('공개된 세부 내용 없음');
       if (facts.title) parts.push(facts.title);
       if (facts.content) parts.push(facts.content);
       if (facts.replacedPart) parts.push('교체 부품: ' + facts.replacedPart);
@@ -38,7 +38,7 @@
     row.append(create('p', parts.filter(Boolean).join(' · '))); return row;
   }
   function mount(container, context) {
-    if (!container || !/^[1-9]\d*$/.test(String(context.id)) || !['products','listings'].includes(context.scope)) return;
+    if (!container || !/^[1-9]\d*$/.test(String(context.id)) || context.scope !== 'listings') return;
     clear(context.scope);
     const root = create('section', null, 'product-questions'); root.setAttribute('aria-label', '제품 이력 Q&A');
     root.append(create('h2', '제품 이력에 질문하기'), create('p', '등록된 사양·보증·이력을 근거로 답해요. 답변 아래에서 사용한 기록을 함께 확인해 주세요.', 'pq-help'));
@@ -56,8 +56,7 @@
       button.addEventListener('click', () => { if (!panel.busy) { input.value = question; input.focus(); } }); examples.append(button);
     }
     root.append(examples, form, message, output);
-    if (context.scope === 'products' && container.querySelector('[data-history-root]')) container.querySelector('[data-history-root]').before(root);
-    else container.append(root);
+    container.append(root);
     const controls = () => {
       const seconds = Math.max(0, Math.ceil((panel.until - Date.now()) / 1000));
       submit.disabled = panel.busy || seconds > 0; input.disabled = panel.busy;
@@ -68,14 +67,18 @@
     form.addEventListener('submit', async event => {
       event.preventDefault();
       if (panel.busy || panel.until > Date.now() || !input.value.trim() || !form.reportValidity()) return;
+      const draft = input.value, question = draft.trim();
+      let restoreQuestion = true;
       const controller = new AbortController(); panel.request = controller; panel.busy = true;
-      output.replaceChildren(); output.hidden = true; message.textContent = '질문에 필요한 기록을 확인하고 있어요…'; message.classList.remove('is-error');
+      input.value = '';
+      output.replaceChildren(create('h3', '내 질문'), create('p', question, 'pq-question')); output.hidden = false;
+      message.textContent = '질문에 필요한 기록을 확인하고 있어요…'; message.classList.remove('is-error');
       root.setAttribute('aria-busy', 'true'); controls();
       try {
         const fetcher = window.PastportApi?.fetch || window.fetch.bind(window);
         const response = await fetcher('/api/v1/' + context.scope + '/' + context.id + '/ai/questions', {
           method:'POST', credentials:'same-origin', cache:'no-store', headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({question:input.value.trim()}), signal:controller.signal
+          body:JSON.stringify({question}), signal:controller.signal
         });
         const payload = await response.json().catch(() => null);
         if (controller.signal.aborted || !root.isConnected) return;
@@ -85,7 +88,7 @@
             panel.until = Date.now() + (Number.isFinite(wait) && wait > 0 ? Math.min(wait, 3600) : 60) * 1000;
             panel.timer = setInterval(controls, 1000);
           }
-          if (response.status === 401 || response.status === 404) input.value = '';
+          if (response.status === 401 || response.status === 404) restoreQuestion = false;
           throw new Error(response.status === 401 ? '로그인 후 질문해 주세요.' : response.status === 404 ? '현재 이 제품이나 판매글에 질문할 수 없어요.' : response.status === 409 ? '확인 중 제품 정보나 이력이 바뀌었어요. 최신 내용을 확인한 뒤 다시 질문해 주세요.' : response.status === 429 ? 'AI 요청이 많아요. 표시된 시간이 지난 뒤 다시 질문해 주세요.' : response.status >= 500 ? '지금은 AI 답변을 만들지 못했어요. 잠시 후 다시 질문해 주세요. 제품과 전체 이력은 계속 확인할 수 있어요.' : payload?.fieldErrors?.[0]?.message || payload?.message || '질문을 처리하지 못했어요.');
         }
         const answer = payload?.data;
@@ -98,17 +101,17 @@
         if (answer.sample) output.append(create('p', '샘플 이력으로 확인하는 답변이에요.', 'pq-help'));
         output.hidden = false; message.textContent = '등록된 기록만으로 설명한 답변이에요. 전체 이력도 함께 확인해 주세요.';
       } catch (error) {
-        if (!controller.signal.aborted && root.isConnected) { message.textContent = error instanceof TypeError ? '서버에 연결하지 못했어요. 연결 상태를 확인하고 다시 질문해 주세요.' : error.message; message.classList.add('is-error'); }
+        if (!controller.signal.aborted && root.isConnected) {
+          input.value = restoreQuestion ? draft : '';
+          output.replaceChildren(); output.hidden = true;
+          message.textContent = error instanceof TypeError ? '서버에 연결하지 못했어요. 연결 상태를 확인하고 다시 질문해 주세요.' : error.message; message.classList.add('is-error');
+        }
       } finally {
         if (!controller.signal.aborted && root.isConnected) { panel.busy = false; root.setAttribute('aria-busy', 'false'); controls(); }
       }
     });
   }
-  document.addEventListener('pastport:product-detail-rendered', event => {
-    mount(document.querySelector('#passport [data-product-detail]'), {scope:'products', id:event.detail.product.productId});
-  });
   document.addEventListener('pastport:page-shown', event => {
-    if (event.detail.id !== 'passport') clear('products');
     if (event.detail.id !== 'detail') clear('listings');
   });
   document.addEventListener('pastport:auth-changed', () => clear());

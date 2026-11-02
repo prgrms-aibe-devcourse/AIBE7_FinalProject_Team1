@@ -17,9 +17,66 @@
     })
   );
 
+  const side = document.querySelector('#side');
+  const sectionNav = document.querySelector('[data-section-nav]');
+  const sectionTitle = document.querySelector('#side-section');
+  const sectionToggle = document.querySelector('#menu');
+  const alignSectionNav = () => {
+    const header = document.querySelector('.site-header');
+    if (side && header) side.style.top = Math.max(0, header.getBoundingClientRect().bottom) + 'px';
+  };
+  const belongsTo = (button, page) => button.dataset.page === page || (button.dataset.navRelated || '').split(/\s+/).includes(page);
+  const markCurrent = (button, page) => {
+    const current = belongsTo(button, page);
+    button.classList.toggle('active', current);
+    if (current) button.setAttribute('aria-current', button.dataset.page === page ? 'page' : 'location');
+    else button.removeAttribute('aria-current');
+  };
+
+  function closeSectionNav(returnFocus = false) {
+    const wasOpen = side?.classList.contains('open');
+    const restoreFocus = wasOpen && (returnFocus || side.contains(document.activeElement));
+    side?.classList.remove('open');
+    sectionToggle?.setAttribute('aria-expanded', 'false');
+    if (restoreFocus) sectionToggle?.focus({ preventScroll: true });
+  }
+
+  /** 상단 하위 메뉴를 그대로 사용해 명칭·순서·이동 대상이 별도로 어긋나지 않게 한다. */
+  function renderSectionNav(page) {
+    closeSectionNav();
+    alignSectionNav();
+    const selected = groups.find(item => [...item.querySelectorAll('.nav-drop button')].some(button => belongsTo(button, page)));
+    for (const item of groups) {
+      item.querySelector(':scope > button').classList.toggle('active', item === selected);
+      item.querySelectorAll('.nav-drop button').forEach(button => markCurrent(button, page));
+    }
+    grid.querySelectorAll('button').forEach(button => markCurrent(button, page));
+    grid.querySelectorAll('.mega-title').forEach(button => {
+      button.classList.toggle('active', Boolean(selected) && button.dataset.page === selected.querySelector(':scope > button').dataset.page);
+      button.removeAttribute('aria-current');
+    });
+    if (!side || !sectionNav || !sectionTitle) return;
+    side.hidden = !selected;
+    side.closest('.app')?.classList.toggle('has-section-nav', Boolean(selected));
+    sectionNav.replaceChildren();
+    const title = selected?.querySelector(':scope > button').textContent.trim() || '';
+    sectionTitle.textContent = title;
+    sectionNav.setAttribute('aria-label', title + ' 하위 메뉴');
+    if (sectionToggle) sectionToggle.textContent = title ? title + ' 메뉴' : '현재 메뉴 열기';
+    if (!selected) return;
+    for (const source of selected.querySelectorAll('.nav-drop button')) {
+      const button = document.createElement('button');
+      button.type = 'button'; button.dataset.page = source.dataset.page;
+      button.textContent = (source.querySelector('b') || source).textContent.trim();
+      if (source.dataset.navRelated) button.dataset.navRelated = source.dataset.navRelated;
+      markCurrent(button, page);
+      sectionNav.append(button);
+    }
+  }
+
   /** 전체 메뉴와 개별 하위 메뉴가 동시에 펼쳐지지 않도록 한다. */
   const setOpen = (open) => {
-    if (open) closeDropdown();
+    if (open) { closeDropdown(); closeSectionNav(); }
     mega.hidden = !open;
     toggle.setAttribute('aria-expanded', String(open));
     toggle.classList.toggle('open', open);
@@ -41,6 +98,7 @@
 
   /** 가로 스크롤 밖에 메뉴를 고정한다. 아래 공간이 부족하면 위로 열고, 낮은 화면에서도 스크롤 공간을 확보한다. */
   const openDropdown = (item, hover = false) => {
+    closeSectionNav();
     closeDropdown();
     setOpen(false);
     const trigger = item.querySelector(':scope > button');
@@ -104,19 +162,34 @@
   });
 
   document.querySelector('.landing-nav').addEventListener('scroll', closeDropdown);
-  window.addEventListener('resize', closeDropdown);
+  window.addEventListener('resize', () => {
+    closeDropdown();
+    alignSectionNav();
+    if (document.documentElement.clientWidth > 780) closeSectionNav();
+  });
   window.addEventListener('scroll', closeDropdown);
-  document.addEventListener('pastport:page-shown', closeDropdown);
+  document.addEventListener('pastport:page-shown', event => { closeDropdown(); renderSectionNav(event.detail.id); });
+
+  sectionToggle?.addEventListener('click', () => {
+    if (!side || side.hidden) return;
+    if (side.classList.contains('open')) { closeSectionNav(true); return; }
+    closeDropdown(); setOpen(false);
+    side.classList.add('open'); sectionToggle.setAttribute('aria-expanded', 'true');
+    sectionNav?.querySelector('button')?.focus({ preventScroll: true });
+  });
+  document.querySelector('[data-section-nav-close]')?.addEventListener('click', () => closeSectionNav(true));
 
   toggle.addEventListener('click', () => setOpen(mega.hidden));
   mega.addEventListener('click', (event) => {
     if (event.target.closest('[data-page]')) setOpen(false);
   });
   document.addEventListener('click', (event) => {
+    if (side?.classList.contains('open') && !side.contains(event.target) && !sectionToggle?.contains(event.target)) closeSectionNav();
     if (activeGroup && !activeGroup.contains(event.target)) closeDropdown();
     if (!mega.hidden && !event.target.closest('#mega, #nav-all')) setOpen(false);
   });
   document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && side?.classList.contains('open')) closeSectionNav(true);
     if (event.key === 'Escape' && activeGroup) {
       const trigger = activeGroup.querySelector(':scope > button');
       closeDropdown();
@@ -127,4 +200,5 @@
       toggle.focus();
     }
   });
+  renderSectionNav([...document.querySelectorAll('.page')].find(page => page.classList.contains('active'))?.id || 'landing');
 })();

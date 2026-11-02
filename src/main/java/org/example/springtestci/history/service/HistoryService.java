@@ -10,6 +10,7 @@ import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
 import org.example.springtestci.history.dto.CorrectHistoryEventRequest;
 import org.example.springtestci.history.dto.CreateHistoryEventRequest;
+import org.example.springtestci.history.dto.HistoryChangeResponse;
 import org.example.springtestci.history.dto.HistoryEventResponse;
 import org.example.springtestci.history.dto.HistoryEventSource;
 import org.example.springtestci.history.dto.VoidHistoryEventRequest;
@@ -28,9 +29,15 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+/**
+ * 제품 이력의 등록·조회·정정·무효화 업무를 처리한다.
+ *
+ * <p>Controller와 {@link HistoryRepository} 사이에서 소유권, 변경 가능 상태, 사양 값 검증 및 트랜잭션을 관리한다.
+ */
 @Service
 public class HistoryService {
 
+  // 사용자가 임의의 필드명을 저장하지 못하도록 변경 가능한 제품 사양 키를 제한한다.
   private static final Set<String> SPEC_KEYS =
       Set.of(
           "cpu",
@@ -66,11 +73,15 @@ public class HistoryService {
   public HistoryEventResponse create(
       long ownerId, long productId, CreateHistoryEventRequest request) {
     requireOwnedLock(productId, ownerId);
+    if (historyRepository.hasPendingDirectTransfer(productId)) {
+      throw new CommonException(ErrorCode.HISTORY_REGISTRATION_BLOCKED);
+    }
     validateCommon(request.eventType(), request.occurredOn(), request.specsAfter());
     if (request.eventType() == HistoryEventType.TRANSFER) {
       throw new CommonException(ErrorCode.INVALID_HISTORY_EVENT);
     }
 
+    // List는 응답 순서를 유지하고, 내부의 Set 검사는 중복 문서 ID를 찾는 데 사용한다.
     List<Long> documentIds = normalizedDocumentIds(request.documentIds());
     if (!historyRepository.documentsCanBeLinked(productId, documentIds)) {
       throw new CommonException(ErrorCode.INVALID_HISTORY_DOCUMENT);
@@ -106,13 +117,15 @@ public class HistoryService {
     return response;
   }
 
+  /** 소유권을 확인한 뒤 이력, 연결 문서, 최근 변경 정보를 합쳐 타임라인을 만든다. */
   @Transactional(readOnly = true)
   public List<HistoryEventResponse> timeline(long ownerId, long productId) {
     if (!historyRepository.existsOwnedProduct(productId, ownerId)) {
       throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
     }
+    // eventId를 Map의 키로 사용하면 반복 조회 없이 각 이벤트에 문서와 변경 정보를 연결할 수 있다.
     Map<Long, List<Long>> documents = historyRepository.findDocumentIds(productId);
-    Map<Long, HistoryChangeRecord> changes = historyRepository.findLatestChanges(productId);
+    Map<Long, List<HistoryChangeRecord>> changes = historyRepository.findChanges(productId);
     return historyRepository.findTimeline(productId).stream()
         .map(
             event ->
@@ -120,7 +133,7 @@ public class HistoryService {
                     ownerId,
                     event,
                     documents.getOrDefault(event.eventId(), List.of()),
-                    changes.get(event.eventId())))
+                    changes.getOrDefault(event.eventId(), List.of())))
         .toList();
   }
 
@@ -165,7 +178,7 @@ public class HistoryService {
             ownerId,
             after,
             historyRepository.findDocumentIds(productId).getOrDefault(eventId, List.of()),
-            historyRepository.findLatestChanges(productId).get(eventId));
+            historyRepository.findChanges(productId).getOrDefault(eventId, List.of()));
     events.publishEvent(new ProductFactsChanged(productId));
     return response;
   }
@@ -190,13 +203,14 @@ public class HistoryService {
             ownerId,
             after,
             historyRepository.findDocumentIds(productId).getOrDefault(eventId, List.of()),
-            historyRepository.findLatestChanges(productId).get(eventId));
+            historyRepository.findChanges(productId).getOrDefault(eventId, List.of()));
     events.publishEvent(new ProductFactsChanged(productId));
     return response;
   }
 
   private void rebuildSpecifications(
       long productId, long changedEventId, ProductSpecifications base) {
+    // LinkedHashMap은 정해진 사양 키 순서를 유지해 JSON과 디버깅 결과를 읽기 쉽게 만든다.
     Map<String, Object> current = new LinkedHashMap<>(toMap(base));
     for (HistoryEventRecord event :
         historyRepository.findValidSpecificationEventsFrom(productId, changedEventId)) {
@@ -316,11 +330,18 @@ public class HistoryService {
   private HistoryEventResponse getOwnedEvent(
       long ownerId, long productId, long eventId, List<Long> documentIds) {
     return toResponse(
-        ownerId, historyRepository.findEvent(productId, eventId).orElseThrow(), documentIds, null);
+        ownerId,
+        historyRepository.findEvent(productId, eventId).orElseThrow(),
+        documentIds,
+        List.of());
   }
 
+  /** 이벤트별 변경 기록 전체와 마지막 변경 요약을 권한 정보가 포함된 API 응답으로 변환한다. */
   private HistoryEventResponse toResponse(
-      long ownerId, HistoryEventRecord event, List<Long> documentIds, HistoryChangeRecord change) {
+      long ownerId,
+      HistoryEventRecord event,
+      List<Long> documentIds,
+      List<HistoryChangeRecord> changes) {
     HistoryEventSource source =
         event.eventType() == HistoryEventType.TRANSFER
             ? HistoryEventSource.SYSTEM
@@ -331,6 +352,13 @@ public class HistoryService {
         event.status() == HistoryEventStatus.VALID
             && event.eventType() != HistoryEventType.TRANSFER
             && java.util.Objects.equals(event.authorId(), ownerId);
+    List<HistoryChangeResponse> changeResponses =
+        changes.stream()
+            .map(
+                change ->
+                    new HistoryChangeResponse(change.action(), change.reason(), change.changedAt()))
+            .toList();
+    HistoryChangeRecord latestChange = changes.isEmpty() ? null : changes.get(changes.size() - 1);
     return new HistoryEventResponse(
         event.eventId(),
         event.productId(),
@@ -347,9 +375,10 @@ public class HistoryService {
         source,
         editable,
         documentIds,
-        change == null ? null : change.action(),
-        change == null ? null : change.reason(),
-        change == null ? null : change.changedAt(),
+        changeResponses,
+        latestChange == null ? null : latestChange.action(),
+        latestChange == null ? null : latestChange.reason(),
+        latestChange == null ? null : latestChange.changedAt(),
         event.createdAt(),
         event.updatedAt());
   }

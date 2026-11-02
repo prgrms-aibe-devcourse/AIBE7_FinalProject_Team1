@@ -1,161 +1,143 @@
-(function () {
-  let currentToken = null;
-  let timerInterval = null;
-  let tokenFromUrl = new URLSearchParams(window.location.search).get('token');
-
-  const request = (path, options) => (window.PastportApi?.fetch || window.fetch.bind(window))(path, options);
-  const goTo = (page) => document.querySelector(`[data-page="${page}"]`)?.click();
-
-  async function initReceivePage() {
-    const receiveRoot = document.querySelector('.rc');
-    if (!receiveRoot) return;
-
-    const token = tokenFromUrl;
-    if (!token) {
-      showError('유효하지 않은 링크입니다. 소유권 이전 토큰이 누락되었습니다.');
-      return;
-    }
-    currentToken = token;
-    // 일회용 토큰이 주소창·히스토리에 남지 않도록 읽은 즉시 지운다.
-    window.history.replaceState(null, '', window.location.pathname);
-
-    try {
-      const res = await request(`/api/v1/ownership/transfers/verify?token=${encodeURIComponent(token)}`);
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok || !data.success) {
-        showError(data.message || '소유권 이전 정보를 찾을 수 없습니다.');
-        return;
-      }
-
-      renderTransferInfo(data.data);
-    } catch (err) {
-      console.error(err);
-      showError('서버와의 통신 중 오류가 발생했습니다.');
-    }
-  }
-
-  function renderTransferInfo(info) {
-    const prodTitleEl = document.querySelector('.rc-prod h2');
-    const prodDescEl = document.querySelector('.rc-prod p');
-    const timeEl = document.querySelector('.rc-time b');
-    const acceptBtn = document.querySelector('.rc button.primary');
-    const asideEl = document.querySelector('.rc-state');
-
-    if (prodTitleEl) prodTitleEl.textContent = info.productTitle;
-    if (prodDescEl) prodDescEl.textContent = `판매자: ${info.fromUserNickname} · 소유권 이전 대기 중`;
-
-    // 만료 시간 카운트다운
-    if (timeEl && info.expiresAt) {
-      startCountdown(info.expiresAt, timeEl);
-    }
-
-    if (!info.canAccept) {
-      if (acceptBtn) {
-        acceptBtn.disabled = true;
-        acceptBtn.textContent = info.isExpired ? '만료된 이전 요청입니다' : '수락할 수 없는 상태입니다';
-      }
-    } else {
-      if (acceptBtn) {
-        acceptBtn.disabled = false;
-        acceptBtn.onclick = handleAccept;
-      }
-    }
-  }
-
-  function startCountdown(expiresAtStr, el) {
-    if (timerInterval) clearInterval(timerInterval);
-    const target = new Date(expiresAtStr).getTime();
-
-    function update() {
-      const now = Date.now();
-      const diff = target - now;
-      if (diff <= 0) {
-        el.textContent = '만료됨';
-        clearInterval(timerInterval);
-        const acceptBtn = document.querySelector('.rc button.primary');
-        if (acceptBtn) {
-          acceptBtn.disabled = true;
-          acceptBtn.textContent = '만료된 이전 요청입니다';
-        }
-        return;
-      }
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const secs = Math.floor((diff % (1000 * 60)) / 1000);
-      el.textContent = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-    }
-    update();
-    timerInterval = setInterval(update, 1000);
-  }
-
-  async function handleAccept() {
+(() => {
+  const TTL = 15 * 60 * 1000;
+  let currentToken = new URLSearchParams(window.location.search).get('token');
+  if (currentToken) window.history.replaceState(null, '', window.location.pathname);
+  let expiresAt = null;
+  let info = null;
+  let timer = null;
+  let cleanupTimer = null;
+  let busy = false;
+  let version = 0;
+  let accountId = auth.user?.id == null ? null : String(auth.user.id);
+  const root = () => document.querySelector('#receive .rc');
+  const find = selector => root()?.querySelector(selector);
+  const navigate = page => { if (typeof show === 'function') show(page); };
+  const clearToken = () => {
+    currentToken = null; expiresAt = null; info = null;
+    clearInterval(timer); timer = null; clearTimeout(cleanupTimer); cleanupTimer = null;
+    const login = find('[data-receive-login]'); if (login) login.hidden = true;
+    const accept = find('[data-receive-accept]'); if (accept) accept.disabled = true;
+    const title = find('[data-receive-title]'); if (title) title.textContent = '소유권 이전 요청';
+    const seller = find('[data-receive-seller]'); if (seller) seller.textContent = '';
+    const expiration = find('[data-receive-expiration]'); if (expiration) expiration.textContent = '';
+  };
+  const save = () => {
     if (!currentToken) return;
-
-    const acceptBtn = document.querySelector('.rc button.primary');
-    if (acceptBtn) {
-      acceptBtn.disabled = true;
-      acceptBtn.textContent = '소유권 이전 처리 중…';
+    expiresAt = Math.min(expiresAt || Date.now() + TTL, info?.expiresAt ? Date.parse(info.expiresAt) : Infinity);
+    clearTimeout(cleanupTimer);
+    cleanupTimer = setTimeout(() => {
+      status('이전 링크 또는 로그인 이어가기 시간이 만료되었습니다. 링크를 다시 열어 주세요.'); clearToken();
+    }, Math.max(0, expiresAt - Date.now()));
+  };
+  if (currentToken) save();
+  const status = (text, allowRetry = false) => {
+    const target = find('[data-receive-message]'); if (target) target.textContent = text;
+    const retry = find('[data-receive-retry]'); if (retry) retry.hidden = !allowRetry;
+    const accept = find('[data-receive-accept]'); if (accept) accept.disabled = true;
+  };
+  const authState = () => {
+    const signedIn = Boolean(auth.user);
+    const login = find('[data-receive-login]'); if (login) login.hidden = signedIn || !currentToken;
+    if (info?.canAccept && currentToken) status(signedIn ? '제품을 실제로 받았는지 확인한 뒤 수락해 주세요.' : '로그인하면 같은 이전으로 돌아옵니다. 로그인만으로 수락되지는 않습니다.');
+    const accept = find('[data-receive-accept]');
+    if (accept) accept.disabled = busy || !signedIn || !info?.canAccept || !currentToken;
+  };
+  const render = () => {
+    const title = find('[data-receive-title]'); if (title) title.textContent = info.productTitle || '소유권 이전 요청';
+    const seller = find('[data-receive-seller]'); if (seller) seller.textContent = info.fromUserNickname ? `보내는 사람: ${info.fromUserNickname}` : '';
+    const expiration = find('[data-receive-expiration]'); if (expiration) expiration.textContent = `링크 만료: ${new Date(info.expiresAt).toLocaleString('ko-KR')}`;
+    if (info.isExpired || info.status === 'EXPIRED') { status('만료된 링크입니다. 판매자에게 새 링크를 요청하세요.'); clearToken(); return; }
+    if (info.status === 'CANCELLED') { status('취소된 이전 요청입니다. 판매자에게 새 링크를 요청하세요.'); clearToken(); return; }
+    if (info.status === 'COMPLETED') { status('이미 완료된 이전 요청입니다. 내 제품에서 현재 소유 제품을 확인하세요.'); clearToken(); const home = find('[data-receive-home]'); if (home) home.hidden = false; return; }
+    if (info.recipientAcceptedAt) { status('수락이 저장되었습니다. 현재 소유자의 최종 승인을 기다리고 있습니다.', true); return; }
+    if (!info.canAccept) { status('현재 수락할 수 없습니다. 판매 중·소유자 변경 여부를 판매자에게 확인하세요.'); clearToken(); return; }
+    save(); authState();
+    const update = () => {
+      if (!currentToken) return;
+      const remaining = Math.min(Date.parse(info.expiresAt), expiresAt) - Date.now();
+      if (remaining <= 0) { status('이전 링크 또는 로그인 이어가기 시간이 만료되었습니다. 링크를 다시 열어 주세요.'); clearToken(); return; }
+      const time = find('[data-receive-time]');
+      if (time) time.textContent = `${Math.floor(remaining / 3600000)}시간 ${Math.floor(remaining / 60000) % 60}분 ${Math.floor(remaining / 1000) % 60}초`;
+    };
+    clearInterval(timer); update(); if (currentToken) timer = setInterval(update, 1000);
+  };
+  const verify = async () => {
+    if (!root() || busy) return;
+    if (!currentToken || expiresAt <= Date.now()) { status('이전 링크가 없거나 이어가기 시간이 만료되었습니다. 판매자에게 받은 링크를 다시 열어 주세요.'); clearToken(); return; }
+    if (!auth.user) {
+      info = null;
+      status('로그인하면 같은 이전 요청으로 돌아옵니다. 로그인 후 제품과 발신자를 확인해 주세요.');
+      authState(); return;
     }
-
+    const requestVersion = ++version;
+    status('이전 요청을 확인하고 있습니다.');
     try {
-      const res = await request('/api/v1/ownership/transfers/accept', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ token: currentToken })
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) {
-        alert(data.message || '소유권 이전에 실패했습니다.');
-        if (acceptBtn) {
-          acceptBtn.disabled = false;
-          acceptBtn.textContent = '제품을 받았어요 · 소유권 이전 수락';
-        }
+      const response = await window.PastportApi.fetch(`/api/v1/ownership/transfers/verify?token=${encodeURIComponent(currentToken)}`, { cache: 'no-store', referrerPolicy: 'no-referrer' });
+      const payload = await response.json().catch(() => null);
+      if (requestVersion !== version) return;
+      if (response.status === 401) {
+        // 이전 정보 조회는 로그인이 필요하다. 토큰은 지우지 않고 로그인 버튼을 보여 로그인 뒤 같은 이전으로 돌아온다.
+        info = null;
+        status('이전 정보를 확인하려면 로그인이 필요해요. 로그인하면 같은 이전으로 돌아옵니다.');
+        const login = find('[data-receive-login]'); if (login) login.hidden = false;
         return;
       }
-
-      alert('축하합니다! 제품 소유권 이전이 성공적으로 완료되었습니다.\n내 기기 목록으로 이동합니다.');
-      goTo('mypage');
-    } catch (err) {
-      console.error(err);
-      alert('소유권 이전 요청 중 오류가 발생했습니다.');
-      if (acceptBtn) {
-        acceptBtn.disabled = false;
-        acceptBtn.textContent = '제품을 받았어요 · 소유권 이전 수락';
+      if (!response.ok) {
+        status(response.status >= 500 ? '일시적인 서버 오류입니다. 다시 시도해 주세요.' : '유효하지 않거나 종료된 이전 링크입니다.', response.status >= 500);
+        if (response.status < 500) clearToken();
+        return;
       }
-    }
-  }
-
-  function showError(msg) {
-    const card = document.querySelector('.rc .sc-card');
-    if (!card) return;
-    const box = document.createElement('div');
-    box.style.cssText = 'text-align:center;padding:40px 20px';
-    const mark = document.createElement('span');
-    mark.style.cssText = 'font-size:40px;color:var(--danger)';
-    mark.textContent = '×';
-    const title = document.createElement('h2');
-    title.style.margin = '16px 0 8px';
-    title.textContent = '이전 요청을 확인할 수 없습니다';
-    const text = document.createElement('p');
-    text.style.cssText = 'color:var(--muted);margin-bottom:24px';
-    text.textContent = msg;
-    const back = document.createElement('button');
-    back.type = 'button';
-    back.className = 'sc-btn primary';
-    back.textContent = '마켓으로 돌아가기';
-    back.addEventListener('click', () => goTo('market'));
-    box.append(mark, title, text, back);
-    card.replaceChildren(box);
-  }
-
-  // 화면 HTML은 비동기로 채워지므로 로드가 끝난 뒤에 초기화한다.
-  document.addEventListener('pastport:page-loaded', (event) => {
+      info = payload.data; render();
+    } catch { if (requestVersion === version) status('네트워크 연결을 확인하고 다시 시도해 주세요.', true); }
+  };
+  const accept = async () => {
+    if (busy || !currentToken || !info?.canAccept || !auth.user) return;
+    busy = true; const requestVersion = version; const token = currentToken;
+    status('소유권 이전을 처리하고 있습니다.');
+    try {
+      const response = await window.PastportApi.fetch('/api/v1/ownership/transfers/accept', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+        body: JSON.stringify({ token }), referrerPolicy: 'no-referrer'
+      });
+      const payload = await response.json().catch(() => null);
+      if (requestVersion !== version) return;
+      if (!response.ok) {
+        const messages = { OWN_004: '본인 소유 제품은 수락할 수 없습니다.', OWN_005: '판매 중이거나 내부 예약이 있습니다. 기존 거래 경로를 이용해 주세요.', COMMON_002: '지정된 수신자가 아닙니다. 올바른 계정으로 로그인해 주세요.' };
+        status(messages[payload?.code] || (response.status === 401 ? '로그인이 만료되었습니다. 다시 로그인해 주세요.' : response.status === 403 ? '수신자 또는 보안 확인에 실패했습니다. 계정을 확인한 뒤 다시 시도해 주세요.' : '이전 요청을 수락하지 못했습니다. 최신 상태를 다시 확인해 주세요.'), true);
+        if (response.status === 401) { const login = find('[data-receive-login]'); if (login) login.hidden = false; }
+        if (['OWN_001', 'OWN_002', 'OWN_005'].includes(payload?.code)) clearToken();
+        return;
+      }
+      info = { ...info, canAccept: false, recipientAcceptedAt: payload.data.recipientAcceptedAt };
+      status('수락이 저장되었습니다. 현재 소유자의 최종 승인 후 이전이 완료됩니다.', true);
+    } catch { if (requestVersion === version) status('응답을 받지 못했습니다. 중복 수락 전에 최신 상태를 다시 확인해 주세요.', true); }
+    finally { if (requestVersion === version) busy = false; }
+  };
+  const init = () => {
+    find('[data-receive-accept]')?.addEventListener('click', accept);
+    find('[data-receive-retry]')?.addEventListener('click', verify);
+    find('[data-receive-login]')?.addEventListener('click', () => { save(); navigate('auth'); });
+    verify();
+  };
+  window.PastportReceive = { resumeAfterLogin: () => {
+    if (!currentToken || expiresAt <= Date.now()) return false;
+    navigate('receive'); return true;
+  } };
+  document.addEventListener('pastport:page-loaded', event => {
     if (event.detail.id !== 'receive') return;
-    if (tokenFromUrl && typeof show === 'function') show('receive');
-    initReceivePage();
+    init(); if (currentToken) navigate('receive');
   });
+  document.addEventListener('pastport:page-shown', event => { if (event.detail.id === 'receive') verify(); else { version += 1; busy = false; info = null; clearInterval(timer); timer = null; } });
+  document.addEventListener('pastport:auth-changed', () => {
+    const nextAccount = auth.user?.id == null ? null : String(auth.user.id);
+    version += 1; busy = false; info = null;
+    if (accountId !== null && accountId !== nextAccount) clearToken();
+    accountId = nextAccount;
+    const title = find('[data-receive-title]'); if (title) title.textContent = '소유권 이전 요청';
+    const seller = find('[data-receive-seller]'); if (seller) seller.textContent = '';
+    authState(); if (currentToken && !busy) verify();
+  });
+  document.addEventListener('pastport:logout', () => { version += 1; clearToken(); status('로그아웃되어 이전 정보가 지워졌습니다. 링크를 다시 열어 주세요.'); });
+  window.addEventListener('pagehide', () => { version += 1; clearToken(); });
+  if (root()) { init(); if (currentToken) navigate('receive'); }
 })();

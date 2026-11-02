@@ -48,6 +48,75 @@ class ProductRepositoryTest {
   }
 
   @Test
+  void ownedProductCursorIndexIsCreatedByFlyway() {
+    Integer count =
+        jdbc.queryForObject(
+            "SELECT COUNT(*) FROM information_schema.indexes WHERE LOWER(index_name) = 'ix_products_owner_archive_created'",
+            Integer.class);
+
+    assertEquals(1, count);
+  }
+
+  @Test
+  void ownedProductIncludesHistoryCountAndMostRecentRecord() {
+    long productId = insert(21L, "APPLE", "fp-history-summary");
+    jdbc.update(
+        "INSERT INTO product_events (product_id, author_id, event_type, occurred_on, title) VALUES (?, ?, 'INSPECTION', ?, ?)",
+        productId,
+        21L,
+        LocalDate.of(2026, 10, 1),
+        "초기 점검");
+    jdbc.update(
+        "INSERT INTO product_events (product_id, author_id, event_type, occurred_on, title) VALUES (?, ?, 'REPAIR', ?, ?)",
+        productId,
+        21L,
+        LocalDate.of(2026, 10, 2),
+        "키보드 수리");
+
+    ProductResponse product = repository.findOwned(productId, 21L).orElseThrow();
+
+    assertEquals(2L, product.historyCount());
+    assertEquals("REPAIR", product.recentHistory().eventType());
+    assertEquals("키보드 수리", product.recentHistory().title());
+    assertEquals(LocalDate.of(2026, 10, 2), product.recentHistory().occurredOn());
+  }
+
+  @Test
+  void ownedProductsArePagedInStableOrderAndImagesAreLoadedInOneBatch() {
+    long oldest = insert(24L, "APPLE", "fp-page-oldest");
+    long middle = insert(24L, "APPLE", "fp-page-middle", LocalDate.of(2026, 10, 20));
+    long newest = insert(24L, "APPLE", "fp-page-newest");
+    repository.insertImage(oldest, "product-images/page-oldest.png", "image/png", 10L);
+    repository.insertImage(middle, "product-images/page-middle.png", "image/png", 30L);
+    repository.insertImage(newest, "product-images/page-newest.png", "image/png", 20L);
+
+    var firstPage = repository.findOwnedPage(24L, null, null, 2);
+    repository.archive(newest);
+    var secondPage =
+        repository.findOwnedPage(
+            24L, firstPage.get(1).createdAt(), firstPage.get(1).productId(), 2);
+    var images = repository.findImages(firstPage.stream().map(ProductResponse::productId).toList());
+    var summary = repository.summarizeOwned(24L);
+
+    assertEquals(
+        List.of(newest, middle), firstPage.stream().map(ProductResponse::productId).toList());
+    assertEquals(List.of(oldest), secondPage.stream().map(ProductResponse::productId).toList());
+    assertEquals(1, images.get(newest).size());
+    assertEquals(1, images.get(middle).size());
+    assertEquals(2L, summary.total());
+    assertEquals(1L, summary.purchased());
+  }
+
+  @Test
+  void replacingFieldAuthorTransfersEditResponsibilityToCurrentOwner() {
+    long productId = insert(22L, "APPLE", "fp-field-author");
+
+    repository.replaceFieldAuthor(productId, "TITLE", 23L);
+
+    assertEquals(23L, repository.findFieldAuthor(productId, "TITLE").orElseThrow());
+  }
+
+  @Test
   void anotherUserCannotReadOrLockTheProduct() {
     long productId = insert(2L, "APPLE", "fp-other-user");
 
@@ -93,6 +162,18 @@ class ProductRepositoryTest {
   }
 
   @Test
+  void ownershipTransferChangesOwnerAndIncrementsFactsVersionOnce() {
+    long productId = insert(15L, "APPLE", "fp-owner-transfer");
+
+    repository.updateOwner(productId, 16L);
+
+    ProductResponse product = repository.findOwned(productId, 16L).orElseThrow();
+    assertEquals(16L, repository.findOwnerId(productId).orElseThrow());
+    assertEquals(2L, product.factsVersion());
+    assertTrue(repository.findOwned(productId, 15L).isEmpty());
+  }
+
+  @Test
   void imagesStoreMetadataAndCanBeReorderedAndMarkedPrimary() {
     long productId = insert(6L, "APPLE", "fp-images");
     long first = repository.insertImage(productId, "product-images/a.png", "image/png", 100L);
@@ -133,10 +214,16 @@ class ProductRepositoryTest {
   }
 
   private long insert(long ownerId, String manufacturerNormalized, String fingerprint) {
+    return insert(ownerId, manufacturerNormalized, fingerprint, null);
+  }
+
+  private long insert(
+      long ownerId, String manufacturerNormalized, String fingerprint, LocalDate purchaseDate) {
     CreateProductRequest request =
         request(
             new CreateProductRequest.Specifications(
-                "Apple M3 Pro", null, 18, 512, "SSD", "14인치", 92, "macOS"));
+                "Apple M3 Pro", null, 18, 512, "SSD", "14인치", 92, "macOS"),
+            purchaseDate);
     long productId =
         repository.insertProduct(
             ownerId, request, manufacturerNormalized, fingerprint, "ciphertext");
@@ -146,11 +233,16 @@ class ProductRepositoryTest {
   }
 
   private static CreateProductRequest request(CreateProductRequest.Specifications specs) {
+    return request(specs, null);
+  }
+
+  private static CreateProductRequest request(
+      CreateProductRequest.Specifications specs, LocalDate purchaseDate) {
     return new CreateProductRequest(
         "MacBook Pro 14",
         "Apple",
         "MacBook Pro 14",
-        null,
+        purchaseDate,
         LocalDate.of(2099, 1, 1),
         "구매 후 1년",
         "SERIAL1234",

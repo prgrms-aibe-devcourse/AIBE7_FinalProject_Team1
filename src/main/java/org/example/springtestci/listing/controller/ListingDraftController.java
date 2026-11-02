@@ -153,7 +153,7 @@ public class ListingDraftController {
         .body(ApiResponse.success(service.products(userId(authentication))));
   }
 
-  /** 제품을 선택했을 때 사양·사진 등 작성에 필요한 원본 제품 정보를 불러온다. */
+  /** 제품 소유권과 중복 판매 여부를 확인한 뒤 작성에 필요한 사양·사진을 불러온다. */
   @GetMapping("/products/{productId}/listing-draft/composition")
   public ResponseEntity<ApiResponse<DraftProductResponse>> composition(
       @PathVariable @Positive long productId, Authentication authentication) {

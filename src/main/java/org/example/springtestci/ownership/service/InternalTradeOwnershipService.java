@@ -4,10 +4,10 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Clock;
-import java.time.LocalDate;
 import java.util.HexFormat;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
+import org.example.springtestci.history.service.InternalTransferHistoryWriter;
 import org.example.springtestci.ownership.event.OwnershipTransferred;
 import org.example.springtestci.ownership.repository.InternalTradeOwnershipRepository;
 import org.example.springtestci.ownership.repository.InternalTradeOwnershipRepository.Transfer;
@@ -35,16 +35,19 @@ public class InternalTradeOwnershipService
   private static final SecureRandom RANDOM = new SecureRandom();
   private final InternalTradeOwnershipRepository repository;
   private final TradeAuditRepository audit;
+  private final InternalTransferHistoryWriter historyWriter;
   private final ApplicationEventPublisher events;
   private final Clock clock;
 
   public InternalTradeOwnershipService(
       InternalTradeOwnershipRepository repository,
       TradeAuditRepository audit,
+      InternalTransferHistoryWriter historyWriter,
       ApplicationEventPublisher events,
       Clock clock) {
     this.repository = repository;
     this.audit = audit;
+    this.historyWriter = historyWriter;
     this.events = events;
     this.clock = clock;
   }
@@ -109,7 +112,7 @@ public class InternalTradeOwnershipService
       var transfer = transfers.get(0);
       // 완료 재시도는 후속 재이전·제품 보관과 무관하게 기존 결과를 확인하며 추가 쓰기를 하지 않는다.
       if ("COMPLETED".equals(transfer.status())) {
-        if (!repository.hasTransferEvent(c.productId(), transfer.id())) throw conflict();
+        if (!historyWriter.hasCompletedTransfer(c.productId(), transfer.id())) throw conflict();
         return;
       }
       if (!"PENDING".equals(transfer.status())
@@ -118,13 +121,10 @@ public class InternalTradeOwnershipService
           || product.factsVersion() != c.confirmedFactsVersion()) throw conflict();
       if (repository.completeTransfer(transfer.id(), c.completedAt()) != 1
           || repository.transferOwner(c) != 1) throw conflict();
-      repository.insertTransferEvent(
-          c.productId(),
-          transfer.id(),
-          LocalDate.ofInstant(c.completedAt(), clock.getZone()),
-          c.completedAt());
-      // 이력 담당의 정식 visibility 컬럼을 함께 종료한다. 이후 실패 시 기존 PUBLIC 상태도 복원된다.
-      repository.makeHistoryPrivate(c.productId());
+      // 이력 포트가 TRANSFER 생성과 공개 종료를 함께 처리한다. 실패하면 소유자 변경도 롤백된다.
+      historyWriter.recordCompletedTransfer(
+          new InternalTransferHistoryWriter.Command(
+              c.productId(), transfer.id(), c.fromUserId(), c.toUserId(), c.completedAt()));
       repository.protectDocuments(c.productId(), c.completedAt());
       // 필수 초안 정리는 동기 처리한다. 어느 후처리나 상위 거래 감사가 실패해도 전체를 롤백한다.
       events.publishEvent(new OwnershipTransferred(c.productId(), c.fromUserId(), c.toUserId()));

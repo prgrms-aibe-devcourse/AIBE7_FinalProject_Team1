@@ -4,10 +4,12 @@ import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import java.nio.charset.StandardCharsets;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import org.example.springtestci.admin.service.AdminAccessService;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -41,7 +43,9 @@ public class SecurityConfig {
 
   /** CSRF 검증, 쿠키 인증, 접근 규칙을 설정한다. */
   @Bean
-  SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+  SecurityFilterChain securityFilterChain(
+      HttpSecurity http, AdminAccessService adminAccess, JwtDecoder jwtDecoder) throws Exception {
+    var entryPoint = new AdminPageAuthenticationEntryPoint();
     http.csrf(
             csrf ->
                 csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
@@ -51,9 +55,14 @@ public class SecurityConfig {
         // 인증 성공 시 기존 CSRF 쿠키가 지워지므로, 인증 후 새 토큰을 읽어 다음 요청용 쿠키를 발급한다.
         .addFilterAfter(new CsrfCookieFilter(), SessionManagementFilter.class)
         // 쿠키 요청이 CSRF 검사를 받은 뒤에 쿠키를 Authorization 헤더로 바꿔 넘긴다.
-        .addFilterBefore(new CookieBearerTokenFilter(), BearerTokenAuthenticationFilter.class)
+        .addFilterBefore(
+            new CookieBearerTokenFilter(jwtDecoder), BearerTokenAuthenticationFilter.class)
         // CSRF 검사에 실패하면 인증 문제(401)가 아니라 요청 거부(403)로 응답한다.
-        .exceptionHandling(handling -> handling.accessDeniedHandler(new AccessDeniedHandlerImpl()))
+        .exceptionHandling(
+            handling ->
+                handling
+                    .authenticationEntryPoint(entryPoint)
+                    .accessDeniedHandler(new AccessDeniedHandlerImpl()))
         .headers(
             headers ->
                 headers
@@ -72,6 +81,19 @@ public class SecurityConfig {
         .authorizeHttpRequests(
             authorize ->
                 authorize
+                    // 공개 정적 파일·일반 GET 규칙보다 먼저 검사해야 직접 URL 접근도 차단된다.
+                    .requestMatchers(
+                        "/admin",
+                        "/admin/**",
+                        "/admin.html",
+                        "/pages/admin.html",
+                        "/api/v1/admin/**")
+                    .access(
+                        (authentication, context) ->
+                            new AuthorizationDecision(adminAccess.allowed(authentication.get())))
+                    // 문서 임시 URL은 서명만으로 열지 않고 로그인과 현재 소유권을 함께 확인한다.
+                    .requestMatchers("/local-files")
+                    .authenticated()
                     .requestMatchers(
                         "/",
                         "/index.html",
@@ -82,7 +104,6 @@ public class SecurityConfig {
                         "/js/**",
                         "/pages/**",
                         "/images/**",
-                        "/local-files",
                         "/error",
                         "/ws-stomp",
                         "/ws-stomp/**",
@@ -100,7 +121,6 @@ public class SecurityConfig {
                         HttpMethod.GET,
                         "/api/v1/listings",
                         "/api/v1/listings/*/thumbnail",
-                        "/api/v1/ownership/transfers/verify",
                         "/api/v1/products/*/events")
                     .permitAll()
                     .requestMatchers(
@@ -109,13 +129,12 @@ public class SecurityConfig {
                         "/api/auth/signup",
                         "/api/auth/login",
                         "/api/auth/refresh",
-                        "/api/auth/logout",
-                        "/api/v1/ai/ask",
-                        "/api/v1/ai/estimate-price")
+                        "/api/auth/logout")
                     .permitAll()
                     .anyRequest()
                     .authenticated())
-        .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
+        .oauth2ResourceServer(
+            oauth2 -> oauth2.authenticationEntryPoint(entryPoint).jwt(Customizer.withDefaults()));
     return http.build();
   }
 

@@ -1,5 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="16" fill="#0e6a5c"/>
-  <path d="M20 15h22a6 6 0 0 1 6 6v25a3 3 0 0 1-3 3H21a5 5 0 0 1-5-5V20a5 5 0 0 1 4-5Z" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>
-  <path d="M26 15v34M32 25h9M32 33h9M32 41h6" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <title>PastPort</title>
+  <rect width="128" height="128" rx="26" fill="#fff"/>
+  <g fill="#22315e">
+    <path d="M42 12c-5-1-7 1-7 6v10l37 10c11 3 16 10 16 21v18l-18 8v17l25-12c11-5 17-14 17-25V44c0-12-7-18-18-21Z"/>
+    <path d="M28 32c-8-2-13 2-13 10v45c0 6 2 8 7 10V46c0-5 3-7 7-5l36 11c6 2 9 7 9 13v14l9-4V59c0-11-5-16-15-19Z"/>
+  </g>
+  <path d="M32 48c-5-2-7 0-7 5v44c0 5 2 8 7 10l26 13c5 2 8 0 8-5V70c0-6-2-10-8-13Z" fill="#0e6a5c"/>
 </svg>

@@ -62,7 +62,7 @@
       if (!isCurrent()) return false;
       currentUserId = userId;
       if (!currentUserId) {
-        container.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--muted)"><p style="margin-bottom:8px">로그인이 필요한 서비스입니다.</p><button type="button" class="sc-btn primary sm" data-page="auth">로그인하기</button></div>';
+        container.innerHTML = '<div class="dl-empty"><b>로그인이 필요한 서비스입니다.</b><p>로그인하면 판매자·구매자와 나눈 채팅을 볼 수 있어요.</p><button type="button" class="sc-btn primary" data-page="auth">로그인하기</button></div>';
         return false;
       }
       find('[data-deals-scope]').textContent = entry ? (entry.listingTitle || '이 판매글') + ' · 채팅' : '전체 채팅';
@@ -75,7 +75,7 @@
       return true;
     } catch (e) {
       if (!isCurrent() || e.name === 'AbortError') return false;
-      container.innerHTML = '<p class="sub" style="padding:20px;text-align:center;color:var(--muted)">대화방 목록을 불러오지 못했습니다.</p>';
+      container.innerHTML = '<div class="dl-empty"><b>대화방 목록을 불러오지 못했습니다.</b><p>잠시 후 다시 시도해 주세요.</p></div>';
       return false;
     }
   }
@@ -106,13 +106,56 @@
     const infoSection = find('[data-deals-info]'); if (infoSection) infoSection.style.display = 'none';
   }
 
-  /** 대화방 나가기는 서버 기록을 삭제하지 않고 현재 화면과 조회만 닫는다. */
-  function leaveRoom() {
+  /**
+   * 대화방 나가기: 확인을 받은 뒤 서버에 나가기를 요청한다. 내 목록에서 방이 사라지고 상대방에게는 나갔다는 안내가 남는다.
+   * 서버 요청이 성공한 뒤에만 화면을 닫아, 실패하면 대화가 그대로 남는다.
+   */
+  /** 브라우저 기본 confirm 대신 페이지 안 팝업으로 나가기를 한 번 더 확인한다. 일부 내장 브라우저는 confirm을 조용히 막는다. */
+  function confirmLeave() {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'dl-confirm';
+      overlay.innerHTML = '<div class="dl-confirm-box" role="dialog" aria-modal="true" aria-label="채팅방 나가기 확인">'
+        + '<b>채팅방을 나갈까요?</b>'
+        + '<p>나가면 이 채팅방과 대화 내용이 삭제돼요.<br>상대방에게는 나갔다는 안내가 표시됩니다.</p>'
+        + '<div class="dl-confirm-actions"><button type="button" class="sc-btn" data-confirm-cancel>취소</button>'
+        + '<button type="button" class="sc-btn danger" data-confirm-ok>나가기</button></div></div>';
+      const onKey = (e) => { if (e.key === 'Escape') done(false); };
+      const done = (value) => { overlay.remove(); document.removeEventListener('keydown', onKey); resolve(value); };
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay || e.target.closest('[data-confirm-cancel]')) done(false);
+        else if (e.target.closest('[data-confirm-ok]')) done(true);
+      });
+      document.addEventListener('keydown', onKey);
+      document.body.appendChild(overlay);
+      overlay.querySelector('[data-confirm-cancel]')?.focus();
+    });
+  }
+
+  async function leaveRoom() {
+    const scope = roomScope;
+    if (!scope || !roomCurrent(scope)) return;
+    if (!(await confirmLeave())) return;
+    try {
+      await api(`/api/v1/chat-rooms/${scope.room.roomId}`, { method: 'DELETE' });
+    } catch (e) {
+      if (e.status === 401) { resetDeals(); return; }
+      // alert가 막힌 환경에서도 보이도록 대화창 안에도 실패 안내를 남긴다.
+      const box = find('[data-deals-messages]');
+      if (box) {
+        const fail = document.createElement('div');
+        fail.className = 'msg-system';
+        fail.textContent = '채팅방을 나가지 못했어요: ' + e.message;
+        box.appendChild(fail);
+        box.scrollTop = box.scrollHeight;
+      }
+      return;
+    }
     closeRoom();
     find('[data-deals-messages]')?.replaceChildren();
     const chatSection = find('[data-deals-chat-section]'); if (chatSection) chatSection.style.display = 'none';
     const infoSection = find('[data-deals-info]'); if (infoSection) infoSection.style.display = 'none';
-    renderRoomList();
+    loadRooms();
   }
 
   /** 서버가 허용한 대화 목록을 그린다. 판매글 상태와 상대방 문자열은 화면 출력용으로만 사용한다. */
@@ -128,6 +171,7 @@
     currentRoom = room;
     const scope = { room, sequence, userId: currentUserId, controller: new AbortController(), sending: false };
     roomScope = scope;
+    const history = find('[data-deals-cancel-history]'); if (history) { history.replaceChildren(); history.hidden = true; }
     find('[data-deals-messages]')?.replaceChildren();
     const input = find('[data-deals-input]'); if (input) input.value = '';
     const send = find('[data-deals-send]'); if (send) send.disabled = false;
@@ -178,8 +222,8 @@
       if (!roomCurrent(scope)) return;
       renderMessages(messages);
 
-      if (messages.length > 0) {
-        const lastMsg = messages[messages.length - 1];
+      if (messages.some((m) => !m.system)) {
+        const lastMsg = messages.filter((m) => !m.system).pop();
         await api(`/api/v1/chat-rooms/${roomId}/read-position`, {
           method: 'PUT',
           signal: scope.controller.signal,
@@ -204,6 +248,13 @@
     container.replaceChildren();
 
     messages.forEach((msg) => {
+      if (msg.system) {
+        const notice = document.createElement('div');
+        notice.className = 'msg-system';
+        notice.textContent = msg.content;
+        container.appendChild(notice);
+        return;
+      }
       const isMe = currentUserId != null && msg.senderId === currentUserId;
       const box = document.createElement('div');
       box.className = 'msg ' + (isMe ? 'me' : 'you');
@@ -211,6 +262,13 @@
       box.innerHTML = `<p>${escapeHtml(msg.content)}</p><time>${timeStr}</time>`;
       container.appendChild(box);
     });
+
+    // 상대방이 나갔다는 안내가 있으면 더 이상 메시지를 보낼 수 없다.
+    const partnerLeft = messages.some((m) => m.system && m.senderId !== currentUserId);
+    const input = find('[data-deals-input]');
+    const send = find('[data-deals-send]');
+    if (input) { input.disabled = partnerLeft; input.placeholder = partnerLeft ? '상대방이 나간 채팅방이에요' : '메시지를 입력하세요'; }
+    if (send && partnerLeft) send.disabled = true;
 
     container.scrollTop = container.scrollHeight;
   }
@@ -228,15 +286,18 @@
       find('[data-deals-messages]')?.querySelector('[data-deals-pending-card]')?.remove();
       const status = find('[data-deals-info-trade-status]');
       if (status) status.textContent = '종료된 거래';
-      return;
     }
     try {
-      const [sent, received] = await Promise.all(['SENT', 'RECEIVED'].map(direction => api(`/api/v1/purchase-requests?direction=${direction}&roomId=${room.roomId}&page=0&size=100`, { method: 'GET', signal: scope.controller.signal })));
+      const activeRequests = async direction => {
+        const pages = await Promise.all(['PENDING', 'ACCEPTED'].map(status => api(`/api/v1/purchase-requests?direction=${direction}&roomId=${room.roomId}&status=${status}&page=0&size=1`, { method: 'GET', signal: scope.controller.signal })));
+        return { items: pages.flatMap(page => page?.items || []), roomContext: pages[0]?.roomContext };
+      };
+      const [sent, received] = await Promise.all(['SENT', 'RECEIVED'].map(activeRequests));
       if (!isCurrent()) return;
       const sentItems = sent?.items || [];
       const receivedItems = received?.items || [];
       const items = [...sentItems, ...receivedItems].sort((a, b) => b.requestId - a.requestId);
-      const req = items.find(item => item.requestStatus === 'PENDING' || item.requestStatus === 'ACCEPTED');
+      const req = items.find(item => item.transactionStatus === 'RESERVED') || items.find(item => item.requestStatus === 'PENDING') || items.find(item => item.requestStatus === 'ACCEPTED');
       room.listingStatus = req?.listingStatus || sent?.roomContext?.listingStatus || received?.roomContext?.listingStatus || room.listingStatus;
       let isSeller = !!req && receivedItems.some(item => item.requestId === req.requestId);
       const status = find('[data-deals-info-trade-status]');
@@ -244,6 +305,12 @@
       const badge = find('[data-deals-listing-status]');
       if (badge) { badge.textContent = statusLabel(room.listingStatus); badge.className = 'sc-badge ' + statusClass(room.listingStatus); }
       renderRoomList();
+      try { await loadCancellationHistory(scope); }
+      catch {
+        if (isCurrent()) { const history = find('[data-deals-cancel-history]'); if (history) { history.hidden = false; history.textContent = '취소 내역을 불러오지 못했어요. 상태를 다시 확인해 주세요.'; } }
+      }
+      if (!isCurrent()) return;
+      find('[data-deals-messages]')?.querySelector('[data-deals-pending-card]')?.remove();
       if (!req) {
         window.PastportTradeCompletion?.clear();
         setStep('inquiry');
@@ -279,12 +346,72 @@
     }
   }
 
-  /** 현재 방의 판매자에게만 예약 수락·거절을 제공한다. 서버가 실제 권한과 예약 상태를 최종 검사한다. */
+  /** 당사자의 CANCELLED 내역을 방향별로 페이지 조회한다. 방·계정 전환 뒤의 응답은 버린다. */
+  async function loadCancellationHistory(scope) {
+    const container = find('[data-deals-cancel-history]');
+    if (!container || !roomCurrent(scope)) return;
+    scope.historyPages ||= { SENT: 0, RECEIVED: 0 };
+    const generation = scope.historyGeneration = (scope.historyGeneration || 0) + 1;
+    const results = await Promise.all(['SENT', 'RECEIVED'].map(async direction => ({ direction,
+      data: await api(`/api/v1/purchase-requests?direction=${direction}&roomId=${scope.room.roomId}&status=CANCELLED&page=${scope.historyPages[direction]}&size=20`, { signal: scope.controller.signal })
+    })));
+    if (!roomCurrent(scope) || generation !== scope.historyGeneration) return;
+    container.hidden = false; container.replaceChildren();
+    const heading = document.createElement('h3'); heading.textContent = '취소 내역'; container.append(heading);
+    const seen = new Set();
+    const reasons = { SELF_CIRCUMSTANCES: '내 사정', MUTUAL_AGREEMENT: '상대 요청으로 합의', COUNTERPART_UNREACHABLE: '상대 연락 두절', CONDITION_MISMATCH: '제품 상태가 설명과 다름', LISTING_CANCELLED: '판매 중지', PRODUCT_CHANGED: '제품 정보 변경' };
+    results.forEach(({ direction, data }) => {
+      (data?.items || []).forEach(item => {
+        if (seen.has(item.requestId)) return; seen.add(item.requestId);
+        const row = document.createElement('p');
+        const role = item.cancelledById == null ? '확인 불가' : item.cancelledById === scope.userId ? (direction === 'SENT' ? '구매자' : '판매자') : (direction === 'SENT' ? '판매자' : '구매자');
+        row.textContent = item.transactionStatus === 'CANCELLED'
+          ? `#${item.requestId} 예약 취소 · 취소자 ${role} · ${reasons[item.cancelReason] || item.cancelReason || '사유 확인 불가'} · ${item.cancelledAt ? new Date(item.cancelledAt).toLocaleString('ko-KR') : '시각 확인 불가'}`
+          : `#${item.requestId} 구매 요청 취소`;
+        container.append(row);
+      });
+      const page = data?.page;
+      [[-1, '이전 취소 내역'], [1, '다음 취소 내역']].forEach(([step, label]) => {
+        if (!page || (step < 0 ? page.number <= 0 : page.number + 1 >= page.totalPages)) return;
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'sc-btn sm'; button.textContent = `${direction === 'SENT' ? '보낸 요청' : '받은 요청'} ${label}`;
+        button.addEventListener('click', () => {
+          if (!roomCurrent(scope)) return;
+          scope.historyPages[direction] += step;
+          loadCancellationHistory(scope).catch(() => { if (roomCurrent(scope)) container.textContent = '취소 내역을 불러오지 못했어요. 다시 확인해 주세요.'; });
+        }); container.append(button);
+      });
+    });
+    if (!seen.size) { const empty = document.createElement('p'); empty.textContent = '취소된 요청이 없습니다.'; container.append(empty); }
+  }
+
+  /** 현재 방의 구매자에게 대기 취소, 판매자에게 예약 수락·거절을 제공한다. 실제 권한·상태는 서버가 검사한다. */
   function renderPendingCard(req, isSeller, scope) {
     const container = find('[data-deals-messages]');
     if (!container) return;
     container.querySelector('[data-deals-pending-card]')?.remove();
-    if (!isSeller) return;
+    if (!isSeller) {
+      const card = document.createElement('div'); card.className = 'dl-act'; card.dataset.dealsPendingCard = '';
+      const message = document.createElement('p'); message.textContent = '판매자 수락 대기 중'; message.setAttribute('role', 'status');
+      const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'sc-btn sm'; cancel.textContent = '구매 요청 취소';
+      cancel.addEventListener('click', async () => {
+        if (!roomCurrent(scope) || scope.requestBusy || !confirm('대기 중인 구매 요청을 취소할까요?')) return;
+        scope.requestBusy = true; cancel.disabled = true; message.textContent = '구매 요청을 취소하고 있어요.';
+        try {
+          await api(`/api/v1/purchase-requests/${req.requestId}/cancel`, { method: 'POST', signal: scope.controller.signal });
+          if (roomCurrent(scope)) message.textContent = '구매 요청이 취소되었습니다.';
+        } catch (error) {
+          if (!roomCurrent(scope)) return;
+          try {
+            const latest = await api(`/api/v1/purchase-requests/${req.requestId}`, { signal: scope.controller.signal });
+            if (roomCurrent(scope)) message.textContent = latest.requestStatus === 'CANCELLED' ? '구매 요청이 취소되었습니다.' : latest.requestStatus === 'ACCEPTED' ? '판매자가 수락했습니다. 예약 상태를 확인해 주세요.' : error.message;
+          } catch { if (roomCurrent(scope)) message.textContent = '처리 결과를 확인하지 못했어요. 상태를 다시 확인해 주세요.'; }
+        } finally {
+          scope.requestBusy = false;
+          if (roomCurrent(scope)) { await checkPurchaseRequest(scope); alert(message.textContent); }
+        }
+      });
+      card.append(message, cancel); container.append(card); return;
+    }
     const card = document.createElement('div');
     card.className = 'dl-act';
     card.dataset.dealsPendingCard = '';
@@ -400,6 +527,7 @@
     roomScope = null;
     currentRoom = null;
     window.PastportTradeCompletion?.clear();
+    const history = find('[data-deals-cancel-history]'); if (history) { history.replaceChildren(); history.hidden = true; }
     find('.dl')?.classList.remove('dl-has-room');
     const chat = find('[data-deals-chat-section]');
     const info = find('[data-deals-info]');
@@ -431,7 +559,6 @@
     find('[data-deals-back]')?.addEventListener('click', closeRoom);
     const input = find('[data-deals-input]');
     sendBtn?.addEventListener('click', sendMessage);
-    find('[data-deals-leave]')?.addEventListener('click', leaveRoom);
     input?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -514,6 +641,11 @@
   document.addEventListener('pastport:auth-changed', (event) => {
     resetDeals();
     if (event.detail?.signedIn && document.querySelector('#deals.active')) activate();
+  });
+
+  // 나가기 버튼은 화면 HTML이 다시 그려져도 동작하도록 문서 전체에서 위임해 처리한다.
+  document.addEventListener('click', (e) => {
+    if (e.target.closest?.('#deals [data-deals-leave]')) leaveRoom();
   });
 
   window.PastportDeals = Object.freeze({

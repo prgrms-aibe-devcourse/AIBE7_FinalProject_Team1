@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
@@ -11,16 +12,24 @@ import java.util.Objects;
 import org.example.springtestci.auth.repository.UserRepository;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
+import org.example.springtestci.history.service.InternalTransferHistoryWriter;
 import org.example.springtestci.ownership.dto.AcceptTransferRequest;
 import org.example.springtestci.ownership.dto.AcceptTransferResponse;
+import org.example.springtestci.ownership.dto.ApproveTransferRequest;
+import org.example.springtestci.ownership.dto.ApproveTransferResponse;
 import org.example.springtestci.ownership.dto.CreateTransferRequest;
 import org.example.springtestci.ownership.dto.CreateTransferResponse;
+import org.example.springtestci.ownership.dto.OwnerTransferResponse;
+import org.example.springtestci.ownership.dto.TransferStatusResponse;
 import org.example.springtestci.ownership.dto.VerifyTransferResponse;
 import org.example.springtestci.ownership.entity.OwnershipTransfer;
 import org.example.springtestci.ownership.entity.TransferStatus;
 import org.example.springtestci.ownership.entity.TransferType;
 import org.example.springtestci.ownership.event.OwnershipTransferred;
+import org.example.springtestci.ownership.repository.DirectTransferGuard;
+import org.example.springtestci.ownership.repository.InternalTradeOwnershipRepository;
 import org.example.springtestci.ownership.repository.OwnershipTransferRepository;
+import org.example.springtestci.product.event.ProductFactsChanged;
 import org.example.springtestci.product.repository.ProductRepository;
 import org.example.springtestci.trade.repository.TradeAuditRepository;
 import org.springframework.context.ApplicationEventPublisher;
@@ -28,6 +37,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/** DIRECT 토큰 이전을 처리하며 INTERNAL 거래 이전은 별도의 거래 포트에 맡긴다. */
 @Service
 @Transactional(readOnly = true)
 public class OwnershipTransferService {
@@ -39,6 +49,10 @@ public class OwnershipTransferService {
   private final ProductRepository productRepository;
   private final UserRepository userRepository;
   private final TradeAuditRepository tradeAuditRepository;
+  private final DirectTransferGuard guard;
+  private final InternalTradeOwnershipRepository effects;
+  private final Clock clock;
+  private final InternalTransferHistoryWriter historyWriter;
   private final ApplicationEventPublisher events;
 
   public OwnershipTransferService(
@@ -46,19 +60,36 @@ public class OwnershipTransferService {
       ProductRepository productRepository,
       UserRepository userRepository,
       TradeAuditRepository tradeAuditRepository,
+      DirectTransferGuard guard,
+      InternalTradeOwnershipRepository effects,
+      Clock clock,
+      InternalTransferHistoryWriter historyWriter,
       ApplicationEventPublisher events) {
     this.transferRepository = transferRepository;
     this.productRepository = productRepository;
     this.userRepository = userRepository;
     this.tradeAuditRepository = tradeAuditRepository;
+    this.guard = guard;
+    this.effects = effects;
+    this.clock = clock;
+    this.historyWriter = historyWriter;
     this.events = events;
   }
 
-  /** 현재 소유자의 제품을 먼저 잠그고 판매 중·예약 중이 아닌 제품에만 외부 이전 요청을 만든다. */
+  /** 제품 소유자가 DIRECT 이전을 발급한다. 제품 잠금 아래 INTERNAL 예약을 보존하며 같은 트랜잭션에 감사한다. */
   @Transactional
   public CreateTransferResponse createTransfer(long actorId, CreateTransferRequest req) {
-    // 내부 거래 연결 ID는 거래 서비스만 정한다. 외부 링크 요청으로 다른 구매 요청을 점유할 수 없다.
-    if (req.purchaseRequestId() != null) throw new CommonException(ErrorCode.INVALID_INPUT);
+    if (req.productId() == null || req.productId() < 1 || req.purchaseRequestId() != null) {
+      throw new CommonException(ErrorCode.INVALID_INPUT);
+    }
+    if (req.toUserId() != null) {
+      if (req.toUserId() < 1 || Objects.equals(req.toUserId(), actorId)) {
+        throw new CommonException(ErrorCode.INVALID_INPUT);
+      }
+      if (!userRepository.existsById(req.toUserId())) {
+        throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
+      }
+    }
     Long ownerId =
         productRepository
             .findOwnerId(req.productId())
@@ -68,26 +99,26 @@ public class OwnershipTransferService {
       throw new CommonException(ErrorCode.ACCESS_DENIED);
     }
 
-    // 게시와 같은 제품 잠금을 유지해야 두 요청이 상태 검사를 동시에 통과하지 않는다.
+    // 거래 JDBC 경로와 같은 제품→이전 순서로 잠가 예약 슬롯의 확인과 변경을 직렬화한다.
     if (!productRepository.lockOwned(req.productId(), actorId)) {
       throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
     }
-    if (productRepository.hasOpenListing(req.productId())) {
-      throw new CommonException(ErrorCode.OWNERSHIP_TRANSFER_BLOCKED);
-    }
+    boolean saleInProgress = guard.lockSales(req.productId());
 
     // 만료된 대기 요청이 새 이전 요청을 영영 막지 않도록 먼저 만료 처리한다.
-    Instant now = Instant.now();
+    Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
     transferRepository
         .findByProductIdAndStatus(req.productId(), TransferStatus.PENDING)
         .ifPresent(
             pending -> {
-              if (!pending.isExpired(now)) {
+              if (pending.getTransferType() != TransferType.DIRECT || !pending.isExpired(now)) {
                 throw new CommonException(ErrorCode.OWNERSHIP_ALREADY_PENDING);
               }
               pending.expire();
               transferRepository.saveAndFlush(pending);
             });
+
+    if (saleInProgress) throw new CommonException(ErrorCode.OWNERSHIP_TRANSFER_BLOCKED);
 
     byte[] randomBytes = new byte[32];
     SECURE_RANDOM.nextBytes(randomBytes);
@@ -102,7 +133,7 @@ public class OwnershipTransferService {
             req.toUserId(),
             tokenHash,
             TransferType.DIRECT,
-            req.purchaseRequestId(),
+            null,
             expiresAt);
 
     // 동시 요청이 위의 확인을 함께 통과해도 (product_id, pending_slot) 유니크가 하나만 남긴다.
@@ -126,41 +157,63 @@ public class OwnershipTransferService {
     return new CreateTransferResponse(transferId, req.productId(), rawToken, expiresAt, linkUrl);
   }
 
-  public VerifyTransferResponse verifyTransfer(String rawToken) {
+  /**
+   * 원문 토큰의 DIRECT 이전만 읽기 전용으로 검증하며 INTERNAL 식별자는 노출하지 않는다. 로그인한 사용자에게만 보여 주고, 수신자가 지정된 요청은 수락 시점이
+   * 아니라 조회 시점에도 지정 수신자만 볼 수 있어 토큰을 얻은 다른 사용자에게 제품명·판매자 정보가 노출되지 않는다. 발급자는 별도 소유자 상태 API를 사용한다.
+   */
+  public VerifyTransferResponse verifyTransfer(long actorId, String rawToken) {
     String tokenHash = hashToken(rawToken);
     OwnershipTransfer transfer =
         transferRepository
             .findByTokenHash(tokenHash)
             .orElseThrow(() -> new CommonException(ErrorCode.OWNERSHIP_NOT_FOUND));
 
-    if (transfer.getTransferType() != TransferType.DIRECT)
-      throw new CommonException(ErrorCode.OWNERSHIP_NOT_FOUND);
+    requireDirect(transfer);
 
-    Instant now = Instant.now();
+    if (transfer.getToUserId() != null && !Objects.equals(transfer.getToUserId(), actorId)) {
+      throw new CommonException(ErrorCode.ACCESS_DENIED);
+    }
+
+    if (Objects.equals(transfer.getFromUserId(), actorId)) {
+      throw new CommonException(ErrorCode.OWNERSHIP_SELF_ACCEPT);
+    }
+
+    Instant now = clock.instant();
     boolean isExpired = transfer.isExpired(now);
     boolean isPending = transfer.getStatus() == TransferStatus.PENDING;
-    boolean canAccept = isPending && !isExpired;
+    boolean canAccept =
+        isPending
+            && !isExpired
+            && productRepository
+                .findOwnerId(transfer.getProductId())
+                .filter(owner -> owner.equals(transfer.getFromUserId()))
+                .isPresent()
+            && !guard.hasSale(transfer.getProductId());
 
-    String productTitle = productRepository.findTitle(transfer.getProductId()).orElse("등록된 제품");
+    String productTitle =
+        canAccept ? productRepository.findTitle(transfer.getProductId()).orElse("등록된 제품") : null;
     String fromUserNickname =
-        userRepository
-            .findById(transfer.getFromUserId())
-            .map(u -> u.getNickname())
-            .orElse("알 수 없는 사용자");
+        !canAccept
+            ? null
+            : userRepository
+                .findById(transfer.getFromUserId())
+                .map(u -> u.getNickname())
+                .orElse("알 수 없는 사용자");
 
     return new VerifyTransferResponse(
-        transfer.getId(),
-        transfer.getProductId(),
+        canAccept ? transfer.getId() : null,
+        canAccept ? transfer.getProductId() : null,
         productTitle,
-        transfer.getFromUserId(),
+        canAccept ? transfer.getFromUserId() : null,
         fromUserNickname,
         transfer.getExpiresAt(),
         transfer.getStatus(),
         isExpired,
-        canAccept);
+        canAccept && transfer.getRecipientAcceptedAt() == null,
+        transfer.getRecipientAcceptedAt());
   }
 
-  /** 제품→이전 요청 순으로 잠근 뒤 수신자·유효 기간·현재 소유권을 다시 확인하고 함께 확정한다. */
+  /** 인증된 수신자의 동의만 저장한다. 제품→판매글→이전 잠금으로 수신자를 고정하고 소유권 변경은 소유자 최종 승인에 맡긴다. */
   @Transactional
   public AcceptTransferResponse acceptTransfer(long actorId, AcceptTransferRequest req) {
     String tokenHash = hashToken(req.token());
@@ -168,15 +221,18 @@ public class OwnershipTransferService {
         transferRepository
             .findProductIdByTokenHash(tokenHash)
             .orElseThrow(() -> new CommonException(ErrorCode.OWNERSHIP_NOT_FOUND));
-    lockTransferProduct(productId);
+    lockProduct(productId);
+    boolean saleInProgress = guard.lockSales(productId);
     OwnershipTransfer transfer =
         transferRepository
             .findByTokenHashForUpdate(tokenHash)
             .orElseThrow(() -> new CommonException(ErrorCode.OWNERSHIP_NOT_FOUND));
 
-    Instant now = Instant.now();
-    if (transfer.getTransferType() != TransferType.DIRECT)
+    if (transfer.getTransferType() != TransferType.DIRECT) {
       throw new CommonException(ErrorCode.OWNERSHIP_TRANSFER_BLOCKED);
+    }
+
+    Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
     if (transfer.getStatus() != TransferStatus.PENDING || transfer.isExpired(now)) {
       throw new CommonException(ErrorCode.OWNERSHIP_EXPIRED);
     }
@@ -195,13 +251,84 @@ public class OwnershipTransferService {
       throw new CommonException(ErrorCode.OWNERSHIP_EXPIRED);
     }
 
-    // 소유자 변경 및 이전 완료
-    productRepository.updateOwner(transfer.getProductId(), actorId);
-    transfer.complete(actorId, now);
+    if (saleInProgress) throw new CommonException(ErrorCode.OWNERSHIP_TRANSFER_BLOCKED);
+    if (!userRepository.existsById(actorId)) {
+      throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
+    }
+    if (transfer.getRecipientAcceptedAt() == null) {
+      transfer.acceptRecipient(actorId, now);
+      tradeAuditRepository.log(
+          productId,
+          actorId,
+          transfer.getId(),
+          "OWNERSHIP_RECIPIENT_ACCEPTED",
+          null,
+          "status=PENDING;recipient=" + actorId,
+          "수신자 동의 저장, 소유자 최종 승인 대기");
+    }
+    return new AcceptTransferResponse(
+        transfer.getId(),
+        productId,
+        "AWAITING_OWNER_APPROVAL",
+        transfer.getRecipientAcceptedAt(),
+        transfer.getExpiresAt());
+  }
+
+  /** 발신자가 확인한 수신자와 제품 버전을 재검사하고 모든 이전 효과를 같은 트랜잭션에서 확정한다. */
+  @Transactional
+  public ApproveTransferResponse approveTransfer(
+      long actorId, long transferId, ApproveTransferRequest request) {
+    long productId =
+        transferRepository
+            .findProductIdByTransferId(transferId)
+            .orElseThrow(() -> new CommonException(ErrorCode.OWNERSHIP_NOT_FOUND));
+    lockProduct(productId);
+    boolean saleInProgress = guard.lockSales(productId);
+    OwnershipTransfer transfer =
+        transferRepository
+            .findByIdForUpdate(transferId)
+            .orElseThrow(() -> new CommonException(ErrorCode.OWNERSHIP_NOT_FOUND));
+    requireDirect(transfer);
+    if (!Objects.equals(transfer.getFromUserId(), actorId)) {
+      throw new CommonException(ErrorCode.ACCESS_DENIED);
+    }
+    if (transfer.getStatus() == TransferStatus.COMPLETED) {
+      return new ApproveTransferResponse(transferId, transfer.getCompletedAt());
+    }
+    Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+    if (transfer.getStatus() != TransferStatus.PENDING || transfer.isExpired(now)) {
+      throw new CommonException(ErrorCode.OWNERSHIP_EXPIRED);
+    }
+    if (transfer.getRecipientAcceptedAt() == null || saleInProgress) {
+      throw new CommonException(ErrorCode.OWNERSHIP_TRANSFER_BLOCKED);
+    }
+    var product =
+        productRepository
+            .findOwned(productId, actorId)
+            .orElseThrow(() -> new CommonException(ErrorCode.ACCESS_DENIED));
+    if (!Objects.equals(transfer.getToUserId(), request.expectedRecipientId())
+        || !Objects.equals(product.factsVersion(), request.expectedFactsVersion())) {
+      throw new CommonException(ErrorCode.INVALID_INPUT);
+    }
+    long recipientId = transfer.getToUserId();
+    if (recipientId == actorId
+        || !userRepository.existsById(actorId)
+        || !userRepository.existsById(recipientId)) {
+      throw new CommonException(ErrorCode.INVALID_INPUT);
+    }
+    productRepository.updateOwner(productId, recipientId);
+    transfer.complete(recipientId, now);
+    transferRepository.flush();
+
+    // 소유자 변경과 같은 트랜잭션에서 개인정보 없는 시스템 이력을 남기고 누적 공개를 종료한다.
+    historyWriter.recordCompletedTransfer(
+        new InternalTransferHistoryWriter.Command(
+            transfer.getProductId(), transfer.getId(), transfer.getFromUserId(), recipientId, now));
+    effects.protectDocuments(productId, now);
 
     // 초안 삭제처럼 필수인 후처리는 커밋 전에 실행한다. 실패하면 소유자·이전 상태도 함께 되돌린다.
     events.publishEvent(
-        new OwnershipTransferred(transfer.getProductId(), transfer.getFromUserId(), actorId));
+        new OwnershipTransferred(transfer.getProductId(), transfer.getFromUserId(), recipientId));
 
     tradeAuditRepository.log(
         transfer.getProductId(),
@@ -209,21 +336,21 @@ public class OwnershipTransferService {
         transfer.getId(),
         "OWNERSHIP_TRANSFERRED",
         "fromOwner=" + transfer.getFromUserId(),
-        "toOwner=" + actorId,
+        "toOwner=" + recipientId,
         "소유권 이전 완료");
+    events.publishEvent(new ProductFactsChanged(productId));
 
-    return new AcceptTransferResponse(
-        transfer.getId(), transfer.getProductId(), actorId, transfer.getCompletedAt());
+    return new ApproveTransferResponse(transfer.getId(), transfer.getCompletedAt());
   }
 
-  /** 제품→이전 요청 잠금 아래 발급자의 PENDING 요청만 취소한다. 감사 기록도 같은 트랜잭션이다. */
+  /** 발신자만 DIRECT 대기 이전 ID를 취소하며, 제품→이전 잠금 안에서 슬롯과 감사를 함께 갱신한다. */
   @Transactional
   public void cancelTransfer(long actorId, Long transferId) {
     long productId =
         transferRepository
             .findProductIdByTransferId(transferId)
             .orElseThrow(() -> new CommonException(ErrorCode.OWNERSHIP_NOT_FOUND));
-    lockTransferProduct(productId);
+    lockProduct(productId);
     OwnershipTransfer transfer =
         transferRepository
             .findByIdForUpdate(transferId)
@@ -233,15 +360,18 @@ public class OwnershipTransferService {
       throw new CommonException(ErrorCode.ACCESS_DENIED);
     }
 
-    // 내부 예약은 P3/P4에서 거래·판매글과 함께 취소·완료해야 한다.
-    if (transfer.getTransferType() != TransferType.DIRECT)
+    if (transfer.getTransferType() != TransferType.DIRECT) {
       throw new CommonException(ErrorCode.OWNERSHIP_TRANSFER_BLOCKED);
+    }
 
     if (transfer.getStatus() != TransferStatus.PENDING) {
       throw new CommonException(ErrorCode.INVALID_INPUT);
     }
 
-    Instant now = Instant.now();
+    if (!Objects.equals(productRepository.findOwnerId(productId).orElse(null), actorId)) {
+      throw new CommonException(ErrorCode.ACCESS_DENIED);
+    }
+    Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
     transfer.cancel(now);
 
     tradeAuditRepository.log(
@@ -254,13 +384,80 @@ public class OwnershipTransferService {
         "소유권 이전 취소");
   }
 
-  private void lockTransferProduct(long productId) {
+  /** 현재 소유자에게만 최근 DIRECT 상태를 반환한다. 토큰은 재조회하지 않으며 읽기에서 만료 쓰기를 하지 않는다. */
+  public OwnerTransferResponse ownerStatus(long actorId, long productId) {
+    long owner =
+        productRepository
+            .findOwnerId(productId)
+            .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND));
+    if (owner != actorId) throw new CommonException(ErrorCode.ACCESS_DENIED);
+    var transfer =
+        transferRepository
+            .findFirstByProductIdAndFromUserIdAndTransferTypeOrderByIdDesc(
+                productId, actorId, TransferType.DIRECT)
+            .orElseThrow(() -> new CommonException(ErrorCode.OWNERSHIP_NOT_FOUND));
+    return new OwnerTransferResponse(
+        transfer.getId(),
+        productId,
+        transfer.getExpiresAt(),
+        transfer.getStatus(),
+        transfer.getStatus() == TransferStatus.PENDING
+            && transfer.isExpired(clock.instant().truncatedTo(ChronoUnit.MICROS)),
+        transfer.getToUserId(),
+        transfer.getToUserId() == null
+            ? null
+            : userRepository
+                .findById(transfer.getToUserId())
+                .map(u -> u.getNickname())
+                .orElse("알 수 없는 사용자"),
+        transfer.getRecipientAcceptedAt(),
+        productRepository.findTitle(productId).orElse("등록된 제품"),
+        productRepository
+            .findOwned(productId, actorId)
+            .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND))
+            .factsVersion());
+  }
+
+  /** 최초 발신자와 확정 수신자의 응답 유실 복구용 상태만 제공한다. 제품·문서 관리 권한은 부여하지 않는다. */
+  public TransferStatusResponse transferStatus(long actorId, long transferId) {
+    var transfer =
+        transferRepository
+            .findById(transferId)
+            .orElseThrow(() -> new CommonException(ErrorCode.OWNERSHIP_NOT_FOUND));
+    requireDirect(transfer);
+    if (transfer.getFromUserId() != actorId
+        && ((transfer.getRecipientAcceptedAt() == null
+                && transfer.getStatus() != TransferStatus.COMPLETED)
+            || !Objects.equals(transfer.getToUserId(), actorId))) {
+      throw new CommonException(ErrorCode.ACCESS_DENIED);
+    }
+    return new TransferStatusResponse(
+        transferId,
+        transfer.getStatus(),
+        transfer.getRecipientAcceptedAt(),
+        transfer.getCompletedAt(),
+        transfer.getExpiresAt(),
+        transfer.getStatus() == TransferStatus.PENDING
+            && transfer.isExpired(clock.instant().truncatedTo(ChronoUnit.MICROS)));
+  }
+
+  private void requireDirect(OwnershipTransfer transfer) {
+    if (transfer.getTransferType() != TransferType.DIRECT) {
+      throw new CommonException(ErrorCode.OWNERSHIP_NOT_FOUND);
+    }
+  }
+
+  /** 제품→이전 잠금 순서를 지키고, 이전 엔티티는 잠금 이후 최초 로딩해 최신 상태를 검사한다. */
+  private void lockProduct(long productId) {
     if (!productRepository.lockForTransfer(productId)) {
       throw new CommonException(ErrorCode.OWNERSHIP_NOT_FOUND);
     }
   }
 
   public static String hashToken(String rawToken) {
+    if (rawToken == null || rawToken.isBlank() || rawToken.length() > 256) {
+      throw new CommonException(ErrorCode.INVALID_INPUT);
+    }
     try {
       MessageDigest digest = MessageDigest.getInstance("SHA-256");
       byte[] hash = digest.digest(rawToken.trim().getBytes(StandardCharsets.UTF_8));

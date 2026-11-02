@@ -2,7 +2,12 @@ package org.example.springtestci.product.repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.example.springtestci.product.dto.CreateProductRequest;
 import org.example.springtestci.product.dto.ProductResponse;
@@ -23,6 +28,16 @@ public class ProductRepository {
              CASE WHEN p.warranty_expires_at IS NULL THEN 'UNKNOWN'
                   WHEN p.warranty_expires_at >= CURRENT_DATE THEN 'ACTIVE'
                   ELSE 'EXPIRED' END AS warranty_status,
+             (SELECT COUNT(*) FROM product_events pe WHERE pe.product_id = p.id) AS history_count,
+             (SELECT pe.event_type FROM product_events pe WHERE pe.product_id = p.id
+               ORDER BY pe.occurred_on DESC, pe.created_at DESC, pe.id DESC
+               FETCH FIRST 1 ROW ONLY) AS recent_history_type,
+             (SELECT pe.title FROM product_events pe WHERE pe.product_id = p.id
+               ORDER BY pe.occurred_on DESC, pe.created_at DESC, pe.id DESC
+               FETCH FIRST 1 ROW ONLY) AS recent_history_title,
+             (SELECT pe.occurred_on FROM product_events pe WHERE pe.product_id = p.id
+               ORDER BY pe.occurred_on DESC, pe.created_at DESC, pe.id DESC
+               FETCH FIRST 1 ROW ONLY) AS recent_history_occurred_on,
              l.cpu_spec, l.gpu_spec, l.ram_gb, l.storage_gb, l.storage_type,
              l.display_spec, l.battery_health_percent, l.os_name
         FROM products p LEFT JOIN laptop_details l ON l.product_id = p.id
@@ -116,6 +131,17 @@ public class ProductRepository {
         .findFirst();
   }
 
+  /** 승계 후 현재 소유자가 값을 고치면 해당 필드의 최신 작성 책임도 현재 소유자로 넘긴다. */
+  public void replaceFieldAuthor(long productId, String fieldName, long authorId) {
+    int updated =
+        jdbc.update(
+            "UPDATE product_field_authors SET author_id = ? WHERE product_id = ? AND field_name = ?",
+            authorId,
+            productId,
+            fieldName);
+    if (updated == 0) insertFieldAuthor(productId, fieldName, authorId);
+  }
+
   public void insertLaptopDetails(long productId, CreateProductRequest.Specifications specs) {
     jdbc.update(
         """
@@ -145,12 +171,40 @@ public class ProductRepository {
         .findFirst();
   }
 
-  public List<ProductResponse> findAllOwned(long ownerId) {
+  /** 마지막으로 본 생성 시각·ID보다 뒤에 정렬되는 제품만 읽어 목록 변경 중에도 경계를 유지한다. */
+  public List<ProductResponse> findOwnedPage(
+      long ownerId, OffsetDateTime cursorCreatedAt, Long cursorProductId, int limit) {
+    if (cursorCreatedAt != null && cursorProductId != null) {
+      return jdbc.query(
+          PRODUCT_SELECT
+              + " WHERE p.owner_id = ? AND p.archived_at IS NULL"
+              + " AND (p.created_at < ? OR (p.created_at = ? AND p.id < ?))"
+              + " ORDER BY p.created_at DESC, p.id DESC LIMIT ?",
+          this::product,
+          ownerId,
+          cursorCreatedAt,
+          cursorCreatedAt,
+          cursorProductId,
+          limit);
+    }
     return jdbc.query(
         PRODUCT_SELECT
             + " WHERE p.owner_id = ? AND p.archived_at IS NULL"
-            + " ORDER BY p.created_at DESC, p.id DESC",
+            + " ORDER BY p.created_at DESC, p.id DESC LIMIT ?",
         this::product,
+        ownerId,
+        limit);
+  }
+
+  public OwnedProductSummary summarizeOwned(long ownerId) {
+    return jdbc.queryForObject(
+        """
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN purchase_date IS NOT NULL THEN 1 ELSE 0 END), 0) AS purchased
+          FROM products
+         WHERE owner_id = ? AND archived_at IS NULL
+        """,
+        (row, index) -> new OwnedProductSummary(row.getLong("total"), row.getLong("purchased")),
         ownerId);
   }
 
@@ -216,9 +270,10 @@ public class ProductRepository {
         .findFirst();
   }
 
+  /** 제품 잠금을 보유한 DIRECT 완료에서 소유자와 사실 버전을 같은 트랜잭션으로 갱신한다. */
   public void updateOwner(long productId, long newOwnerId) {
     jdbc.update(
-        "UPDATE products SET owner_id = ?, updated_at = NOW() WHERE id = ? AND archived_at IS NULL",
+        "UPDATE products SET owner_id = ?, facts_version = facts_version + 1, updated_at = NOW() WHERE id = ? AND archived_at IS NULL",
         newOwnerId,
         productId);
   }
@@ -325,6 +380,36 @@ public class ProductRepository {
         productId);
   }
 
+  /** 목록 페이지에 포함된 제품들의 이미지를 한 번에 읽어 제품별로 묶는다. */
+  public Map<Long, List<ProductImageRecord>> findImages(List<Long> productIds) {
+    if (productIds.isEmpty()) return Map.of();
+    String placeholders = String.join(",", Collections.nCopies(productIds.size(), "?"));
+    Map<Long, List<ProductImageRecord>> result = new LinkedHashMap<>();
+    jdbc.query(
+        """
+        SELECT product_id, id, storage_key, content_type, byte_size, sort_order, is_primary
+          FROM product_images
+         WHERE product_id IN (%s) AND deleted_at IS NULL
+         ORDER BY product_id, sort_order, id
+        """
+            .formatted(placeholders),
+        row -> {
+          long productId = row.getLong("product_id");
+          result
+              .computeIfAbsent(productId, ignored -> new ArrayList<>())
+              .add(
+                  new ProductImageRecord(
+                      row.getLong("id"),
+                      row.getString("storage_key"),
+                      row.getString("content_type"),
+                      row.getLong("byte_size"),
+                      row.getInt("sort_order"),
+                      row.getBoolean("is_primary")));
+        },
+        productIds.toArray());
+    return result;
+  }
+
   public Optional<ProductImageRecord> findImage(long productId, long imageId) {
     return findImages(productId).stream().filter(image -> image.imageId() == imageId).findFirst();
   }
@@ -422,7 +507,14 @@ public class ProductRepository {
             row.getObject("battery_health_percent", Integer.class),
             row.getString("os_name")),
         List.of(),
-        row.getObject("created_at", java.time.OffsetDateTime.class));
+        row.getObject("created_at", java.time.OffsetDateTime.class),
+        row.getLong("history_count"),
+        row.getString("recent_history_title") == null
+            ? null
+            : new ProductResponse.RecentHistory(
+                row.getString("recent_history_type"),
+                row.getString("recent_history_title"),
+                row.getObject("recent_history_occurred_on", java.time.LocalDate.class)));
   }
 
   public record ProductImageRecord(
@@ -432,4 +524,6 @@ public class ProductRepository {
       long byteSize,
       int sortOrder,
       boolean primary) {}
+
+  public record OwnedProductSummary(long total, long purchased) {}
 }

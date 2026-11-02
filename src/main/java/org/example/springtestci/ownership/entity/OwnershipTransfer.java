@@ -52,6 +52,9 @@ public class OwnershipTransfer {
   @Column(name = "completed_at")
   private Instant completedAt;
 
+  @Column(name = "recipient_accepted_at")
+  private Instant recipientAcceptedAt;
+
   @Column(name = "cancelled_at")
   private Instant cancelledAt;
 
@@ -91,6 +94,11 @@ public class OwnershipTransfer {
     this.completedAt = now;
   }
 
+  public void acceptRecipient(Long receiverId, Instant now) {
+    this.toUserId = receiverId;
+    this.recipientAcceptedAt = now;
+  }
+
   public void cancel(Instant now) {
     this.status = TransferStatus.CANCELLED;
     this.pendingSlot = null;
@@ -103,6 +111,6 @@ public class OwnershipTransfer {
   }
 
   public boolean isExpired(Instant now) {
-    return now.isAfter(expiresAt);
+    return !now.isBefore(expiresAt);
   }
 }

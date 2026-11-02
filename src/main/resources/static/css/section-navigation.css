@@ -1,0 +1,27 @@
+/* 상단의 전체 분류와 현재 분류의 하위 메뉴를 구분한다. 메뉴 명칭과 순서는 같은 데이터에서 가져온다. */
+/* 왼쪽 사이드바는 모든 화면에서 쓰지 않는다. 하위 메뉴는 상단 메뉴의 드롭다운으로 이동한다. */
+.app>.side,#side[hidden]{display:none!important}
+.app>.main{margin-left:0}
+.app>.main>.top{display:none}
+/* 모든 화면을 홈(.landing-shell)과 같은 폭 1220px로 가운데에 둔다. brand.css가 id 선택자로 1360px·왼쪽 정렬을 지정해 두어 같은 수준으로 덮어쓴다. 상세(#detail)는 자체 카드 폭을 유지한다. */
+.app>.main>:is(#home,#passport,#register,#documents,#market,#my-listings,#sell,#auth,#signup,#mypage,#docmask,#deals,#receive,#trade,#ai).page{max-width:1220px;margin-left:auto;margin-right:auto}
+/* 상단 메뉴의 밑줄(현재 메뉴 표시)은 쓰지 않는다. */
+.site-header .landing-nav .nav-item>button:after{transform:scaleX(0);transition:none}
+#side{padding:28px 12px 104px;overflow-y:auto}
+.side-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin:0 12px 20px}
+.side-section-head p{margin:0 0 8px;font-size:12px;line-height:1.5;color:#5f6368}
+.side-section-head h2{margin:0;font-size:20px;line-height:1.4;font-weight:600;letter-spacing:-.5px;color:var(--ink)}
+.side-section-head button{display:none}
+#side .nav{display:grid;gap:4px}
+#side .nav button{min-height:44px;padding:10px 12px;border-radius:6px;font-size:14px;line-height:1.6;color:#4f5156}
+#side .nav button:hover{background:#f3f5f7}
+#side .nav button.active{background:#eef0f2;color:var(--ink);font-weight:600}
+@media(max-width:780px){
+  #side{width:min(280px,calc(100vw - 48px));z-index:19;transition:transform .2s ease}
+  #side:not(.open){visibility:hidden}
+  #side.open{visibility:visible}
+  .side-section-head{margin-right:0}
+  .side-section-head button{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;margin-top:-8px;font-size:13px;color:#4f5156}
+  .mobile-menu{min-height:44px;padding:8px 4px;font-size:14px;font-weight:600;color:var(--ink)}
+}
+@media(prefers-reduced-motion:reduce){#side{transition:none}}

@@ -3,7 +3,6 @@ package org.example.springtestci.listing.service;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
-import java.util.regex.Pattern;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
 import org.example.springtestci.listing.dto.DraftProductResponse;
@@ -33,12 +32,6 @@ public class ListingPublicationService {
           .thenComparing(Event::createdAt)
           .thenComparingLong(Event::eventId)
           .reversed();
-  // 보조 방어다. 사람 이름·주소 등 모든 개인정보를 판별하지 못하므로 원천의 공개 검토를 대체하지 않는다.
-  private static final Pattern SENSITIVE_TEXT =
-      Pattern.compile(
-          "(?i)(?:https?://|www\\.|[\\w.+-]+@[\\w.-]+\\.[a-z]{2,}|"
-              + "(?:0\\d{1,2})[- .]?\\d{3,4}[- .]?\\d{4}|\\d{6}[- ]?[1-4]\\d{6}|"
-              + "(?:\\d[\\d,]*\\s*원)|시리얼|serial|증빙|영수증|보증서|계좌|연락처|주소|주문번호)");
 
   private final ProductService products;
   private final ObjectProvider<ListingHistoryReader> historyReaders;
@@ -127,13 +120,17 @@ public class ListingPublicationService {
     }
   }
 
-  /** 미검토 텍스트와 시스템 이전의 자유 입력은 제외하되 기록의 존재·상태는 유지한다. */
+  /** 자동 검사된 공개 필드를 사용하고 시스템 이전은 유형·날짜·상태만 표시한다. */
   private ListingPublicationResponse.Event project(Event event, long userId) {
     var text = event.text();
     boolean reviewed =
         event.eventType() != EventType.TRANSFER
             && text != null
             && text.reviewed()
+            && (present(text.title())
+                || present(text.content())
+                || present(text.serviceProvider())
+                || present(text.replacedPart()))
             && safe(text.title())
             && safe(text.content())
             && safe(text.serviceProvider())
@@ -157,7 +154,12 @@ public class ListingPublicationService {
                       change.correctionId(),
                       change.correctedAt(),
                       approved ? change.reason() : null,
-                      approved ? DetailsStatus.REVIEWED : DetailsStatus.REVIEW_PENDING);
+                      approved
+                          ? DetailsStatus.REVIEWED
+                          : change.reviewed()
+                              ? DetailsStatus.EXCLUDED
+                              : DetailsStatus.REVIEW_PENDING,
+                      change.action());
                 })
             .toList();
     return new ListingPublicationResponse.Event(
@@ -174,12 +176,20 @@ public class ListingPublicationService {
         reviewed ? text.replacedPart() : null,
         !system && event.authorId() != null && event.authorId() != userId,
         system,
-        reviewed || system ? DetailsStatus.REVIEWED : DetailsStatus.REVIEW_PENDING,
+        reviewed || system
+            ? DetailsStatus.REVIEWED
+            : text != null && text.reviewed()
+                ? DetailsStatus.EXCLUDED
+                : DetailsStatus.REVIEW_PENDING,
         corrections);
   }
 
+  private boolean present(String value) {
+    return value != null && !value.isBlank();
+  }
+
   private boolean safe(String value) {
-    return value == null || (value.length() <= 2000 && !SENSITIVE_TEXT.matcher(value).find());
+    return value == null || value.equals(PublicHistoryTextPolicy.clean(value, 2000));
   }
 
   private String label(EventType type) {

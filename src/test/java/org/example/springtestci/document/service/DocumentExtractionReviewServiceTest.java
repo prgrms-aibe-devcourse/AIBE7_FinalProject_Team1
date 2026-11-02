@@ -54,6 +54,10 @@ class DocumentExtractionReviewServiceTest {
   void setUp() {
     lenient().when(writerProvider.getIfAvailable()).thenReturn(writer);
     lenient().when(productOwnerReader.findOwnerId(PRODUCT)).thenReturn(Optional.of(OWNER));
+    lenient()
+        .when(productOwnerReader.lockOwnerId(PRODUCT))
+        .thenAnswer(invocation -> productOwnerReader.findOwnerId(PRODUCT));
+    lenient().when(documentRepository.findProductIdById(DOCUMENT)).thenReturn(Optional.of(PRODUCT));
     service =
         new DocumentExtractionReviewService(
             documentRepository,
@@ -110,6 +114,21 @@ class DocumentExtractionReviewServiceTest {
   }
 
   @Test
+  void confirmLocksProductBeforeDocumentToMatchHistoryRegistration() {
+    DocumentExtraction extraction = extracted();
+    givenExtraction(extraction);
+    ExtractedFields reviewed = reviewed();
+    when(writer.recordFromDocument(PRODUCT, DOCUMENT, OWNER, reviewed)).thenReturn(EVENT);
+
+    service.confirm(DOCUMENT, EXTRACTION, OWNER, reviewed);
+
+    // 직접 이력 등록과 같은 제품 → 문서 순서여야 동시에 처리해도 교착이 생기지 않는다.
+    org.mockito.InOrder order = org.mockito.Mockito.inOrder(productOwnerReader, documentRepository);
+    order.verify(productOwnerReader).lockOwnerId(PRODUCT);
+    order.verify(documentRepository).findByIdForUpdate(DOCUMENT);
+  }
+
+  @Test
   void confirmRejectsAlreadyConfirmedWithoutCreatingAnotherEvent() {
     DocumentExtraction extraction = extracted();
     extraction.confirm(EVENT, NOW);
@@ -158,7 +177,6 @@ class DocumentExtractionReviewServiceTest {
 
   @Test
   void nonOwnerSeesNotFound() {
-    when(documentRepository.findByIdForUpdate(DOCUMENT)).thenReturn(Optional.of(document()));
 
     assertEquals(
         ErrorCode.RESOURCE_NOT_FOUND,

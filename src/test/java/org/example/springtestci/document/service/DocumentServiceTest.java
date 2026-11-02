@@ -26,8 +26,10 @@ import org.example.springtestci.common.storage.FileStorage;
 import org.example.springtestci.document.dto.FileUrlResponse;
 import org.example.springtestci.document.entity.Document;
 import org.example.springtestci.document.entity.DocumentExtraction;
+import org.example.springtestci.document.entity.DocumentReplacement;
 import org.example.springtestci.document.entity.ExtractionStatus;
 import org.example.springtestci.document.repository.DocumentExtractionRepository;
+import org.example.springtestci.document.repository.DocumentReplacementRepository;
 import org.example.springtestci.document.repository.DocumentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,6 +49,7 @@ class DocumentServiceTest {
 
   @Mock private DocumentRepository documentRepository;
   @Mock private DocumentExtractionRepository extractionRepository;
+  @Mock private DocumentReplacementRepository replacementRepository;
   @Mock private FileStorage fileStorage;
   @Mock private ObjectProvider<FileStorage> storageProvider;
   @Mock private ProductOwnerReader productOwnerReader;
@@ -60,18 +63,123 @@ class DocumentServiceTest {
         new DocumentService(
             documentRepository,
             extractionRepository,
+            replacementRepository,
             storageProvider,
             new DocumentFileValidator(),
             productOwnerReader,
-            Clock.fixed(NOW, ZoneOffset.UTC));
+            Clock.fixed(NOW, ZoneOffset.UTC),
+            new DocumentUrlSigner("test-document-secret"));
   }
 
   private Document document(Long uploader) {
     return Document.register(PRODUCT, uploader, "documents/100/k.pdf", "application/pdf", 10, NOW);
   }
 
+  @Test
+  void downloadRechecksOwnerVersionSignatureExpiryAndRedaction() throws IOException {
+    var signer = new DocumentUrlSigner("test-document-secret");
+    long expires = NOW.plusSeconds(300).getEpochSecond();
+    String signature = signer.sign(5L, OWNER, 1, expires);
+    ownerIs(OWNER);
+    Document document = document(OWNER);
+    when(documentRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(document));
+    when(fileStorage.load("documents/100/k.pdf"))
+        .thenReturn(new org.springframework.core.io.ByteArrayResource(PDF));
+    assertEquals(
+        "application/pdf", service.download(5L, OWNER, 1, expires, signature).contentType());
+    assertEquals(
+        ErrorCode.ACCESS_DENIED, errorOf(() -> service.download(5L, OTHER, 1, expires, signature)));
+    assertEquals(
+        ErrorCode.ACCESS_DENIED,
+        errorOf(() -> service.download(5L, OWNER, 1, NOW.getEpochSecond(), signature)));
+    when(productOwnerReader.lockOwnerId(PRODUCT)).thenReturn(Optional.of(OTHER));
+    assertEquals(
+        ErrorCode.RESOURCE_NOT_FOUND,
+        errorOf(() -> service.download(5L, OWNER, 1, expires, signature)));
+    when(productOwnerReader.lockOwnerId(PRODUCT)).thenReturn(Optional.of(OWNER));
+    document.requireRedaction(NOW);
+    assertEquals(
+        ErrorCode.DOCUMENT_REDACTION_REQUIRED,
+        errorOf(() -> service.download(5L, OWNER, 1, expires, signature)));
+    document.replaceFile("documents/100/new.pdf", "application/pdf", PDF.length, NOW);
+    assertEquals(
+        ErrorCode.ACCESS_DENIED, errorOf(() -> service.download(5L, OWNER, 1, expires, signature)));
+    verify(fileStorage).load("documents/100/k.pdf");
+  }
+
+  @Test
+  void oldFileDeletionFailureDoesNotRestoreOldDownloadVersionOrProtection() throws IOException {
+    Document document = document(OWNER);
+    document.protect(NOW);
+    ownerIs(OWNER);
+    when(documentRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(document));
+    when(fileStorage.store(eq("documents/100"), eq("pdf"), any(InputStream.class)))
+        .thenReturn("documents/100/new.pdf");
+    org.mockito.Mockito.doThrow(new IOException("cleanup failed"))
+        .when(fileStorage)
+        .delete("documents/100/k.pdf");
+    replace(OWNER, true);
+    assertTrue(document.isProtected());
+    long expires = NOW.plusSeconds(300).getEpochSecond();
+    String oldSignature = new DocumentUrlSigner("test-document-secret").sign(5L, OWNER, 1, expires);
+    assertEquals(
+        ErrorCode.ACCESS_DENIED,
+        errorOf(() -> service.download(5L, OWNER, 1, expires, oldSignature)));
+    verify(fileStorage, never()).load(anyString());
+  }
+
   private ErrorCode errorOf(Runnable action) {
     return assertThrows(CommonException.class, action::run).errorCode();
+  }
+
+  @Test
+  void signedFileRejectsTamperedIdentifiersExpiryAndSignatureBeforeStorageAccess()
+      throws IOException {
+    var signer = new DocumentUrlSigner("test-document-secret");
+    long expires = NOW.plusSeconds(300).getEpochSecond();
+    String signature = signer.sign(5L, OWNER, 1, expires);
+    assertEquals(
+        ErrorCode.ACCESS_DENIED, errorOf(() -> service.download(6L, OWNER, 1, expires, signature)));
+    assertEquals(
+        ErrorCode.ACCESS_DENIED, errorOf(() -> service.download(5L, OWNER, 2, expires, signature)));
+    assertEquals(
+        ErrorCode.ACCESS_DENIED,
+        errorOf(() -> service.download(5L, OWNER, 1, expires + 1, signature)));
+    assertEquals(
+        ErrorCode.ACCESS_DENIED,
+        errorOf(() -> service.download(5L, OWNER, 1, expires, "tampered")));
+    long exactExpiry = NOW.getEpochSecond();
+    assertEquals(
+        ErrorCode.ACCESS_DENIED,
+        errorOf(
+            () ->
+                service.download(
+                    5L, OWNER, 1, exactExpiry, signer.sign(5L, OWNER, 1, exactExpiry))));
+    verify(fileStorage, never()).load(anyString());
+  }
+
+  @Test
+  void newFileIsRemovedWhenTransactionRollsBackAfterUploadReturns() throws IOException {
+    ownerIs(OWNER);
+    when(fileStorage.store(anyString(), anyString(), any(InputStream.class)))
+        .thenReturn("documents/100/rollback.pdf");
+    when(documentRepository.save(any(Document.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+    try {
+      upload(OWNER, true);
+      verify(fileStorage, never()).delete(anyString());
+      for (var synchronization :
+          org.springframework.transaction.support.TransactionSynchronizationManager
+              .getSynchronizations()) {
+        synchronization.afterCompletion(
+            org.springframework.transaction.support.TransactionSynchronization.STATUS_ROLLED_BACK);
+      }
+      verify(fileStorage).delete("documents/100/rollback.pdf");
+    } finally {
+      org.springframework.transaction.support.TransactionSynchronizationManager
+          .clearSynchronization();
+    }
   }
 
   private Document upload(Long userId, boolean maskingConfirmed) {
@@ -79,7 +187,15 @@ class DocumentServiceTest {
   }
 
   private void ownerIs(Long ownerId) {
-    when(productOwnerReader.findOwnerId(PRODUCT)).thenReturn(Optional.of(ownerId));
+    org.mockito.Mockito.lenient()
+        .when(productOwnerReader.findOwnerId(PRODUCT))
+        .thenReturn(Optional.of(ownerId));
+    org.mockito.Mockito.lenient()
+        .when(productOwnerReader.lockOwnerId(PRODUCT))
+        .thenReturn(Optional.of(ownerId));
+    org.mockito.Mockito.lenient()
+        .when(documentRepository.findProductIdById(5L))
+        .thenReturn(Optional.of(PRODUCT));
   }
 
   @Test
@@ -111,6 +227,27 @@ class DocumentServiceTest {
   }
 
   @Test
+  void 다운로드_시점에_현재_소유자가_아니면_파일_접근을_거부한다() {
+    when(documentRepository.findByObjectKey("documents/100/k.pdf"))
+        .thenReturn(Optional.of(document(OWNER)));
+    ownerIs(OWNER);
+
+    service.requireCurrentOwnerOfFile("documents/100/k.pdf", OWNER);
+    assertEquals(
+        ErrorCode.RESOURCE_NOT_FOUND,
+        errorOf(() -> service.requireCurrentOwnerOfFile("documents/100/k.pdf", OTHER)));
+  }
+
+  @Test
+  void 문서에_없는_저장_키는_다운로드할_수_없다() {
+    when(documentRepository.findByObjectKey("documents/100/none.pdf")).thenReturn(Optional.empty());
+
+    assertEquals(
+        ErrorCode.RESOURCE_NOT_FOUND,
+        errorOf(() -> service.requireCurrentOwnerOfFile("documents/100/none.pdf", OWNER)));
+  }
+
+  @Test
   void 마스킹을_확인하지_않으면_업로드할_수_없다() {
     assertEquals(ErrorCode.MASKING_NOT_CONFIRMED, errorOf(() -> upload(OWNER, false)));
     verify(documentRepository, never()).save(any());
@@ -126,7 +263,7 @@ class DocumentServiceTest {
 
   @Test
   void 없는_제품에는_업로드할_수_없다() {
-    when(productOwnerReader.findOwnerId(PRODUCT)).thenReturn(Optional.empty());
+    when(productOwnerReader.lockOwnerId(PRODUCT)).thenReturn(Optional.empty());
 
     assertEquals(ErrorCode.RESOURCE_NOT_FOUND, errorOf(() -> upload(OWNER, true)));
   }
@@ -172,12 +309,10 @@ class DocumentServiceTest {
   void 현재_소유자는_만료형_URL을_받는다() {
     when(documentRepository.findById(5L)).thenReturn(Optional.of(document(OTHER)));
     ownerIs(OWNER);
-    when(fileStorage.createTemporaryUrl(eq("documents/100/k.pdf"), any(Instant.class)))
-        .thenReturn("/local-files?x");
 
     FileUrlResponse response = service.createFileUrl(5L, OWNER);
 
-    assertEquals("/local-files?x", response.url());
+    assertTrue(response.url().startsWith("/api/v1/documents/5/file?version=1&expires="));
     assertEquals(NOW.plus(DocumentService.FILE_URL_TTL), response.expiresAt());
   }
 
@@ -205,7 +340,7 @@ class DocumentServiceTest {
   @Test
   void 본인이_올린_보호되지_않은_사본은_삭제할_수_있다() throws IOException {
     Document document = document(OWNER);
-    when(documentRepository.findById(5L)).thenReturn(Optional.of(document));
+    when(documentRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(document));
     ownerIs(OWNER);
 
     service.delete(5L, OWNER);
@@ -219,7 +354,7 @@ class DocumentServiceTest {
   void 이력에_연결되어_보호된_사본은_삭제할_수_없다() throws IOException {
     Document document = document(OWNER);
     document.protect(NOW);
-    when(documentRepository.findById(5L)).thenReturn(Optional.of(document));
+    when(documentRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(document));
     ownerIs(OWNER);
 
     assertEquals(ErrorCode.DOCUMENT_DELETE_NOT_ALLOWED, errorOf(() -> service.delete(5L, OWNER)));
@@ -229,7 +364,7 @@ class DocumentServiceTest {
 
   @Test
   void 이전받은_사본은_삭제할_수_없다() throws IOException {
-    when(documentRepository.findById(5L)).thenReturn(Optional.of(document(OTHER)));
+    when(documentRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(document(OTHER)));
     ownerIs(OWNER);
 
     assertEquals(ErrorCode.DOCUMENT_DELETE_NOT_ALLOWED, errorOf(() -> service.delete(5L, OWNER)));
@@ -238,11 +373,18 @@ class DocumentServiceTest {
 
   @Test
   void 이전_소유자는_삭제할_수_없다() throws IOException {
-    when(documentRepository.findById(5L)).thenReturn(Optional.of(document(OTHER)));
     ownerIs(OWNER);
 
     assertEquals(ErrorCode.RESOURCE_NOT_FOUND, errorOf(() -> service.delete(5L, OTHER)));
     verify(fileStorage, never()).delete(anyString());
+  }
+
+  private static byte[] sha256(byte[] content) {
+    try {
+      return java.security.MessageDigest.getInstance("SHA-256").digest(content);
+    } catch (java.security.NoSuchAlgorithmException exception) {
+      throw new IllegalStateException(exception);
+    }
   }
 
   private Document replace(Long userId, boolean maskingConfirmed) {
@@ -267,6 +409,47 @@ class DocumentServiceTest {
     // 이력 연결(보호)은 교체해도 유지된다.
     assertTrue(replaced.isProtected());
     verify(fileStorage).delete("documents/100/k.pdf");
+  }
+
+  @Test
+  void 교체하면_보호_여부와_파일_정보가_교체_기록에_남는다() throws IOException {
+    Document document = document(OWNER);
+    document.protect(NOW);
+    when(documentRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(document));
+    ownerIs(OWNER);
+    when(fileStorage.store(eq("documents/100"), eq("pdf"), any(InputStream.class)))
+        .thenReturn("documents/100/new.pdf");
+
+    Document replaced = replace(OWNER, true);
+
+    org.mockito.ArgumentCaptor<DocumentReplacement> captor =
+        org.mockito.ArgumentCaptor.forClass(DocumentReplacement.class);
+    verify(replacementRepository).save(captor.capture());
+    DocumentReplacement record = captor.getValue();
+    assertEquals(1, record.getFromVersion());
+    assertEquals(2, record.getToVersion());
+    assertEquals(OWNER, record.getReplacedById());
+    assertTrue(record.isWasProtected());
+    assertEquals(10, record.getOldByteSize());
+    assertEquals(PDF.length, record.getNewByteSize());
+    // 같은 내용이면 항상 같은 해시가 나와야 나중에 비교할 수 있다.
+    assertEquals(java.util.HexFormat.of().formatHex(sha256(PDF)), record.getNewSha256());
+    assertEquals(1, replaced.getReplacementCount());
+    assertEquals(NOW, replaced.getLastReplacedAt());
+  }
+
+  @Test
+  void 교체에_실패하면_교체_기록도_남기지_않는다() throws IOException {
+    Document document = document(OWNER);
+    when(documentRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(document));
+    ownerIs(OWNER);
+    when(fileStorage.store(eq("documents/100"), eq("pdf"), any(InputStream.class)))
+        .thenReturn("documents/100/new.pdf");
+    when(documentRepository.save(any(Document.class))).thenThrow(new IllegalStateException());
+
+    assertThrows(IllegalStateException.class, () -> replace(OWNER, true));
+
+    verify(replacementRepository, never()).save(any());
   }
 
   @Test
@@ -297,7 +480,6 @@ class DocumentServiceTest {
 
   @Test
   void 소유자가_아니면_교체할_수_없다() throws IOException {
-    when(documentRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(document(OWNER)));
     ownerIs(OWNER);
 
     assertEquals(ErrorCode.RESOURCE_NOT_FOUND, errorOf(() -> replace(OTHER, true)));

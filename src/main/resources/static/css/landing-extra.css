@@ -103,3 +103,66 @@
 .mk-search button:hover,.mk-search button:focus-visible{opacity:.65}
 #market .mk-cats{flex-wrap:wrap;overflow:visible;margin-bottom:12px}
 @media(prefers-reduced-motion:reduce){.mk-search button{transition:none}}
+
+/* 메인 화면 정리: 이미지는 단순 일러스트, 안내 영역은 글 중심, 간격·푸터 보완 */
+.landing-hero:before{background:url('/images/hero-passport.svg') 85% 50%/auto 92% no-repeat;-webkit-mask-image:none;mask-image:none;inset:0}
+.lpx-find{margin:24px 0 0;padding:36px 24px 30px}
+.lpx-find h2{font-size:26px}
+.lpx-find-bar{max-width:460px;margin-top:18px}
+.lpx-find-tags{margin-top:14px}
+.lpx-find-card{max-width:760px;margin-top:22px;padding:20px 20px 24px;box-shadow:none}
+.lpx-find-tabs{margin-bottom:18px}
+.lpx-find-tabs button{padding:4px 18px;font-size:15px}
+.lpx-find-tabs button[aria-selected="true"]:after{left:18px;right:18px}
+.lpx-find-row select,.lpx-find-go{height:48px}
+.lpx-find-row select{min-width:150px}
+.lpx-trust{margin:40px 0 48px}
+.lp-how{margin:0 0 64px;padding:0;background:transparent;border:0;border-radius:0}
+.lp-how h2{margin:0 0 20px;padding-bottom:14px;border-bottom:2px solid var(--ink);font-size:22px;letter-spacing:-1px}
+.lp-how-grid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:0}
+.lp-how-grid li{padding:4px 28px 4px 0;margin-right:28px;border-right:1px solid var(--line)}
+.lp-how-grid li:last-child{margin-right:0;padding-right:0;border-right:0}
+.lp-how-grid span{display:block;font-size:13px;font-weight:800;letter-spacing:1px;color:var(--blue)}
+.lp-how-grid h3{margin:8px 0 6px;font-size:18px}
+.lp-how-grid p{margin:0;font-size:14px;line-height:1.65;color:#62646b}
+.lpx-spec{margin-bottom:64px}
+.lpx-spec-head h2{margin:0;font-size:22px;letter-spacing:-1px}
+.lpx-spec-head p{margin:6px 0 0;font-size:14px;color:var(--muted)}
+.lpx-spec dl{margin:18px 0 0;border-top:2px solid var(--ink)}
+.lpx-spec dl>div{display:grid;grid-template-columns:200px 1fr;gap:20px;padding:16px 4px;border-bottom:1px solid var(--line)}
+.lpx-spec dt{font-size:15px;font-weight:800}
+.lpx-spec dd{margin:0;font-size:14px;line-height:1.65;color:#62646b}
+.lpx-safety-head{margin-bottom:18px}
+.lpx-safety-head h2{margin:0;font-size:22px;letter-spacing:-1px}
+.lpx-safety-head p{margin:6px 0 0;font-size:14px;color:var(--muted)}
+.lpx-safety li{padding:16px 18px 16px 52px;border-radius:6px}
+.lpx-safety li:before{left:16px;top:16px;width:24px;height:24px;border-radius:50%;font-size:13px}
+.lpx-faq details{border-radius:6px}
+.lpx-footer{display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:32px;margin-top:72px;padding:36px 0 20px;border-top:1px solid var(--line)}
+.lpx-footer h4{margin:0 0 10px;font-size:13px;color:var(--ink)}
+.lpx-footer nav{display:grid;gap:8px;align-content:start;justify-items:start}
+.lpx-footer nav button{padding:0;font-size:13px}
+.lpx-footer .lpx-copy{grid-column:1/-1;margin:8px 0 0;padding-top:16px;border-top:1px solid var(--line);max-width:none;font-size:12px}
+@media(max-width:900px){.lp-how-grid{grid-template-columns:1fr;gap:20px}.lp-how-grid li{margin:0;padding:0 0 20px;border:0;border-bottom:1px solid var(--line)}.lpx-spec dl>div{grid-template-columns:1fr;gap:4px}.lpx-footer{grid-template-columns:1fr 1fr}.lpx-foot-brand{grid-column:1/-1}}
+@media(max-width:780px){.landing-hero:before{inset:auto 0 0 0;height:46%;background-position:50% 100%;background-size:auto 100%}}
+/* 찾기 영역 뒤 음영 제거: 페이지 배경과 같은 색 */
+.lpx-find{background:transparent;border-radius:0}
+/* 찾기 영역 가로폭을 위(히어로)·아래(카테고리)와 같게. 세로 간격은 그대로 */
+.lpx-find{padding-left:0;padding-right:0}
+.lpx-find-card{max-width:none}
+/* 현재 MVP는 노트북만 제공한다. 나머지 가전 카테고리는 준비 중이라 흐리게 표시하고 선택하지 못하게 한다. */
+.lpx-find-row option:disabled{color:#a6a8ad}
+.lpx-find-cats a.is-soon,.lpx-find-cats a.is-soon:hover,.lpx-find-cats a.is-soon:focus-visible{opacity:.4;cursor:not-allowed;pointer-events:none;border-color:var(--line);color:var(--ink)}
+.lpx-cats a.is-soon,.lpx-cats a.is-soon:hover,.lpx-cats a.is-soon:focus-visible{opacity:.4;cursor:not-allowed;pointer-events:none;transform:none;border-color:var(--line)}
+/* 현재 MVP는 노트북만 제공한다. 노트북 외 해시태그와 중고거래 카테고리 칩은 준비 중이라 회색으로 표시하고 누르지 못하게 한다. */
+.lpx-find-tags button.is-soon,.lpx-find-tags button.is-soon:hover,.lpx-find-tags button.is-soon:focus-visible{background:#ececee;color:#a6a8ad;cursor:not-allowed}
+.mk-cats .chip-btn.is-soon,.mk-cats .chip-btn.is-soon:hover{background:#f1f1f3;border-color:var(--line);color:#a6a8ad;cursor:not-allowed}
+/* 홈 "방금 올라온 상품" 카드: 사진을 칸 안에 맞춰 보여 주고, 카드 링크가 사진·글 2열 배치를 깨지 않게 한다. (이미지 크기 규칙이 #market에만 있어 홈에서는 원본 크기로 잘려 보였다.) */
+.lp-grid .mk-thumb img{display:block;width:100%;height:100%;object-fit:contain}
+.lp-grid .mk-card-link{display:grid;grid-template-columns:240px minmax(0,1fr);gap:20px;min-width:0;color:inherit;text-decoration:none}
+@media(max-width:780px){.lp-grid .mk-card-link{grid-template-columns:120px minmax(0,1fr);gap:12px}}
+/* 카드 안에 링크 하나만 있으므로 카드는 1열로 두고, 사진·글 2열 배치는 링크가 맡는다. (카드가 2열 그리드면 링크가 사진 칸에 갇혀 글이 세로로 쌓였다.) */
+.lp-grid .mk-card{display:block;min-width:0}
+/* 글이 길면 한 줄에서 ...으로 줄인다. */
+.lp-grid .mk-body{min-width:0;padding-right:0}
+.lp-grid .mk-body h3,.lp-grid .mk-meta,.lp-grid .mk-body .price{display:block;min-width:0;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}

@@ -47,7 +47,7 @@ Controller
 4. `PublishedListingAccess`와 `JdbcPublishedListingAccess`가 제품을 먼저 잠근 뒤 판매글을 잠그고 ACTIVE/RESERVED 상태를 갱신한다.
 5. `accept()`는 요청 ACCEPTED/RESERVED, 판매글 RESERVED와 `InternalTransferPendingWriter.createPending()`을 같은 트랜잭션에서 처리한다.
 
-`InternalTransferPendingWriter`의 운영 구현은 이 저장소에 없다. PostgreSQL 시험의 내부 JDBC writer와 HTTP 시험 Bean은 원자성 검증용 대역이며 정식 ownership 연결이 아니다.
+`InternalTransferPendingWriter`와 `InternalTradeCompletionPort`의 정식 운영 구현은 `InternalTradeOwnershipService`다. DIRECT는 이 내부 포트를 호출하지 않는다.
 
 ## P3 예약 취소
 
@@ -66,7 +66,7 @@ INTERNAL/PENDING 이전 취소
 → 감사 기록
 ```
 
-모든 단계는 같은 Spring 트랜잭션에 참여한다. `InternalTransferCancellationPort`의 운영 구현은 아직 없으며 시험 대역은 연동 완료 근거가 아니다.
+모든 단계는 같은 Spring 트랜잭션에 참여한다. `InternalTransferCancellationPort`의 정식 운영 구현은 `ownership/repository/JdbcInternalTransferCancellation.java`이며, P3 활성화 환경에서 `MANDATORY` 트랜잭션에 참여한다.
 
 `TradeListingCanceller.cancel()`은 R07 판매 중지 트랜잭션에 `MANDATORY`로 참여한다. RESERVED 판매글을 중지할 때 선택 거래와 나머지 PENDING 요청을 정리하지만 이미 CANCELLED인 판매글을 ACTIVE로 복구하지 않는다.
 
@@ -86,9 +86,19 @@ INTERNAL/PENDING 이전 취소
 3. `ProductService#getForListing()`의 `factsVersion`과 `ListingDetailService#get()`의 공개 projection을 같은 잠금 범위에서 조합한다. READY가 아니거나 샘플인 이력은 완료 근거로 사용하지 않는다.
 4. `TradeCompletionService#complete()`는 종료 재요청을 먼저 반환하고, 진행 중 거래에는 최신 버전·정식 공개 이력·미확인 변경 0건을 다시 검사한 뒤 인증 사용자의 확인만 저장한다.
 5. 양측 확인이 같은 현재 버전이면 `PurchaseRequestRepository#complete()`, `PublishedListingAccess#sell()`, `#rejectPendingByListingId()` 순서로 거래 측 상태를 확정한다.
-6. `InternalTradeCompletionPort#complete()`와 `TradeAuditRecorder#tradeCompleted()`가 같은 트랜잭션에 참여한다. 운영 완료 포트는 아직 없으며 기능 활성화 시 필수 Bean이다.
+6. `InternalTradeCompletionPort#complete()`와 `TradeAuditRecorder#tradeCompleted()`가 같은 트랜잭션에 참여한다. 기능 활성화 시 `InternalTradeOwnershipService` 한 개만 운영 완료 포트로 등록한다.
 
 완료된 거래의 재요청은 원래 방 당사자에게 최소 상태만 반환한다. 이후 제품 소유자 변경이나 facts 버전 증가를 이유로 과거 완료를 다시 수행하지 않는다.
+
+## DIRECT 외부 이전
+
+`OwnershipTransferController → OwnershipTransferService`는 실제 제품 ID로 현재 소유자의 링크 발급·상태 조회·취소와 인증된 수신자의 명시 수락을 처리한다. verify는 읽기 전용이며 INTERNAL 토큰은 404로 숨기고 외부 수락·취소는 기존 409 차단 계약을 유지한다.
+
+제품→판매글→이전 행 순서로 잠근 뒤 소유자·보관·판매·수신자·만료 정각을 재검사한다. 수신자의 accept는 동의 시각만 기록하고 PENDING을 유지한다. 최초 발신자인 현재 소유자의 approve가 확인한 수신자 ID·factsVersion을 재검사한 뒤 같은 트랜잭션에서 owner/facts·COMPLETED·슬롯 해제·실제 PK의 시스템 TRANSFER·PRIVATE·증빙 보호·감사를 확정한다. 정식 `InternalTransferHistoryWriter`가 시스템 이력 생성과 누적 공개 종료를 처리하고 `InternalTradeOwnershipRepository.protectDocuments()`가 증빙을 보호한다. `OwnershipTransferred`는 동기 초안 정리에, `ProductFactsChanged`는 커밋 후 AI 갱신에 한 번씩 발행한다. 허용 마스킹 사본의 승계와 재마스킹·업로더·삭제 제한은 현행 `DocumentService`를 따른다.
+
+`ownership.js`는 제품 상세의 발급·취소·재발급·최종 승인과 로컬 QR을, `receive.js`는 토큰 주소 정리·메모리 내 로그인 복귀·명시 동의·승인 대기·응답 유실 후 재확인을 담당한다. Web Locks 인증 흐름과 INTERNAL 거래 화면은 유지한다.
+
+문서 업로드·교체·삭제·추출 요청·확정·반려는 제품을 먼저 잠그고 소유권을 재검사한 뒤 문서를 잠근다. 제품 ID는 scalar 조회로 구해 잠금 전의 문서 버전이 영속성 컨텍스트에 남지 않게 한다. 다운로드는 사용자·문서 ID·버전·만료를 묶은 HMAC URL을 사용하고 같은 잠금 아래 현재 소유권·재마스킹 필요 여부·파일 가독성을 검사한다. 신규 사본은 DB 롤백 시 삭제하고 구 사본은 커밋 후 삭제하며 교체 감사는 같은 트랜잭션에서 유지한다. 공통 `FileStorage.load()`를 사용하며 운영 저장소 어댑터의 정식 제공은 별도 작업이다.
 
 ## 내 판매글 진입
 
@@ -97,6 +107,14 @@ INTERNAL/PENDING 이전 취소
 상단 메뉴·마켓 상단·마이페이지·판매글 상세에서 내 판매글로 이동한다. 목록의 `관리하기`는 기존 상세 조회와 관리 API로 이어지며, 현재 소유자가 아니거나 제품이 보관 처리됐거나 판매글이 종료됐으면 관리 버튼과 제품 사진 URL을 제공하지 않는다. 관리 API 자체의 권한·상태 검사도 유지한다. 종료된 글은 과거 판매글의 제목·가격·상태만 확인할 수 있고 새로운 소유자의 제품 정보는 조회하지 않는다.
 
 `my-listings.js`는 상태·페이지를 URL에 보관하고 계정 변경·화면 이탈 시 요청을 중단하고 비공개 목록을 비운다. 예약 취소나 소유권 이전 등 상태 변경은 이 화면에서 직접 수행하지 않고 기존 관리 API에 위임한다.
+
+## 관리자 거래 확인 상태 조회
+
+`GET /api/v1/admin/trades/{id}/progress`는 `AdminController → AdminProgressService → AdminReadService / AdminProgressRepository`로 이어진다.
+현재 관리자 역할·P2 활성·구매 요청 존재를 확인하고 읽기 전용 트랜잭션으로 같은 시점의 버전·미확인 건수를 읽는다.
+당사자용 완료 context는 제품 잠금을 취하므로 이 관리자 조회에서 호출하지 않는다.
+종료 상태를 먼저 판정한 뒤 예약 거래에만 변경 이력 확인과 최신 버전의 양측 완료 확인 대기를 계산한다.
+P3/P4 비활성 상태와 현재 확인 전 상태를 구분하고, 양측 확인이 있어도 실제 완료나 완료 가능 상태를 추정하지 않는다.
 
 ## 주석 유지 기준
 

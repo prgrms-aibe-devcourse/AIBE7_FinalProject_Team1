@@ -14,8 +14,10 @@ import org.example.springtestci.common.storage.FileStorage;
 import org.example.springtestci.document.dto.FileUrlResponse;
 import org.example.springtestci.document.entity.Document;
 import org.example.springtestci.document.entity.DocumentExtraction;
+import org.example.springtestci.document.entity.DocumentReplacement;
 import org.example.springtestci.document.entity.ExtractionStatus;
 import org.example.springtestci.document.repository.DocumentExtractionRepository;
+import org.example.springtestci.document.repository.DocumentReplacementRepository;
 import org.example.springtestci.document.repository.DocumentRepository;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
@@ -38,10 +40,12 @@ public class DocumentService {
 
   private final DocumentRepository documentRepository;
   private final DocumentExtractionRepository extractionRepository;
+  private final DocumentReplacementRepository replacementRepository;
   private final ObjectProvider<FileStorage> fileStorage;
   private final DocumentFileValidator fileValidator;
   private final ProductOwnerReader productOwnerReader;
   private final Clock clock;
+  private final DocumentUrlSigner urlSigner;
 
   /** 현재 소유자가 마스킹을 확인한 사본을 올린다. 업로드 파일명은 확장자 판별에만 쓰고 저장하지 않는다. */
   @Transactional
@@ -55,7 +59,13 @@ public class DocumentService {
     if (!maskingConfirmed) {
       throw new CommonException(ErrorCode.MASKING_NOT_CONFIRMED);
     }
-    requireCurrentOwner(productId, userId);
+    Long lockedOwner =
+        productOwnerReader
+            .lockOwnerId(productId)
+            .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND));
+    if (!userId.equals(lockedOwner)) {
+      throw new CommonException(ErrorCode.ACCESS_DENIED);
+    }
     DocumentFileValidator.FileKind kind =
         fileValidator.validate(uploadedFilename, contentType, content);
 
@@ -89,7 +99,8 @@ public class DocumentService {
     if (!maskingConfirmed) {
       throw new CommonException(ErrorCode.MASKING_NOT_CONFIRMED);
     }
-    // 같은 문서를 동시에 교체하거나 추출하지 못하도록 행을 잠근다.
+    // 이전과 같은 제품→문서 순서로 잠가 권한 확인과 교체 사이의 소유권 변경을 막는다.
+    lockDocumentProduct(documentId, userId);
     Document document =
         documentRepository
             .findByIdForUpdate(documentId)
@@ -103,10 +114,30 @@ public class DocumentService {
         fileValidator.validate(uploadedFilename, contentType, content);
 
     String oldObjectKey = document.getObjectKey();
+    // 교체 전 상태를 먼저 잡아 둔다. replaceFile이 값을 바꾸기 때문이다.
+    int fromVersion = document.getVersion();
+    String oldContentType = document.getContentType();
+    long oldByteSize = document.getByteSize();
+    boolean wasProtected = document.isProtected();
     String newObjectKey = store(document.getProductId(), kind.extension(), content);
     try {
-      document.replaceFile(newObjectKey, kind.contentType(), content.length, clock.instant());
+      Instant now = clock.instant();
+      document.replaceFile(newObjectKey, kind.contentType(), content.length, now);
       documentRepository.save(document);
+      // 문서 번호와 이력 연결이 그대로라 다른 파일로 바뀐 사실을 나중에 확인할 수 있도록 같은 트랜잭션에서 남긴다.
+      replacementRepository.save(
+          DocumentReplacement.record(
+              documentId,
+              fromVersion,
+              document.getVersion(),
+              userId,
+              wasProtected,
+              oldContentType,
+              kind.contentType(),
+              oldByteSize,
+              content.length,
+              sha256(content),
+              now));
       rejectPendingExtractions(documentId);
     } catch (RuntimeException exception) {
       deleteStoredFile(newObjectKey);
@@ -114,6 +145,16 @@ public class DocumentService {
     }
     deleteStoredFileAfterCommit(oldObjectKey);
     return document;
+  }
+
+  private static String sha256(byte[] content) {
+    try {
+      return java.util.HexFormat.of()
+          .formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(content));
+    } catch (java.security.NoSuchAlgorithmException exception) {
+      // 모든 JVM이 SHA-256을 제공하므로 도달하지 않는다.
+      throw new IllegalStateException(exception);
+    }
   }
 
   private void rejectPendingExtractions(Long documentId) {
@@ -141,7 +182,73 @@ public class DocumentService {
     }
     Instant expiresAt = clock.instant().plus(FILE_URL_TTL);
     return new FileUrlResponse(
-        storage().createTemporaryUrl(document.getObjectKey(), expiresAt), expiresAt);
+        "/api/v1/documents/"
+            + documentId
+            + "/file?version="
+            + document.getVersion()
+            + "&expires="
+            + expiresAt.getEpochSecond()
+            + "&sig="
+            + urlSigner.sign(documentId, userId, document.getVersion(), expiresAt.getEpochSecond()),
+        expiresAt);
+  }
+
+  /** 제품→문서 잠금 아래 현재 소유자와 서명 버전을 검사하고 전송할 사본을 확보한다. */
+  @Transactional
+  public DocumentContent download(
+      Long documentId, Long userId, int version, long expires, String signature) {
+    if (clock.instant().getEpochSecond() >= expires
+        || !urlSigner.valid(documentId, userId, version, expires, signature)) {
+      throw new CommonException(ErrorCode.ACCESS_DENIED);
+    }
+    lockDocumentProduct(documentId, userId);
+    Document document =
+        documentRepository
+            .findByIdForUpdate(documentId)
+            .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND));
+    if (clock.instant().getEpochSecond() >= expires || document.getVersion() != version) {
+      throw new CommonException(ErrorCode.ACCESS_DENIED);
+    }
+    if (document.isRedactionRequired() || document.getMaskConfirmedAt() == null) {
+      throw new CommonException(ErrorCode.DOCUMENT_REDACTION_REQUIRED);
+    }
+    try {
+      var resource = storage().load(document.getObjectKey());
+      if (!resource.exists() || !resource.isReadable()) {
+        throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
+      }
+      return new DocumentContent(resource.getContentAsByteArray(), document.getContentType());
+    } catch (IOException exception) {
+      throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
+    }
+  }
+
+  private void lockDocumentProduct(Long documentId, Long userId) {
+    Long productId =
+        documentRepository
+            .findProductIdById(documentId)
+            .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND));
+    if (!productOwnerReader.lockOwnerId(productId).filter(userId::equals).isPresent()) {
+      throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
+    }
+  }
+
+  public record DocumentContent(byte[] bytes, String contentType) {}
+
+  /**
+   * 임시 URL로 실제 다운로드하는 시점에 요청자가 그 파일이 속한 제품의 현재 소유자인지 다시 확인한다. URL 발급 뒤 소유권이 이전되거나 파일이 교체된 경우 거부된다.
+   * 존재 여부를 알려 주지 않도록 모두 RESOURCE_NOT_FOUND로 응답한다.
+   */
+  @Transactional(readOnly = true)
+  public void requireCurrentOwnerOfFile(String objectKey, Long userId) {
+    Document document =
+        documentRepository
+            .findByObjectKey(objectKey)
+            .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND));
+    Long ownerId = productOwnerReader.findOwnerId(document.getProductId()).orElse(null);
+    if (!userId.equals(ownerId)) {
+      throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
+    }
   }
 
   /**
@@ -150,7 +257,11 @@ public class DocumentService {
    */
   @Transactional
   public void delete(Long documentId, Long userId) {
-    Document document = findDocumentOfCurrentOwner(documentId, userId);
+    lockDocumentProduct(documentId, userId);
+    Document document =
+        documentRepository
+            .findByIdForUpdate(documentId)
+            .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND));
     if (!document.isUploadedBy(userId) || document.isProtected()) {
       throw new CommonException(ErrorCode.DOCUMENT_DELETE_NOT_ALLOWED);
     }
@@ -193,8 +304,19 @@ public class DocumentService {
 
   private String store(Long productId, String extension, byte[] content) {
     try {
-      return storage()
-          .store("documents/" + productId, extension, new ByteArrayInputStream(content));
+      String objectKey =
+          storage().store("documents/" + productId, extension, new ByteArrayInputStream(content));
+      // save가 반환된 뒤 flush/commit이 실패해도 새 사본이 저장소에 남지 않게 한다.
+      if (TransactionSynchronizationManager.isSynchronizationActive()) {
+        TransactionSynchronizationManager.registerSynchronization(
+            new TransactionSynchronization() {
+              @Override
+              public void afterCompletion(int status) {
+                if (status != STATUS_COMMITTED) deleteStoredFile(objectKey);
+              }
+            });
+      }
+      return objectKey;
     } catch (IOException exception) {
       log.error("Failed to store document file productId={}", productId);
       throw new CommonException(ErrorCode.INTERNAL_ERROR);

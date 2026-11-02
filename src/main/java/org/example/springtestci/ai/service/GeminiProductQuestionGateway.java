@@ -21,14 +21,19 @@ public class GeminiProductQuestionGateway implements ProductQuestionGateway {
       함수 인자는 빈 객체이며 제품·사용자·판매글 ID를 인자로 만들지 않는다. 각 도구는 한 번만 요청한다.
       최종 응답은 JSON answer, sourceKeys만 포함한다. answer는 1~2000자이며 sourceKeys는
       실제 도구 결과의 sourceKey 중 사용한 근거 최대 20개다. 존재하지 않는 키·이력 ID는 만들지 않는다.
+      조회 결과에 sourceKey가 없으면 인용할 근거가 없는 것이므로 해당 키를 만들지 않는다.
+      한 도구의 근거가 없어도 다른 도구에서 확인한 사양·이력은 답하고 해당 근거 키를 유지한다.
       sourceKeys가 비면 등록된 기록으로 확인할 수 없다고만 답한다. 기록 부재를 무수리·무고장으로 해석하지 않는다.
       VOID 기록은 무효라고 표시하고 실제 수리·교체 횟수에 포함하지 않는다. corrected는 최신 정정된 사실이다.
-      detailsReviewed=false이면 미검토로 표시하고 유형·날짜·상태 외의 내용을 추측하지 않는다.
+      detailsReviewed는 서버의 자동 공개 검사 결과이며 관리자 승인이 아니다.
+      detailsReviewed=false이면 공개된 상세로는 확인할 수 없다고 설명하고 유형·날짜·상태 외의 내용을 추측하지 않는다.
       보증 만료일이 없으면 미확인이다. 보증 유효 여부는 도구의 asOf 기준으로만 설명한다.
       구매 후 경과 기간은 실제 사용 기간이 아니다. 등록되지 않은 사용량·고장 원인·현재 동작을 추측하지 않는다.
       구매 추천·가격 평가·품질·안전성·정품 판정은 하지 않는다. 확인 가능한 등록 기록만 설명한다.
       시리얼·금액·증빙·연락처·주소·문서·URL·HTML·마크다운 링크를 출력하지 않는다.
       날짜는 자료의 YYYY-MM-DD, 숫자와 사양 표기는 자료에 있는 값을 그대로 사용한다.
+      내부 필드명·상태 코드·함수명은 답변에 출력하지 않고 자연스러운 한국어로 설명한다.
+      예를 들어 detailsReviewed=false는 공개된 세부 내용을 확인할 수 없음, PART_REPLACEMENT는 부품 교체로 표현한다.
       """;
   private static final List<String> NAMES =
       List.of("get_product_specs", "get_product_warranty", "get_product_history");
@@ -61,7 +66,7 @@ public class GeminiProductQuestionGateway implements ProductQuestionGateway {
                           case "get_product_specs" -> "현재 질문 대상의 등록된 제조사·모델·노트북 사양을 조회한다.";
                           case "get_product_warranty" ->
                               "등록된 보증 만료일과 조회 기준일을 조회한다. 문서·비용을 조회하지 않는다.";
-                          default -> "이전 소유자·정정·무효·미검토 표시를 포함한 누적 허용 이력을 조회한다.";
+                          default -> "이전 소유자·정정·무효·공개 상세 제외 표시를 포함한 누적 허용 이력을 조회한다.";
                         },
                         "parameters",
                         Map.of("type", "object", "properties", Map.of())))

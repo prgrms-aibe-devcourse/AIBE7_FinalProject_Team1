@@ -4,6 +4,7 @@ import org.springframework.http.HttpStatus;
 
 public enum ErrorCode {
   INVALID_INPUT(HttpStatus.BAD_REQUEST, "COMMON_001", "요청 값이 올바르지 않습니다."),
+  ADMIN_TRADE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "ADMIN_001", "거래 조회 기능이 아직 활성화되지 않았습니다."),
   UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "AUTH_001", "인증이 필요합니다."),
   ACCESS_DENIED(HttpStatus.FORBIDDEN, "AUTH_002", "접근 권한이 없습니다."),
   DUPLICATE_EMAIL(HttpStatus.CONFLICT, "AUTH_003", "이미 가입된 이메일입니다."),
@@ -78,6 +79,10 @@ public enum ErrorCode {
       HttpStatus.SERVICE_UNAVAILABLE, "DOC_010", "AI 추출 기능을 아직 사용할 수 없습니다. 잠시 후 다시 시도해 주세요."),
   DOCUMENT_HISTORY_UNAVAILABLE(
       HttpStatus.SERVICE_UNAVAILABLE, "DOC_011", "이력 기능을 아직 사용할 수 없습니다. 잠시 후 다시 시도해 주세요."),
+  DOCUMENT_EVENT_DATE_REQUIRED(
+      HttpStatus.BAD_REQUEST, "DOC_012", "이력을 만들려면 구매일 또는 수리일이 필요합니다. 날짜를 입력한 뒤 다시 확정해 주세요."),
+  DOCUMENT_EVENT_CONTENT_TOO_LONG(
+      HttpStatus.BAD_REQUEST, "DOC_013", "이력에 남길 내용이 너무 깁니다. 수리 내용을 줄인 뒤 다시 확정해 주세요."),
   PRODUCT_DUPLICATE_SERIAL(
       HttpStatus.CONFLICT, "PRODUCT_001", "이미 등록된 제품입니다. 현재소유자에게 소유권 이전을 요청하세요."),
   INVALID_PRODUCT_IMAGE(
@@ -90,6 +95,8 @@ public enum ErrorCode {
       HttpStatus.FORBIDDEN, "HISTORY_002", "본인이 작성한 일반 이력만 정정하거나 무효 처리할 수 있습니다."),
   INVALID_HISTORY_DOCUMENT(
       HttpStatus.BAD_REQUEST, "HISTORY_003", "같은 제품의 마스킹 확인된 증빙만 이력에 연결할 수 있습니다."),
+  HISTORY_REGISTRATION_BLOCKED(
+      HttpStatus.CONFLICT, "HISTORY_004", "진행 중인 외부 소유권 이전 요청이 있어 새 이력을 등록할 수 없습니다."),
   TRADE_CONFLICT(HttpStatus.CONFLICT, "TRADE_001", "구매 요청을 현재 상태에서 처리할 수 없습니다."),
   TRADE_DEPENDENCY_UNAVAILABLE(
       HttpStatus.SERVICE_UNAVAILABLE, "TRADE_002", "거래 연동 기능을 일시적으로 사용할 수 없습니다."),

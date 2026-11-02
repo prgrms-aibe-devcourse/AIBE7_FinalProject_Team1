@@ -4,6 +4,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -13,12 +14,15 @@ import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -51,7 +55,11 @@ class SecurityHttpTest {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-      return new SecurityConfig().securityFilterChain(http);
+      return new SecurityConfig()
+          .securityFilterChain(
+              http,
+              mock(org.example.springtestci.admin.service.AdminAccessService.class),
+              jwtDecoder());
     }
 
     @Bean
@@ -68,6 +76,11 @@ class SecurityHttpTest {
   /** 보안 규칙만 확인하려는 가짜 API. */
   @RestController
   static class Probe {
+
+    @GetMapping("/api/v1/listings")
+    String listings(Authentication authentication) {
+      return authentication == null ? "anonymous" : authentication.getName();
+    }
 
     @GetMapping("/api/v1/probe")
     String read() {
@@ -160,6 +173,47 @@ class SecurityHttpTest {
         .andExpect(status().isUnauthorized());
   }
 
+  /** 관리자 HTML 탐색은 인증 전 공개 복구 화면으로 이동하며, 관리자 콘텐츠를 직접 제공하지 않는다. */
+  @ParameterizedTest
+  @ValueSource(strings = {"/admin", "/admin/", "/admin.html", "/pages/admin.html"})
+  void sendsUnauthenticatedAdminHtmlNavigationToSessionRecovery(String path) throws Exception {
+    mvc.perform(get(path).header(HttpHeaders.ACCEPT, "text/html"))
+        .andExpect(status().isFound())
+        .andExpect(header().string(HttpHeaders.LOCATION, "/?returnTo=admin"))
+        .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"));
+  }
+
+  /** JWT 인증 필터에서 먼저 실패한 만료 쿠키도 HTML 복구로 안내한다. */
+  @Test
+  void sendsAnExpiredAdminHtmlCookieToRecoveryWithoutUsingAReturnUrlFromTheRequest()
+      throws Exception {
+    mvc.perform(
+            get("/admin?returnTo=https://untrusted.invalid")
+                .header(HttpHeaders.ACCEPT, "text/html")
+                .cookie(accessCookie(token("jti-expired-admin", Instant.now().minusSeconds(120)))))
+        .andExpect(status().isFound())
+        .andExpect(header().string(HttpHeaders.LOCATION, "/?returnTo=admin"));
+  }
+
+  /** API의 401과 인증된 일반 회원의 403은 로그인 복구 리다이렉트로 바꾸지 않는다. */
+  @Test
+  void preservesAdminApiUnauthorizedAndNonAdminHtmlForbidden() throws Exception {
+    mvc.perform(get("/api/v1/admin/trades").header(HttpHeaders.ACCEPT, "text/html"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(header().doesNotExist(HttpHeaders.LOCATION));
+    mvc.perform(
+            get("/admin")
+                .header(HttpHeaders.ACCEPT, "application/json")
+                .cookie(new Cookie(SecurityConfig.ACCESS_TOKEN_COOKIE, "forged")))
+        .andExpect(status().isUnauthorized());
+    mvc.perform(
+            get("/admin")
+                .header(HttpHeaders.ACCEPT, "text/html")
+                .cookie(accessCookie("jti-non-admin")))
+        .andExpect(status().isForbidden())
+        .andExpect(header().doesNotExist(HttpHeaders.LOCATION));
+  }
+
   /** 로그아웃한 토큰은 유효 기간이 남아 있어도 401이다. */
   @Test
   void rejectsALoggedOutAccessCookie() throws Exception {
@@ -173,6 +227,41 @@ class SecurityHttpTest {
   @Test
   void acceptsAValidAccessCookieForReads() throws Exception {
     mvc.perform(get("/api/v1/probe").cookie(accessCookie("jti-ok"))).andExpect(status().isOk());
+  }
+
+  @Test
+  void publicListRecognizesAValidCookieButDoesNotKeepItForTheNextAnonymousRequest()
+      throws Exception {
+    mvc.perform(get("/api/v1/listings").cookie(accessCookie("jti-public-list")))
+        .andExpect(status().isOk())
+        .andExpect(content().string("7"));
+    mvc.perform(get("/api/v1/listings"))
+        .andExpect(status().isOk())
+        .andExpect(content().string("anonymous"));
+  }
+
+  @Test
+  void publicListTreatsExpiredMalformedAndLoggedOutCookiesAsAnonymous() throws Exception {
+    when(BLOCKLIST.isBlocked("jti-public-blocked")).thenReturn(true);
+    for (String value :
+        new String[] {
+          "not-a-valid-jwt",
+          token("jti-public-expired", Instant.now().minusSeconds(120)),
+          token("jti-public-blocked")
+        }) {
+      mvc.perform(get("/api/v1/listings").cookie(accessCookie(value)))
+          .andExpect(status().isOk())
+          .andExpect(content().string("anonymous"));
+    }
+  }
+
+  @Test
+  void publicListStillRejectsAnInvalidExplicitBearerEvenWithAValidCookie() throws Exception {
+    mvc.perform(
+            get("/api/v1/listings")
+                .cookie(accessCookie("jti-public-cookie"))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer invalid"))
+        .andExpect(status().isUnauthorized());
   }
 
   /** 배포용 HTTPS 응답에만 HSTS 헤더가 붙는다. */

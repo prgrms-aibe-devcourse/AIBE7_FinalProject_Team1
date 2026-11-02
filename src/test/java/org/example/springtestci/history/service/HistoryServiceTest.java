@@ -26,6 +26,7 @@ import org.example.springtestci.history.dto.VoidHistoryEventRequest;
 import org.example.springtestci.history.entity.HistoryEventStatus;
 import org.example.springtestci.history.entity.HistoryEventType;
 import org.example.springtestci.history.repository.HistoryRepository;
+import org.example.springtestci.history.repository.HistoryRepository.HistoryChangeRecord;
 import org.example.springtestci.history.repository.HistoryRepository.HistoryEventRecord;
 import org.example.springtestci.history.repository.HistoryRepository.ProductSpecifications;
 import org.example.springtestci.product.event.ProductFactsChanged;
@@ -87,6 +88,30 @@ class HistoryServiceTest {
     verify(historyRepository).linkDocuments(EVENT, List.of(31L));
     verify(historyRepository).incrementFactsVersion(PRODUCT);
     verify(events).publishEvent(new ProductFactsChanged(PRODUCT));
+  }
+
+  @Test
+  void createIsBlockedWhileAnExternalDirectTransferIsPending() {
+    CreateHistoryEventRequest request =
+        new CreateHistoryEventRequest(
+            HistoryEventType.INSPECTION,
+            LocalDate.of(2026, 10, 19),
+            "승계 전 점검",
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of());
+    when(historyRepository.lockOwnedProduct(PRODUCT, OWNER)).thenReturn(true);
+    when(historyRepository.hasPendingDirectTransfer(PRODUCT)).thenReturn(true);
+
+    CommonException exception =
+        assertThrows(CommonException.class, () -> historyService.create(OWNER, PRODUCT, request));
+
+    assertEquals(ErrorCode.HISTORY_REGISTRATION_BLOCKED, exception.errorCode());
+    verify(historyRepository, never()).insertEvent(anyLong(), anyLong(), any(), any(), any());
+    verifyNoInteractions(events);
   }
 
   @Test
@@ -362,7 +387,7 @@ class HistoryServiceTest {
     HistoryEventRecord currentOwnerEvent = eventWithAuthor(OWNER);
     when(historyRepository.existsOwnedProduct(PRODUCT, OWNER)).thenReturn(true);
     when(historyRepository.findDocumentIds(PRODUCT)).thenReturn(Map.of());
-    when(historyRepository.findLatestChanges(PRODUCT)).thenReturn(Map.of());
+    when(historyRepository.findChanges(PRODUCT)).thenReturn(Map.of());
     when(historyRepository.findTimeline(PRODUCT))
         .thenReturn(List.of(previousOwnerEvent, transferEvent(), currentOwnerEvent));
 
@@ -375,6 +400,43 @@ class HistoryServiceTest {
     assertEquals(false, timeline.get(0).editable());
     assertEquals(false, timeline.get(1).editable());
     assertEquals(true, timeline.get(2).editable());
+  }
+
+  @Test
+  void timelineReturnsEveryCorrectionBeforeTheVoidReasonInOrder() {
+    when(historyRepository.existsOwnedProduct(PRODUCT, OWNER)).thenReturn(true);
+    when(historyRepository.findDocumentIds(PRODUCT)).thenReturn(Map.of());
+    when(historyRepository.findTimeline(PRODUCT)).thenReturn(List.of(voidedEvent()));
+    when(historyRepository.findChanges(PRODUCT))
+        .thenReturn(
+            Map.of(
+                EVENT,
+                List.of(
+                    new HistoryChangeRecord(
+                        "HISTORY_CORRECTED",
+                        "발생일 정정",
+                        OffsetDateTime.parse("2026-10-20T01:00:00Z")),
+                    new HistoryChangeRecord(
+                        "HISTORY_CORRECTED", "제목 정정", OffsetDateTime.parse("2026-10-20T02:00:00Z")),
+                    new HistoryChangeRecord(
+                        "HISTORY_VOIDED", "중복 이력", OffsetDateTime.parse("2026-10-20T03:00:00Z")))));
+
+    var response = historyService.timeline(OWNER, PRODUCT).get(0);
+
+    assertEquals(
+        List.of("발생일 정정", "제목 정정", "중복 이력"),
+        response.changes().stream().map(change -> change.reason()).toList());
+    assertEquals(
+        List.of("HISTORY_CORRECTED", "HISTORY_CORRECTED", "HISTORY_VOIDED"),
+        response.changes().stream().map(change -> change.action()).toList());
+    assertEquals(
+        List.of(
+            OffsetDateTime.parse("2026-10-20T01:00:00Z"),
+            OffsetDateTime.parse("2026-10-20T02:00:00Z"),
+            OffsetDateTime.parse("2026-10-20T03:00:00Z")),
+        response.changes().stream().map(change -> change.changedAt()).toList());
+    assertEquals("HISTORY_VOIDED", response.changeAction());
+    assertEquals("중복 이력", response.changeReason());
   }
 
   @Test

@@ -52,6 +52,13 @@ public class DocumentExtractionService {
     if (aiExtractor == null) {
       throw new CommonException(ErrorCode.DOCUMENT_AI_UNAVAILABLE);
     }
+    Long productId =
+        documentRepository
+            .findProductIdById(documentId)
+            .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND));
+    if (!productOwnerReader.lockOwnerId(productId).filter(userId::equals).isPresent()) {
+      throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
+    }
     Document document =
         documentRepository
             .findByIdForUpdate(documentId)

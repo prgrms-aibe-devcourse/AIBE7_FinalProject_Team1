@@ -1,38 +1,17 @@
-<div class="sc-head">
-  <div><span class="eyebrow">소유권 이전 받기</span><h1>제품을 이어받으시겠어요?</h1><p>실제로 제품을 받은 뒤에 수락해 주세요.</p></div>
-</div>
-
+<div class="sc-head"><div><span class="eyebrow">외부 소유권 이전 받기</span><h1>제품을 이어받으시겠어요?</h1><p>제품을 실제로 받은 뒤 수락하세요. 현재 소유자의 최종 승인 후 이전이 완료됩니다.</p></div></div>
 <div class="rc">
   <section class="sc-card">
-    <div class="rc-prod">
-      <div class="laptop"></div>
-      <div><span class="eyebrow">제품 여권 인증 완료</span><h2>MacBook Pro 14″ M3 Pro</h2><p>Apple · 2024.02 구매 · M3 Pro · 18GB · 512GB</p></div>
-    </div>
-
-    <div class="rc-time"><span>이전 요청 만료까지</span><b>23:41:08</b></div>
-
-    <div class="rc-cols">
-      <div>
-        <h3>이어받는 정보</h3>
-        <ul class="sc-list"><li>제품 기본 정보·현재 사양</li><li>이전 소유자 포함 누적 핵심 이력</li><li>정정·무효 표시</li><li>개인정보를 가린 증빙 사본</li></ul>
-      </div>
-      <div>
-        <h3>전달되지 않는 정보</h3>
-        <ul class="sc-list no"><li>이름·연락처·주소</li><li>결제·계좌 정보</li><li>개인정보가 있는 원본</li><li>이전 소유자의 대화</li></ul>
-      </div>
-    </div>
-
-    <div class="sc-note info" style="margin-bottom:16px"><i>i</i><span>수락 전에는 비공개 이력과 증빙을 볼 수 없어요. 수락하면 새 소유자로 제품을 관리하고, 이전 기록은 수정·삭제할 수 없어요.</span></div>
-    <div style="display:grid;gap:8px">
-      <button class="sc-btn primary block" style="height:50px;font-size:15px">제품을 받았어요 · 소유권 이전 수락</button>
-      <button class="sc-btn block" data-page="market">공개 이력 먼저 보기</button>
+    <div class="rc-prod"><div class="laptop"></div><div><h2 data-receive-title>소유권 이전 요청 확인</h2><p data-receive-seller></p></div></div>
+    <div class="rc-time"><span>수락 · 로그인 이어가기 가능 시간</span><b data-receive-time>확인 중</b></div>
+    <p data-receive-expiration></p>
+    <p data-receive-message role="status">이전 링크를 확인하고 있습니다.</p>
+    <div class="sc-note info"><span>제품 기본 정보와 공개 가능한 핵심 이력을 이어받습니다. 이전 소유자의 원본 증빙·개인정보·대화·판매 초안은 전달되지 않습니다.</span></div>
+    <div class="ownership-actions">
+      <button class="sc-btn primary" type="button" data-receive-login hidden>로그인하고 돌아오기</button>
+      <button class="sc-btn primary" type="button" data-receive-accept disabled>제품을 받았어요 · 소유권 이전 수락</button>
+      <button class="sc-btn" type="button" data-receive-retry hidden>최신 상태 확인 · 다시 시도</button>
+      <button class="sc-btn" type="button" data-page="home" data-receive-home hidden>내 제품 확인</button>
+      <button class="sc-btn" type="button" data-page="market">마켓으로 돌아가기</button>
     </div>
   </section>
-
-  <aside class="rc-state">
-    <p class="sub" style="margin:0 0 -4px;font-weight:700;color:#62646b">이런 경우에는 이렇게 보여요</p>
-    <div class="sc-card"><span class="ic" style="background:var(--blue)">→</span><h3>로그인이 필요해요</h3><p>로그인하면 이 화면으로 바로 돌아와요.</p><button class="sc-btn sm" data-page="auth">로그인하기</button></div>
-    <div class="sc-card"><span class="ic" style="background:var(--warn)">!</span><h3>이미 내가 소유한 제품이에요</h3><p>본인 소유 제품은 이전을 수락할 수 없어요.</p></div>
-    <div class="sc-card"><span class="ic" style="background:var(--danger)">×</span><h3>만료되었거나 이미 사용된 링크예요</h3><p>판매자에게 새 링크 또는 QR 코드를 요청해 주세요. 같은 QR은 한 번만 쓸 수 있어요.</p></div>
-  </aside>
 </div>
