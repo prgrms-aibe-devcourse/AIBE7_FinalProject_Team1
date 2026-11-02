@@ -11,6 +11,7 @@ import java.util.Objects;
 import org.example.springtestci.auth.repository.UserRepository;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
+import org.example.springtestci.history.service.InternalTransferHistoryWriter;
 import org.example.springtestci.ownership.dto.AcceptTransferRequest;
 import org.example.springtestci.ownership.dto.AcceptTransferResponse;
 import org.example.springtestci.ownership.dto.CreateTransferRequest;
@@ -39,6 +40,7 @@ public class OwnershipTransferService {
   private final ProductRepository productRepository;
   private final UserRepository userRepository;
   private final TradeAuditRepository tradeAuditRepository;
+  private final InternalTransferHistoryWriter historyWriter;
   private final ApplicationEventPublisher events;
 
   public OwnershipTransferService(
@@ -46,11 +48,13 @@ public class OwnershipTransferService {
       ProductRepository productRepository,
       UserRepository userRepository,
       TradeAuditRepository tradeAuditRepository,
+      InternalTransferHistoryWriter historyWriter,
       ApplicationEventPublisher events) {
     this.transferRepository = transferRepository;
     this.productRepository = productRepository;
     this.userRepository = userRepository;
     this.tradeAuditRepository = tradeAuditRepository;
+    this.historyWriter = historyWriter;
     this.events = events;
   }
 
@@ -198,6 +202,11 @@ public class OwnershipTransferService {
     // 소유자 변경 및 이전 완료
     productRepository.updateOwner(transfer.getProductId(), actorId);
     transfer.complete(actorId, now);
+
+    // 소유자 변경과 같은 트랜잭션에서 개인정보 없는 시스템 이력을 남기고 누적 공개를 종료한다.
+    historyWriter.recordCompletedTransfer(
+        new InternalTransferHistoryWriter.Command(
+            transfer.getProductId(), transfer.getId(), transfer.getFromUserId(), actorId, now));
 
     // 초안 삭제처럼 필수인 후처리는 커밋 전에 실행한다. 실패하면 소유자·이전 상태도 함께 되돌린다.
     events.publishEvent(
