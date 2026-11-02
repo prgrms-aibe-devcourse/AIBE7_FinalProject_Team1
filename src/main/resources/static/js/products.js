@@ -204,6 +204,7 @@
       <div class="product-form-actions"><button class="button" type="button" data-product-edit-cancel>취소</button><button class="button primary" type="submit" data-product-edit-submit>변경 사항 저장</button></div>
     </form>`;
   };
+  /** 소유 제품의 상세 정보와 이미지·문서·이력 관리 컨트롤을 렌더링한다. */
   const renderDetail = (product) => {
     const container = document.querySelector('#passport [data-product-detail]');
     const status = document.querySelector('#passport [data-product-detail-status]');
@@ -218,6 +219,12 @@
         <div class="product-gallery-wrap"><div class="product-gallery">${firstImage
           ? `<img data-product-gallery-main data-protected-image="${escapeHtml(firstImage.url)}" alt="${escapeHtml(product.title)} 제품 이미지 1">`
           : '<div class="product-gallery-empty"><div class="laptop" aria-hidden="true"></div></div>'}</div>
+          <div class="product-gallery-tools">
+            ${images.length < 10 ? `<span>JPG, PNG, WEBP · 최대 ${10 - images.length}장 더 추가</span>
+            <label class="button primary" for="product-detail-images">＋ 이미지 추가</label>
+            <input id="product-detail-images" type="file" accept="image/jpeg,image/png,image/webp" multiple data-product-detail-images>`
+              : '<span>이미지는 최대 10장까지 등록할 수 있습니다.</span>'}
+          </div>
           ${images.length > 1 ? `<div class="product-thumbnails" aria-label="제품 이미지 선택">${images.map((image, index) => `<button type="button" data-product-thumbnail data-image-index="${index}" aria-label="${index + 1}번째 이미지" aria-pressed="${image.imageId === firstImage.imageId}"><img data-protected-image="${escapeHtml(image.url)}" alt=""></button>`).join('')}</div>` : ''}</div>
         <section class="product-detail-card">
           <div class="product-detail-top"><span class="eyebrow">PRODUCT PASSPORT · 내 제품</span><span><button class="button" type="button" data-product-edit-open>정보 수정</button> <button class="button" type="button" data-product-delete style="color:#e53e3e;border-color:#e53e3e">제품 삭제</button></span></div>
@@ -232,7 +239,7 @@
             <div class="product-fact"><span>등록일</span><b>${dateTime(product.createdAt)}</b></div>
             <div class="product-fact"><span>등록 이미지</span><b>${product.images?.length || 0}장</b></div>
           </div>
-          <button class="button primary" type="button" data-page="docmask" data-docmask-product-id="${escapeHtml(product.productId)}">증빙 문서 올리기</button>
+          <div class="product-document-actions"><button class="button primary" type="button" data-page="docmask" data-docmask-product-id="${escapeHtml(product.productId)}">증빙 문서 올리기</button><button class="button" type="button" data-product-documents-show>등록 문서 보기</button></div>
         </section>
       </div>
       <section class="product-spec-card" data-ownership-root aria-label="외부 소유권 이전"></section>
@@ -248,7 +255,6 @@
       </section>
       <section class="history-mount" data-history-root data-product-id="${product.productId}" aria-label="제품 이력"></section>
       ${images.length ? `<section class="product-image-manager"><h2>제품 이미지 관리</h2>${images.map((image, index) => `<div class="product-image-row"><span>${index + 1}번 이미지 ${image.primary ? '· 대표' : ''}</span><div><button class="button" type="button" data-image-move="up" data-image-id="${image.imageId}" ${index === 0 ? 'disabled' : ''}>앞으로</button><button class="button" type="button" data-image-move="down" data-image-id="${image.imageId}" ${index === images.length - 1 ? 'disabled' : ''}>뒤로</button><button class="button" type="button" data-image-primary data-image-id="${image.imageId}" ${image.primary ? 'disabled' : ''}>대표 지정</button><button class="button danger" type="button" data-image-delete data-image-id="${image.imageId}">삭제</button></div></div>`).join('')}</section>` : ''}
-      <section class="product-detail-upload"><div><h2>제품 이미지 추가</h2><p>JPG, PNG, WEBP · 장당 최대 5MB · 제품당 최대 10장</p></div><label class="button primary" for="product-detail-images">＋ 이미지 추가</label><input id="product-detail-images" type="file" accept="image/jpeg,image/png,image/webp" multiple data-product-detail-images></section>
       <section class="ph" data-product-history data-product-id="${escapeHtml(product.productId)}"></section>`;
     hydrateImages(container);
     hydrateDocuments(product.productId);
@@ -423,6 +429,10 @@
     if (product) state.selectedId = Number(product.dataset.productId);
     if (event.target.closest?.('[data-product-retry]')) openHome(true);
     if (event.target.closest?.('[data-product-detail-retry]')) openDetail();
+    if (event.target.closest?.('[data-product-documents-show]')) {
+      document.querySelector('[data-product-documents]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
     const documentOpen = event.target.closest?.('[data-product-document-open]');
     if (documentOpen) {
       try {
