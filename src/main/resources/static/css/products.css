@@ -19,7 +19,7 @@
 .product-icon-button:disabled{color:#fff;background:var(--blue);opacity:1}
 
 /* 구매·보증 일정과 상세 사양을 분리해 빠르게 훑을 수 있게 한다. */
-.product-detail-hero{grid-template-columns:minmax(280px,.9fr) 1.1fr}
+@media(min-width:781px){.product-detail-hero{grid-template-columns:minmax(280px,.9fr) 1.1fr}}
 .product-detail-card{display:flex;min-height:320px;flex-direction:column;padding:28px;border-radius:11px}
 .product-detail-card h1{margin:42px 0 7px;font-size:28px}
 .product-passport-summary{display:flex;align-items:center;gap:10px;margin-top:auto;padding-top:22px;border-top:1px solid var(--line)}
