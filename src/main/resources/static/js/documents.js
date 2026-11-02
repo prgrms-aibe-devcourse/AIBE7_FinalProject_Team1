@@ -1,6 +1,7 @@
 // 문서 보관함: 내 제품 목록과 제품별 업로드 문서를 실제 API로 보여 준다.
 (() => {
   const state = { products: [], selected: null, token: 0 };
+  let openSeq = 0;
   const root = () => document.querySelector('#documents');
   const find = selector => root()?.querySelector(selector);
   const create = (tag, text, className = '') => {
@@ -84,12 +85,15 @@
   /** 문서 화면 진입 때 모든 소유 제품을 읽고 기존 선택을 유지한 채 문서 목록을 연다. */
   async function open() {
     if (!root() || !find('[data-docs-products]')) return;
+    const seq = ++openSeq;
     status('문서를 불러오는 중이에요…');
     try {
-      state.products = await loadAllProducts();
+      const loadedProducts = await loadAllProducts();
+      if (seq !== openSeq) return;
+      state.products = loadedProducts;
       if (!state.products.some(item => item.productId === state.selected)) state.selected = state.products[0]?.productId ?? null;
       products(); await loadDocuments();
-    } catch (error) { status(error.message, true); }
+    } catch (error) { if (seq === openSeq) status(error.message, true); }
   }
   document.addEventListener('pastport:page-loaded', event => { if (event.detail.id === 'documents' && root().classList.contains('active')) open(); });
   document.addEventListener('pastport:page-shown', event => { if (event.detail.id === 'documents') open(); });

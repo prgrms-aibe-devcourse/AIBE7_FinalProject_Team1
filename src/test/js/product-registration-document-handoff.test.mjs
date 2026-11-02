@@ -5,6 +5,7 @@ import fs from 'node:fs';
 const registerPage = fs.readFileSync('src/main/resources/static/pages/register.html', 'utf8');
 const products = fs.readFileSync('src/main/resources/static/js/products.js', 'utf8');
 const docMask = fs.readFileSync('src/main/resources/static/js/doc-mask.js', 'utf8');
+const documents = fs.readFileSync('src/main/resources/static/js/documents.js', 'utf8');
 
 test('등록 화면은 자동 입력 미제공과 등록 후 문서 연결을 정확히 안내한다', () => {
   assert.match(registerPage, /자동 입력은 아직 제공하지 않아요/);
@@ -29,4 +30,26 @@ test('제품 목록 로딩 실패 시 등록 화면에서 인계한 원본을 �
   const clearPending = docMask.indexOf('pendingFile = null;', loadedGuard);
   assert.ok(loadedGuard >= 0, '제품 목록 로딩 실패 분기가 있어야 한다');
   assert.ok(clearPending > loadedGuard, '제품 목록 성공을 확인한 뒤에만 인계 원본을 비워야 한다');
+});
+
+test('마스킹 화면은 이전 진입의 제품 목록 응답을 반영하지 않는다', () => {
+  const loadProducts = docMask.indexOf('async function loadProducts(wanted)');
+  const versionCapture = docMask.indexOf('const version = entryVersion;', loadProducts);
+  const request = docMask.indexOf('await api(`/api/v1/products?page=${page}&size=100`)', versionCapture);
+  const staleGuard = docMask.indexOf('if (version !== entryVersion) return false;', request);
+  const updateOptions = docMask.indexOf("setOptions('증빙을 연결할 제품을 선택해 주세요', products);", staleGuard);
+  assert.ok(versionCapture > loadProducts, '제품 목록 요청은 화면 진입 버전을 보관해야 한다');
+  assert.ok(staleGuard > request && staleGuard < updateOptions, '이전 진입 응답은 드롭다운 갱신 전에 중단해야 한다');
+});
+
+test('문서함은 가장 최근 화면 진입의 제품 목록만 반영한다', () => {
+  const sequenceDeclaration = documents.indexOf('let openSeq = 0;');
+  const open = documents.indexOf('async function open()');
+  const sequenceCapture = documents.indexOf('const seq = ++openSeq;', open);
+  const request = documents.indexOf('const loadedProducts = await loadAllProducts();', sequenceCapture);
+  const staleGuard = documents.indexOf('if (seq !== openSeq) return;', request);
+  const stateUpdate = documents.indexOf('state.products = loadedProducts;', staleGuard);
+  assert.ok(sequenceDeclaration >= 0, '문서함 진입 순서를 추적해야 한다');
+  assert.ok(sequenceCapture > open && request > sequenceCapture, '각 진입 요청에 순번을 부여해야 한다');
+  assert.ok(staleGuard > request && staleGuard < stateUpdate, '이전 요청은 문서함 상태 갱신 전에 중단해야 한다');
 });
