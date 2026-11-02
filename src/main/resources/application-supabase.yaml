@@ -13,6 +13,8 @@ spring:
         tcpKeepAlive: true
   flyway:
     enabled: true
+    # db/deploy: 정식 경로에 없는 거래·이력 DDL을 멱등하게 보완한다(상세는 docs/FLYWAY_DEPLOY_REPAIR.md).
+    locations: classpath:db/migration,classpath:db/deploy
   jpa:
     hibernate:
       ddl-auto: validate
