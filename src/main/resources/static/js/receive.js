@@ -65,6 +65,13 @@
       const response = await window.PastportApi.fetch(`/api/v1/ownership/transfers/verify?token=${encodeURIComponent(currentToken)}`, { cache: 'no-store', referrerPolicy: 'no-referrer' });
       const payload = await response.json().catch(() => null);
       if (requestVersion !== version) return;
+      if (response.status === 401) {
+        // 이전 정보 조회는 로그인이 필요하다. 토큰은 지우지 않고 로그인 버튼을 보여 로그인 뒤 같은 이전으로 돌아온다.
+        info = null;
+        status('이전 정보를 확인하려면 로그인이 필요해요. 로그인하면 같은 이전으로 돌아옵니다.');
+        const login = find('[data-receive-login]'); if (login) login.hidden = false;
+        return;
+      }
       if (!response.ok) {
         status(response.status >= 500 ? '일시적인 서버 오류입니다. 다시 시도해 주세요.' : '유효하지 않거나 종료된 이전 링크입니다.', response.status >= 500);
         if (response.status < 500) clearToken();

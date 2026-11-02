@@ -69,8 +69,11 @@
 #sell .sl-preview-head h2{font-size:22px;margin:0}
 #sell .sl-preview-notice{padding:12px 16px;border-radius:8px;background:var(--soft);font-size:13px;line-height:1.7}
 #sell .sl-preview .listing-detail{grid-template-columns:minmax(0,1fr) 300px;margin-top:24px}
-.listing-detail .dt-stage{height:300px;overflow:hidden}
-.listing-detail .dt-stage img{width:100%;height:100%;object-fit:contain}
+/* 사진은 가로 폭에 맞춰 전체를 보여 준다. 세로로 아주 긴 사진은 잘라 내지 않고 영역 안에서 아래로 스크롤해 본다. */
+.listing-detail .dt-stage{height:auto;min-height:200px;max-height:560px;overflow-y:auto;overflow-x:hidden;align-items:start;place-items:start center}
+.listing-detail .dt-stage img{display:block;width:auto;max-width:100%;height:auto}
+.listing-detail .dt-stage>.sub{align-self:center;padding:24px}
+@media(max-width:780px){.listing-detail .dt-stage{max-height:420px}}
 .listing-detail-thumbs{display:flex;gap:8px;flex-wrap:wrap}
 .listing-detail-thumbs button[aria-pressed=true]{border-color:var(--blue);background:var(--soft);color:var(--blue)}
 .listing-detail-description{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.8}

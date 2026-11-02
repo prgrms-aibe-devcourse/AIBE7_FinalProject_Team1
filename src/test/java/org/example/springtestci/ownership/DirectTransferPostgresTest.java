@@ -347,7 +347,7 @@ class DirectTransferPostgresTest {
       default -> {}
     }
     var before = snapshot();
-    var verification = direct.verifyTransfer(transfer.rawToken());
+    var verification = direct.verifyTransfer(2, transfer.rawToken());
     assertThat(verification.canAccept()).isEqualTo(state.equals("valid"));
     assertThat(verification.isExpired()).isEqualTo(state.equals("expired"));
     if (!state.equals("valid")) {
@@ -359,7 +359,7 @@ class DirectTransferPostgresTest {
 
   @Test
   void p5A03InvalidAndInternalTokensNeverExposeOrMutateInternalTransfer() {
-    error(() -> direct.verifyTransfer("not-a-token"), ErrorCode.OWNERSHIP_NOT_FOUND);
+    error(() -> direct.verifyTransfer(2, "not-a-token"), ErrorCode.OWNERSHIP_NOT_FOUND);
     jdbc.update("UPDATE listings SET status='ACTIVE',active_slot=1 WHERE id=301");
     purchases.accept(701, 1);
     String token = "synthetic-internal-not-issued";
@@ -368,7 +368,7 @@ class DirectTransferPostgresTest {
         OwnershipTransferService.hashToken(token),
         java.sql.Timestamp.from(testClock.instant().minus(Duration.ofDays(2))));
     var before = snapshot();
-    error(() -> direct.verifyTransfer(token), ErrorCode.OWNERSHIP_NOT_FOUND);
+    error(() -> direct.verifyTransfer(2, token), ErrorCode.OWNERSHIP_NOT_FOUND);
     error(
         () -> direct.acceptTransfer(2, new AcceptTransferRequest(token)),
         ErrorCode.OWNERSHIP_TRANSFER_BLOCKED);
@@ -405,7 +405,7 @@ class DirectTransferPostgresTest {
   void p5A04ExactExpiryBoundaryIsDeterministicAndReissueReleasesOnlyExpiredDirect(long nanos) {
     var first = issue(2L);
     testClock.set(first.expiresAt().plusNanos(nanos));
-    assertThat(direct.verifyTransfer(first.rawToken()).isExpired()).isEqualTo(nanos >= 0);
+    assertThat(direct.verifyTransfer(2, first.rawToken()).isExpired()).isEqualTo(nanos >= 0);
     var before = snapshot();
     if (nanos < 0) {
       error(() -> issue(null), ErrorCode.OWNERSHIP_ALREADY_PENDING);
@@ -511,7 +511,7 @@ class DirectTransferPostgresTest {
             "GET",
             "/api/v1/ownership/transfers/verify?token=" + transfer.rawToken(),
             null,
-            0,
+            2,
             false,
             false);
     assertThat(verify.statusCode()).isEqualTo(200);

@@ -111,6 +111,27 @@ class DocumentServiceTest {
   }
 
   @Test
+  void 다운로드_시점에_현재_소유자가_아니면_파일_접근을_거부한다() {
+    when(documentRepository.findByObjectKey("documents/100/k.pdf"))
+        .thenReturn(Optional.of(document(OWNER)));
+    ownerIs(OWNER);
+
+    service.requireCurrentOwnerOfFile("documents/100/k.pdf", OWNER);
+    assertEquals(
+        ErrorCode.RESOURCE_NOT_FOUND,
+        errorOf(() -> service.requireCurrentOwnerOfFile("documents/100/k.pdf", OTHER)));
+  }
+
+  @Test
+  void 문서에_없는_저장_키는_다운로드할_수_없다() {
+    when(documentRepository.findByObjectKey("documents/100/none.pdf")).thenReturn(Optional.empty());
+
+    assertEquals(
+        ErrorCode.RESOURCE_NOT_FOUND,
+        errorOf(() -> service.requireCurrentOwnerOfFile("documents/100/none.pdf", OWNER)));
+  }
+
+  @Test
   void 마스킹을_확인하지_않으면_업로드할_수_없다() {
     assertEquals(ErrorCode.MASKING_NOT_CONFIRMED, errorOf(() -> upload(OWNER, false)));
     verify(documentRepository, never()).save(any());

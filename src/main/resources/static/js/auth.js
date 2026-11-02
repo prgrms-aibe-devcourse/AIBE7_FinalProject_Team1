@@ -96,6 +96,23 @@ const auth = (() => {
       if (el) el.textContent = value;
     });
     renderAvatar(member);
+    renderOwnedCount(member);
+  };
+
+  /** 현재 소유 제품 수를 제품 목록 API(이전된 제품 제외)로 세어 보여준다. 실패하면 숫자 대신 안내만 남긴다. */
+  const renderOwnedCount = async (member) => {
+    const el = member.querySelector('[data-mp-field="ownedCount"]');
+    if (!el) return;
+    const owner = user?.id;
+    el.textContent = '보유 제품 확인 중…';
+    try {
+      const response = await (window.PastportApi?.fetch || fetch)('/api/v1/products', { credentials: 'same-origin', cache: 'no-store' });
+      const payload = await response.json().catch(() => null);
+      if (user?.id !== owner) return;
+      el.textContent = response.ok && Array.isArray(payload?.data) ? `보유 제품 ${payload.data.length}개` : '보유 제품 수를 불러오지 못했어요.';
+    } catch {
+      if (user?.id === owner) el.textContent = '보유 제품 수를 불러오지 못했어요.';
+    }
   };
 
   // 프로필 사진: 서버 저장 API가 아직 없어 이 브라우저(localStorage)에 계정별로 축소본만 보관한다.

@@ -91,6 +91,9 @@ public class SecurityConfig {
                     .access(
                         (authentication, context) ->
                             new AuthorizationDecision(adminAccess.allowed(authentication.get())))
+                    // 문서 임시 URL은 서명만으로 열지 않고 로그인과 현재 소유권을 함께 확인한다.
+                    .requestMatchers("/local-files")
+                    .authenticated()
                     .requestMatchers(
                         "/",
                         "/index.html",
@@ -101,7 +104,6 @@ public class SecurityConfig {
                         "/js/**",
                         "/pages/**",
                         "/images/**",
-                        "/local-files",
                         "/error",
                         "/ws-stomp",
                         "/ws-stomp/**",
@@ -119,7 +121,6 @@ public class SecurityConfig {
                         HttpMethod.GET,
                         "/api/v1/listings",
                         "/api/v1/listings/*/thumbnail",
-                        "/api/v1/ownership/transfers/verify",
                         "/api/v1/products/*/events")
                     .permitAll()
                     .requestMatchers(
@@ -128,9 +129,7 @@ public class SecurityConfig {
                         "/api/auth/signup",
                         "/api/auth/login",
                         "/api/auth/refresh",
-                        "/api/auth/logout",
-                        "/api/v1/ai/ask",
-                        "/api/v1/ai/estimate-price")
+                        "/api/auth/logout")
                     .permitAll()
                     .anyRequest()
                     .authenticated())
