@@ -98,6 +98,18 @@ public class LocalFileStorage implements FileStorage {
     }
   }
 
+  public boolean isPublicImageKey(String key) {
+    if (key == null || !key.matches("product-images/[0-9]+/[A-Za-z0-9-]+\\.(png|jpg|jpeg|webp)"))
+      return false;
+    Path relative = Path.of(key).normalize();
+    return relative.toString().replace('\\', '/').equals(key)
+        && key.startsWith("product-images/")
+        && (key.endsWith(".png")
+            || key.endsWith(".jpg")
+            || key.endsWith(".jpeg")
+            || key.endsWith(".webp"));
+  }
+
   private void copy(String key, InputStream content) throws IOException {
     Path destination = resolve(key);
     try {
