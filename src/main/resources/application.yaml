@@ -53,11 +53,11 @@ app:
     listing-history:
       enabled: ${LISTING_HISTORY_ENABLED:false}
     trade-purchase-requests:
-      enabled: false
+      enabled: ${TRADE_PURCHASE_REQUESTS_ENABLED:false}
     trade-p3:
-      enabled: false
+      enabled: ${TRADE_P3_ENABLED:false}
     trade-p4:
-      enabled: false
+      enabled: ${TRADE_P4_ENABLED:false}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
   jwt:
