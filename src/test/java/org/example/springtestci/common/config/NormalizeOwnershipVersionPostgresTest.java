@@ -77,6 +77,7 @@ class NormalizeOwnershipVersionPostgresTest {
   private static DataSource legacyDatabase() {
     DataSource ds = dataSource(newSchemaName());
     Flyway.configure()
+        .configuration(java.util.Map.of("flyway.postgresql.transactional.lock", "false"))
         .dataSource(ds)
         .locations("classpath:db/migration", "classpath:db/fixtures/h40-legacy-general")
         .target("2026102802")
@@ -144,6 +145,7 @@ class NormalizeOwnershipVersionPostgresTest {
 
     // 정규화한 DB에 현재 마이그레이션(정식 + 배포 복구)을 올려도 이미 있는 소유권 테이블을 다시 만들지 않고 끝난다.
     Flyway.configure()
+        .configuration(java.util.Map.of("flyway.postgresql.transactional.lock", "false"))
         .dataSource(ds)
         .locations("classpath:db/migration", "classpath:db/deploy")
         .ignoreMigrationPatterns("*:*")
@@ -151,6 +153,7 @@ class NormalizeOwnershipVersionPostgresTest {
         .migrate();
     // 이력이 현재 파일과 어긋나지 않는지 무시 패턴 없이도 확인한다.
     Flyway.configure()
+        .configuration(java.util.Map.of("flyway.postgresql.transactional.lock", "false"))
         .dataSource(ds)
         .locations("classpath:db/migration", "classpath:db/deploy")
         .load()
@@ -171,6 +174,8 @@ class NormalizeOwnershipVersionPostgresTest {
             RuntimeException.class,
             () ->
                 Flyway.configure()
+                    .configuration(
+                        java.util.Map.of("flyway.postgresql.transactional.lock", "false"))
                     .dataSource(ds)
                     .locations("classpath:db/migration", "classpath:db/deploy")
                     .ignoreMigrationPatterns("*:*")
@@ -192,7 +197,12 @@ class NormalizeOwnershipVersionPostgresTest {
   @Test
   void 이미_현재_번호인_DB는_바꾸지_않는다() throws Exception {
     DataSource ds = dataSource(newSchemaName());
-    Flyway.configure().dataSource(ds).locations("classpath:db/migration").load().migrate();
+    Flyway.configure()
+        .configuration(java.util.Map.of("flyway.postgresql.transactional.lock", "false"))
+        .dataSource(ds)
+        .locations("classpath:db/migration")
+        .load()
+        .migrate();
     List<Map<String, Object>> before = history(ds);
 
     normalize(ds, schemaOf(ds));
@@ -204,6 +214,7 @@ class NormalizeOwnershipVersionPostgresTest {
   void 소유권_이력이_없는_DB는_바꿀_것이_없다() throws Exception {
     DataSource ds = dataSource(newSchemaName());
     Flyway.configure()
+        .configuration(java.util.Map.of("flyway.postgresql.transactional.lock", "false"))
         .dataSource(ds)
         .locations("classpath:db/migration")
         .target("2026102802")

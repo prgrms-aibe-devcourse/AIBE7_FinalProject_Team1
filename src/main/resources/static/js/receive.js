@@ -8,6 +8,7 @@
   let cleanupTimer = null;
   let busy = false;
   let version = 0;
+  let accountId = auth.user?.id == null ? null : String(auth.user.id);
   const root = () => document.querySelector('#receive .rc');
   const find = selector => root()?.querySelector(selector);
   const navigate = page => { if (typeof show === 'function') show(page); };
@@ -16,6 +17,9 @@
     clearInterval(timer); timer = null; clearTimeout(cleanupTimer); cleanupTimer = null;
     const login = find('[data-receive-login]'); if (login) login.hidden = true;
     const accept = find('[data-receive-accept]'); if (accept) accept.disabled = true;
+    const title = find('[data-receive-title]'); if (title) title.textContent = '소유권 이전 요청';
+    const seller = find('[data-receive-seller]'); if (seller) seller.textContent = '';
+    const expiration = find('[data-receive-expiration]'); if (expiration) expiration.textContent = '';
   };
   const save = () => {
     if (!currentToken) return;
@@ -44,7 +48,8 @@
     const expiration = find('[data-receive-expiration]'); if (expiration) expiration.textContent = `링크 만료: ${new Date(info.expiresAt).toLocaleString('ko-KR')}`;
     if (info.isExpired || info.status === 'EXPIRED') { status('만료된 링크입니다. 판매자에게 새 링크를 요청하세요.'); clearToken(); return; }
     if (info.status === 'CANCELLED') { status('취소된 이전 요청입니다. 판매자에게 새 링크를 요청하세요.'); clearToken(); return; }
-    if (info.status === 'COMPLETED') { status('이미 완료된 이전 요청입니다. 내 제품에서 현재 소유 제품을 확인하세요.'); clearToken(); return; }
+    if (info.status === 'COMPLETED') { status('이미 완료된 이전 요청입니다. 내 제품에서 현재 소유 제품을 확인하세요.'); clearToken(); const home = find('[data-receive-home]'); if (home) home.hidden = false; return; }
+    if (info.recipientAcceptedAt) { status('수락이 저장되었습니다. 현재 소유자의 최종 승인을 기다리고 있습니다.', true); return; }
     if (!info.canAccept) { status('현재 수락할 수 없습니다. 판매 중·소유자 변경 여부를 판매자에게 확인하세요.'); clearToken(); return; }
     save(); authState();
     const update = () => {
@@ -59,6 +64,11 @@
   const verify = async () => {
     if (!root() || busy) return;
     if (!currentToken || expiresAt <= Date.now()) { status('이전 링크가 없거나 이어가기 시간이 만료되었습니다. 판매자에게 받은 링크를 다시 열어 주세요.'); clearToken(); return; }
+    if (!auth.user) {
+      info = null;
+      status('로그인하면 같은 이전 요청으로 돌아옵니다. 로그인 후 제품과 발신자를 확인해 주세요.');
+      authState(); return;
+    }
     const requestVersion = ++version;
     status('이전 요청을 확인하고 있습니다.');
     try {
@@ -98,11 +108,10 @@
         if (['OWN_001', 'OWN_002', 'OWN_005'].includes(payload?.code)) clearToken();
         return;
       }
-      clearToken();
-      status('소유권 이전이 완료되었습니다. 내 제품에서 제품과 기록을 확인하세요.');
-      const home = find('[data-receive-home]'); if (home) home.hidden = false;
+      info = { ...info, canAccept: false, recipientAcceptedAt: payload.data.recipientAcceptedAt };
+      status('수락이 저장되었습니다. 현재 소유자의 최종 승인 후 이전이 완료됩니다.', true);
     } catch { if (requestVersion === version) status('응답을 받지 못했습니다. 중복 수락 전에 최신 상태를 다시 확인해 주세요.', true); }
-    finally { busy = false; }
+    finally { if (requestVersion === version) busy = false; }
   };
   const init = () => {
     find('[data-receive-accept]')?.addEventListener('click', accept);
@@ -118,8 +127,16 @@
     if (event.detail.id !== 'receive') return;
     init(); if (currentToken) navigate('receive');
   });
-  document.addEventListener('pastport:page-shown', event => { if (event.detail.id === 'receive') verify(); else { clearInterval(timer); timer = null; } });
-  document.addEventListener('pastport:auth-changed', authState);
+  document.addEventListener('pastport:page-shown', event => { if (event.detail.id === 'receive') verify(); else { version += 1; busy = false; info = null; clearInterval(timer); timer = null; } });
+  document.addEventListener('pastport:auth-changed', () => {
+    const nextAccount = auth.user?.id == null ? null : String(auth.user.id);
+    version += 1; busy = false; info = null;
+    if (accountId !== null && accountId !== nextAccount) clearToken();
+    accountId = nextAccount;
+    const title = find('[data-receive-title]'); if (title) title.textContent = '소유권 이전 요청';
+    const seller = find('[data-receive-seller]'); if (seller) seller.textContent = '';
+    authState(); if (currentToken && !busy) verify();
+  });
   document.addEventListener('pastport:logout', () => { version += 1; clearToken(); status('로그아웃되어 이전 정보가 지워졌습니다. 링크를 다시 열어 주세요.'); });
   window.addEventListener('pagehide', () => { version += 1; clearToken(); });
   if (root()) { init(); if (currentToken) navigate('receive'); }

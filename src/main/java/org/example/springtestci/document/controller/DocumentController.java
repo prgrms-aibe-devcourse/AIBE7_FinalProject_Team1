@@ -95,15 +95,35 @@ public class DocumentController {
   }
 
   @GetMapping("/documents/{documentId}/file-url")
-  ApiResponse<FileUrlResponse> fileUrl(
+  ResponseEntity<ApiResponse<FileUrlResponse>> fileUrl(
       @AuthenticationPrincipal Jwt jwt, @PathVariable Long documentId) {
-    return ApiResponse.success(documentService.createFileUrl(documentId, userId(jwt)));
+    return ResponseEntity.ok()
+        .cacheControl(org.springframework.http.CacheControl.noStore())
+        .header("Referrer-Policy", "no-referrer")
+        .body(ApiResponse.success(documentService.createFileUrl(documentId, userId(jwt))));
   }
 
   @DeleteMapping("/documents/{documentId}")
   ResponseEntity<Void> delete(@AuthenticationPrincipal Jwt jwt, @PathVariable Long documentId) {
     documentService.delete(documentId, userId(jwt));
     return ResponseEntity.noContent().build();
+  }
+
+  @GetMapping("/documents/{documentId}/file")
+  ResponseEntity<byte[]> download(
+      @AuthenticationPrincipal Jwt jwt,
+      @PathVariable Long documentId,
+      @RequestParam int version,
+      @RequestParam long expires,
+      @RequestParam String sig) {
+    var file = documentService.download(documentId, userId(jwt), version, expires, sig);
+    return ResponseEntity.ok()
+        .contentType(MediaType.parseMediaType(file.contentType()))
+        .header("Cache-Control", "no-store")
+        .header("X-Content-Type-Options", "nosniff")
+        .header("Referrer-Policy", "no-referrer")
+        .header("Content-Disposition", "inline; filename=\"document\"")
+        .body(file.bytes());
   }
 
   /** JWT subject를 사용자 ID로 사용한다. 인증 도메인이 확정되면 공통 컴포넌트로 옮긴다. */

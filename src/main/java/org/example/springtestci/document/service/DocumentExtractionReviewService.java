@@ -64,7 +64,7 @@ public class DocumentExtractionReviewService {
   /** 추출 결과를 버린다. 후보값은 비우고, 같은 문서에 다시 추출을 요청할 수 있게 된다. */
   @Transactional
   public DocumentExtraction reject(Long documentId, Long extractionId, Long userId) {
-    findOwnedDocument(documentId, userId);
+    findOwnedDocumentLockingProductFirst(documentId, userId);
     DocumentExtraction extraction = findForUpdate(documentId, extractionId);
     extraction.reject();
     return extraction;
@@ -78,12 +78,11 @@ public class DocumentExtractionReviewService {
 
   /** 제품 행을 먼저 잠근 뒤 문서 행을 잠근다. 잠금 순서는 확정에서 이력 저장까지 이어지는 흐름과 같다. */
   private Document findOwnedDocumentLockingProductFirst(Long documentId, Long userId) {
-    // 제품 ID를 알아야 제품을 잠글 수 있으므로 문서는 잠그지 않고 먼저 읽기만 한다.
+    // 엔티티를 먼저 로딩하면 잠금 대기 중 교체된 이전 버전이 영속성 컨텍스트에 남으므로 ID만 읽는다.
     Long productId =
         documentRepository
-            .findById(documentId)
-            .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND))
-            .getProductId();
+            .findProductIdById(documentId)
+            .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND));
     Long ownerId = productOwnerReader.lockOwnerId(productId).orElse(null);
     if (!userId.equals(ownerId)) {
       throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
@@ -91,19 +90,6 @@ public class DocumentExtractionReviewService {
     return documentRepository
         .findByIdForUpdate(documentId)
         .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND));
-  }
-
-  /** 다른 사람의 문서가 존재하는지 알려 주지 않기 위해 소유자가 아니면 404로 응답한다. */
-  private Document findOwnedDocument(Long documentId, Long userId) {
-    Document document =
-        documentRepository
-            .findByIdForUpdate(documentId)
-            .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND));
-    Long ownerId = productOwnerReader.findOwnerId(document.getProductId()).orElse(null);
-    if (!userId.equals(ownerId)) {
-      throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
-    }
-    return document;
   }
 
   private static boolean isEmpty(ExtractedFields f) {

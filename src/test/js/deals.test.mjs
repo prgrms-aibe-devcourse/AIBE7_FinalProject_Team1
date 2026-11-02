@@ -22,7 +22,7 @@ async function screen(override = () => undefined, active = 'deals') {
   env.add('section', { id: 'detail', className: 'page' + (active === 'detail' ? ' active' : '') });
   const grid = env.add('div', { className: 'dl' }, page);
   const nodes = {};
-  for (const name of ['rooms', 'scope', 'all', 'messages', 'completion', 'room-title', 'listing-status', 'info-title', 'info-price', 'info-trade-status', 'chat-section', 'info', 'request-buy', 'leave', 'back', 'input', 'send']) {
+  for (const name of ['rooms', 'scope', 'all', 'messages', 'completion', 'cancel-history', 'room-title', 'listing-status', 'info-title', 'info-price', 'info-trade-status', 'chat-section', 'info', 'request-buy', 'leave', 'back', 'input', 'send']) {
     nodes[name] = env.add(['leave', 'back', 'send', 'request-buy'].includes(name) ? 'button' : 'div', { ['data-deals-' + name]: '' }, grid);
   }
   env.window.PastportTradeCompletion = { clear() { state.cleared++; }, async mount() {} };
@@ -32,6 +32,56 @@ async function screen(override = () => undefined, active = 'deals') {
   await flush();
   return { ...env, state, nodes, grid, async select(index) { await nodes.rooms.children[index].emit('click'); } };
 }
+
+test('구매자의 대기 취소는 기존 API를 한 번 호출하고 응답 유실 뒤 CANCELLED를 재확인한다', async () => {
+  let cancelled = false;
+  const waiting = { requestId: 9, requestStatus: 'PENDING', transactionStatus: null, listingStatus: 'ACTIVE' };
+  const s = await screen((path, options) => {
+    if (path === '/api/v1/purchase-requests/9/cancel') { cancelled = true; throw new Error('응답 유실'); }
+    if (path === '/api/v1/purchase-requests/9') return { ...waiting, requestStatus: 'CANCELLED' };
+    if (path.includes('/purchase-requests?')) {
+      const url = new URL(path, 'http://test.invalid');
+      return { items: url.searchParams.get('direction') === 'SENT' && url.searchParams.get('status') === (cancelled ? 'CANCELLED' : 'PENDING') ? [{ ...waiting, requestStatus: cancelled ? 'CANCELLED' : 'PENDING' }] : [] };
+    }
+  });
+  await s.select(0);
+  const button = s.nodes.messages.querySelector('button');
+  assert.equal(button.textContent, '구매 요청 취소');
+  await Promise.all([button.emit('click'), button.emit('click')]); await flush();
+  assert.equal(s.calls.filter(call => call.path.endsWith('/9/cancel')).length, 1);
+  assert.ok(s.calls.some(call => call.path === '/api/v1/purchase-requests/9'));
+  assert.match(s.nodes['cancel-history'].textContent, /#9 구매 요청 취소/);
+  assert.doesNotMatch(s.nodes['cancel-history'].textContent, /취소자|시각/);
+});
+
+test('예약 취소는 사유·역할·시각을 표시하고 방향별 다음 페이지를 조회한다', async () => {
+  const s = await screen(path => {
+    if (!path.includes('/purchase-requests?')) return;
+    const url = new URL(path, 'http://test.invalid');
+    if (url.searchParams.get('status') !== 'CANCELLED' || url.searchParams.get('direction') !== 'SENT') return { items: [] };
+    const page = Number(url.searchParams.get('page'));
+    return { items: [{ requestId: page ? 8 : 9, requestStatus: 'CANCELLED', transactionStatus: 'CANCELLED', cancelledById: 1, cancelReason: 'SELF_CIRCUMSTANCES', cancelledAt: '2026-11-02T00:00:00Z' }], page: { number: page, totalPages: 2 } };
+  });
+  await s.select(0);
+  const history = s.nodes['cancel-history'];
+  assert.match(history.textContent, /#9 예약 취소 · 취소자 구매자 · 내 사정/);
+  await history.querySelector('button').emit('click'); await flush();
+  assert.match(history.textContent, /#8 예약 취소/);
+  assert.ok(s.calls.some(call => call.path.includes('direction=SENT') && call.path.includes('status=CANCELLED&page=1')));
+  await s.select(1); await flush();
+  assert.ok(s.calls.some(call => call.path.includes('roomId=2&status=CANCELLED&page=0')));
+});
+
+test('종료된 판매글도 취소 내역을 조회하고 대기 취소 조작은 남기지 않는다', async () => {
+  const s = await screen((path, options, calls, state) => {
+    state.rooms = [{ ...room(1), listingStatus: 'CANCELLED' }];
+    if (path.includes('/purchase-requests?')) return { items: [], roomContext: { listingStatus: 'CANCELLED' } };
+  });
+  await s.select(0);
+  assert.ok(s.calls.some(call => call.path.includes('status=CANCELLED')));
+  assert.equal(s.nodes['request-buy'].hidden, true);
+  assert.equal(s.nodes.messages.querySelector('[data-deals-pending-card]'), null);
+});
 
 test('계정 A의 늦은 목록 성공은 계정 B의 목록을 덮지 않는다', async () => {
   const pending = deferred(); let first = true;

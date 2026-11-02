@@ -376,6 +376,23 @@ class ListingDraftOwnershipHttpTest {
                 request.header("X-XSRF-TOKEN", "transfer-csrf").build(),
                 HttpResponse.BodyHandlers.ofString())
             .statusCode());
+    assertEquals(1, count("listing_drafts", "product_id=101"));
+    assertEquals(1L, owner());
+    var approval =
+        HttpRequest.newBuilder(
+                URI.create(
+                    base + TRANSFERS + "/" + transfer.path("transferId").asLong() + "/approve"))
+            .header("Content-Type", "application/json")
+            .header("Cookie", "access_token=" + token(1) + "; XSRF-TOKEN=transfer-csrf")
+            .POST(HttpRequest.BodyPublishers.ofString(approvalBody()));
+    assertEquals(
+        403, HTTP.send(approval.build(), HttpResponse.BodyHandlers.ofString()).statusCode());
+    assertEquals(
+        200,
+        HTTP.send(
+                approval.header("X-XSRF-TOKEN", "transfer-csrf").build(),
+                HttpResponse.BodyHandlers.ofString())
+            .statusCode());
     assertEquals(0, count("listing_drafts", "product_id=101"));
   }
 
@@ -385,6 +402,14 @@ class ListingDraftOwnershipHttpTest {
       int expected,
       boolean waitsForCommit)
       throws Exception {
+    assertEquals(
+        200,
+        send(
+                "POST",
+                TRANSFERS + "/accept",
+                2,
+                JSON.writeValueAsString(Map.of("token", transfer.path("rawToken").asString())))
+            .statusCode());
     var entered = new CountDownLatch(1);
     var release = new CountDownLatch(1);
     BEFORE_AUDIT.set(
@@ -401,9 +426,9 @@ class ListingDraftOwnershipHttpTest {
     var acceptance =
         async(
             "POST",
-            TRANSFERS + "/accept",
-            2,
-            JSON.writeValueAsString(Map.of("token", transfer.path("rawToken").asString())));
+            TRANSFERS + "/" + transfer.path("transferId").asLong() + "/approve",
+            1,
+            approvalBody());
     try {
       assertTrue(entered.await(10, TimeUnit.SECONDS));
       var atLock = new CountDownLatch(1);
@@ -472,11 +497,27 @@ class ListingDraftOwnershipHttpTest {
   }
 
   private static HttpResponse<String> accept(JsonNode transfer, long user) throws Exception {
+    var consent =
+        send(
+            "POST",
+            TRANSFERS + "/accept",
+            user,
+            JSON.writeValueAsString(Map.of("token", transfer.path("rawToken").asString())));
+    if (consent.statusCode() != 200) return consent;
     return send(
         "POST",
-        TRANSFERS + "/accept",
-        user,
-        JSON.writeValueAsString(Map.of("token", transfer.path("rawToken").asString())));
+        TRANSFERS + "/" + transfer.path("transferId").asLong() + "/approve",
+        1,
+        approvalBody());
+  }
+
+  private static String approvalBody() {
+    return JSON.writeValueAsString(
+        Map.of(
+            "expectedRecipientId",
+            2L,
+            "expectedFactsVersion",
+            jdbc.queryForObject("SELECT facts_version FROM products WHERE id=101", Long.class)));
   }
 
   private static HttpResponse<String> send(String method, String path, long user, String body)

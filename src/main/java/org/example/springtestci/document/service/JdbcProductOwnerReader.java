@@ -15,7 +15,10 @@ public class JdbcProductOwnerReader implements ProductOwnerReader {
   @Override
   public Optional<Long> findOwnerId(Long productId) {
     return jdbcTemplate
-        .query("select owner_id from products where id = ?", (rs, i) -> rs.getLong(1), productId)
+        .query(
+            "select owner_id from products where id = ? and archived_at is null",
+            (rs, i) -> rs.getLong(1),
+            productId)
         .stream()
         .findFirst();
   }
@@ -24,7 +27,7 @@ public class JdbcProductOwnerReader implements ProductOwnerReader {
   public Optional<Long> lockOwnerId(Long productId) {
     return jdbcTemplate
         .query(
-            "select owner_id from products where id = ? for update",
+            "select owner_id from products where id = ? and archived_at is null for update",
             (rs, i) -> rs.getLong(1),
             productId)
         .stream()
