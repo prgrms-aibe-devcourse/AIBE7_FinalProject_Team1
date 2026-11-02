@@ -1,35 +1,57 @@
-<div class="page-title"><div><h1>마이페이지</h1><p>내 계정 정보와 자주 쓰는 메뉴를 한곳에서 확인하세요.</p></div></div>
-
 <div class="mp-guest sc-card" data-mp="guest" hidden>
   <h2>로그인이 필요해요</h2>
   <p>로그인하면 내 계정 정보를 볼 수 있어요.</p>
   <button type="button" class="sc-btn primary" data-page="auth">로그인하기</button>
 </div>
 
-<div data-mp="member" hidden>
-  <section class="sc-card mp-profile" aria-label="내 계정">
-    <span class="mp-avatar">
-      <img data-mp-img alt="내 프로필 사진" hidden>
-      <span data-mp-field="initial" aria-hidden="true"></span>
-    </span>
-    <div class="mp-who">
-      <strong data-mp-field="nickname"></strong>
-      <span data-mp-field="email"></span>
-      <span data-mp-field="ownedCount">보유 제품 확인 중…</span>
-      <div class="mp-photo-actions">
-        <label class="mp-photo-btn">사진 변경<input type="file" accept="image/png,image/jpeg,image/webp" data-mp-file hidden></label>
-        <button type="button" class="mp-photo-btn" data-mp-remove hidden>삭제</button>
+<div class="mp-layout" data-mp="member" hidden>
+  <div class="mp-main">
+    <section class="mp-summary" aria-label="내 계정">
+      <div class="mp-profile">
+        <span class="mp-avatar">
+          <img data-mp-img alt="내 프로필 사진" hidden>
+          <span data-mp-field="initial" aria-hidden="true"></span>
+        </span>
+        <div class="mp-who">
+          <strong><span data-mp-field="nickname"></span>님</strong>
+          <span data-mp-field="email"></span>
+          <div class="mp-photo-actions">
+            <label class="mp-photo-btn">사진 변경<input type="file" accept="image/png,image/jpeg,image/webp" data-mp-file hidden></label>
+            <button type="button" class="mp-photo-btn" data-mp-remove hidden>삭제</button>
+          </div>
+          <small class="mp-photo-msg" data-mp-msg hidden></small>
+        </div>
+        <button type="button" class="sc-btn" data-auth-logout>로그아웃</button>
       </div>
-      <small class="mp-photo-msg" data-mp-msg hidden></small>
-    </div>
-    <button type="button" class="sc-btn" data-auth-logout>로그아웃</button>
-  </section>
+      <dl class="mp-stats">
+        <div><dt>보유 제품</dt><dd data-mp-field="ownedCount">-</dd></div>
+        <div><dt>내 판매글</dt><dd data-mp-stat="listings">-</dd></div>
+        <div><dt>채팅방</dt><dd data-mp-stat="chats">-</dd></div>
+      </dl>
+    </section>
 
-  <section class="mp-menu" aria-label="바로가기">
-    <button type="button" class="sc-card mp-link" data-page="my-listings"><b>내 판매글</b><small>판매·예약·종료된 글을 확인하고 관리해요</small></button>
-    <button type="button" class="sc-card mp-link" data-page="home"><b>내 제품</b><small>등록한 제품과 여권을 확인해요</small></button>
-    <button type="button" class="sc-card mp-link" data-page="documents"><b>문서 보관함</b><small>영수증·보증서·수리 문서를 모아봐요</small></button>
-    <button type="button" class="sc-card mp-link" data-page="deals"><b>내 거래 · 채팅</b><small>문의부터 예약까지 한눈에 봐요</small></button>
-    <button type="button" class="sc-card mp-link" data-page="sell"><b>판매글 작성</b><small>제품 여권과 함께 판매글을 올려요</small></button>
-  </section>
+    <section class="mp-block" aria-labelledby="mp-chat-h">
+      <div class="mp-block-head"><h2 id="mp-chat-h">채팅 리스트</h2><button type="button" data-page="deals">더보기 ›</button></div>
+      <table class="mp-table">
+        <thead><tr><th>판매글</th><th>상대방</th><th>마지막 메시지</th></tr></thead>
+        <tbody data-mp-list="chats"><tr><td colspan="3" class="mp-empty-row">불러오는 중이에요…</td></tr></tbody>
+      </table>
+    </section>
+
+    <section class="mp-block" aria-labelledby="mp-listing-h">
+      <div class="mp-block-head"><h2 id="mp-listing-h">내 판매글</h2><button type="button" data-page="my-listings">더보기 ›</button></div>
+      <table class="mp-table">
+        <thead><tr><th>판매글</th><th>상태</th><th>가격</th></tr></thead>
+        <tbody data-mp-list="listings"><tr><td colspan="3" class="mp-empty-row">불러오는 중이에요…</td></tr></tbody>
+      </table>
+    </section>
+
+    <section class="mp-block" aria-labelledby="mp-product-h">
+      <div class="mp-block-head"><h2 id="mp-product-h">내 제품</h2><button type="button" data-page="home">더보기 ›</button></div>
+      <table class="mp-table">
+        <thead><tr><th>제품</th><th>제조사</th><th>구매일</th></tr></thead>
+        <tbody data-mp-list="products"><tr><td colspan="3" class="mp-empty-row">불러오는 중이에요…</td></tr></tbody>
+      </table>
+    </section>
+  </div>
 </div>

@@ -1,0 +1,34 @@
+/* 마이페이지: 왼쪽 안내 메뉴 + 요약 띠 + 표 형태 목록 (K Car 마이페이지 구성을 PastPort 색으로 옮김) */
+#mypage .mp-layout{display:block}
+#mypage .mp-layout[hidden]{display:none}
+.mp-main{min-width:0}
+
+#mypage .mp-summary{display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;padding:28px 32px;border-radius:8px;background:#f4f6f7}
+#mypage .mp-profile{display:flex;align-items:center;gap:18px;padding:0}
+#mypage .mp-who strong{font-size:20px}
+.mp-stats{display:flex;margin:0}
+.mp-stats>div{min-width:104px;padding:0 24px;text-align:center;border-left:1px solid #d9dde0}
+.mp-stats>div:first-child{border-left:0}
+.mp-stats dt{font-size:13px;color:#62646a}
+.mp-stats dd{margin:6px 0 0;font-size:28px;font-weight:700;letter-spacing:-.5px;color:var(--ink)}
+
+.mp-block{margin-top:44px}
+.mp-block-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.mp-block-head h2{margin:0;font-size:22px;letter-spacing:-.6px;color:var(--ink)}
+.mp-block-head button{font-size:13px;color:#62646a;background:none;border:0;cursor:pointer}
+.mp-block-head button:hover{color:var(--blue)}
+.mp-table{width:100%;border-collapse:collapse;border-top:2px solid var(--ink)}
+.mp-table th{padding:12px 8px;font-size:13px;font-weight:700;text-align:center;background:#fafbfb;border-bottom:1px solid var(--line)}
+.mp-table td{padding:14px 8px;font-size:14px;text-align:center;border-bottom:1px solid var(--line);color:var(--ink);overflow-wrap:anywhere}
+.mp-table td.mp-left{text-align:left}
+.mp-table .mp-empty-row{padding:36px 8px;color:#80848a}
+.mp-table tbody tr[data-page]{cursor:pointer}
+.mp-table tbody tr[data-page]:hover{background:#f4f9f9}
+.mp-empty-row .sc-btn{margin-top:12px}
+.mp-empty-row p{margin:0 0 4px}
+
+@media(max-width:900px){
+  #mypage .mp-summary{padding:20px}
+  .mp-stats{width:100%}
+  .mp-stats>div{flex:1;min-width:0;padding:0 8px}
+}

@@ -1,9 +1,12 @@
 /* 상단의 전체 분류와 현재 분류의 하위 메뉴를 구분한다. 메뉴 명칭과 순서는 같은 데이터에서 가져온다. */
-.app:not(.has-section-nav)>.side,#side[hidden]{display:none}
-.app:not(.has-section-nav)>.main{margin-left:0}
-.app:not(.has-section-nav)>.main>.top{display:none}
+/* 왼쪽 사이드바는 모든 화면에서 쓰지 않는다. 하위 메뉴는 상단 메뉴의 드롭다운으로 이동한다. */
+.app>.side,#side[hidden]{display:none!important}
+.app>.main{margin-left:0}
+.app>.main>.top{display:none}
+/* 모든 화면을 홈(.landing-shell)과 같은 폭 1220px로 가운데에 둔다. brand.css가 id 선택자로 1360px·왼쪽 정렬을 지정해 두어 같은 수준으로 덮어쓴다. 상세(#detail)는 자체 카드 폭을 유지한다. */
+.app>.main>:is(#home,#passport,#register,#documents,#market,#my-listings,#sell,#auth,#signup,#mypage,#docmask,#deals,#receive,#trade,#ai).page{max-width:1220px;margin-left:auto;margin-right:auto}
+/* 상단 메뉴의 밑줄(현재 메뉴 표시)은 쓰지 않는다. */
 .site-header .landing-nav .nav-item>button:after{transform:scaleX(0);transition:none}
-.site-header .landing-nav .nav-item>button.active:after{transform:scaleX(1)}
 #side{padding:28px 12px 104px;overflow-y:auto}
 .side-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin:0 12px 20px}
 .side-section-head p{margin:0 0 8px;font-size:12px;line-height:1.5;color:#5f6368}
