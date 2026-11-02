@@ -204,3 +204,25 @@ test('다음 칸이 멀리 떨어져 있으면 라벨 옆 덩어리까지만 가
   assert.equal(boxes.length, 1);
   assert.ok(boxes[0].x + boxes[0].w <= words[2].x0);
 });
+
+test('별표로 일부를 가린 카드번호도 가린다', () => {
+  const { findPiiBoxes, groupLines } = load();
+  const labeled = row(100, [['카', 0], ['드', 2], ['번호', 2], [':', 6], ['이', 6], ['7790686089……', 8]]);
+  const bare = row(200, [['3779880********', 0]]);
+  const grouped = row(300, [['1234-56**-****-7890', 0]]);
+  assert.deepEqual(kinds(findPiiBoxes(groupLines([...labeled, ...bare, ...grouped]))), ['카드번호', '카드번호', '카드번호']);
+});
+
+test('카드번호 라벨 뒤 값은 가리되 라벨은 가리지 않는다', () => {
+  const { findPiiBoxes, groupLines } = load();
+  const words = row(100, [['카드번호:', 0], ['3779880********', 8]]);
+  const boxes = findPiiBoxes(groupLines(words));
+  assert.deepEqual(kinds(boxes), ['카드번호']);
+  assert.ok(boxes[0].x >= words[1].x0 - 4);
+});
+
+test('숫자가 거의 없는 점선·승인금액은 카드번호로 보지 않는다', () => {
+  const { findPiiBoxes, groupLines } = load();
+  assert.equal(findPiiBoxes(groupLines(row(100, [['카드번호:', 0], ['…………', 8]]))).length, 0);
+  assert.equal(findPiiBoxes(groupLines(row(200, [['승인금액', 0], ['119,000원', 8]]))).length, 0);
+});
