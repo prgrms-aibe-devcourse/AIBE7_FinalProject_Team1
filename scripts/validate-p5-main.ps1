@@ -26,8 +26,8 @@ $env:REDIS_PASSWORD = ''
 $env:REDIS_SSL_ENABLED = 'false'
 if ($Mode -ne 'basic') {
     foreach ($resource in @('p5-main-postgres-20261102', 'p5-main-redis-20261102')) {
-        $label = & rdctl shell -- /usr/bin/docker inspect --format '{{index .Config.Labels "codex.task"}}' $resource
-        if ($LASTEXITCODE -ne 0 -or $label.Trim() -ne 'p5-main-20261102') { throw 'Dedicated container identity check failed.' }
+        $labels = & rdctl shell -- /usr/bin/docker inspect --format '{{json .Config.Labels}}' $resource
+        if ($LASTEXITCODE -ne 0 -or ($labels | ConvertFrom-Json).'codex.task' -ne 'p5-main-20261102') { throw 'Dedicated container identity check failed.' }
     }
     foreach ($prefix in @('OWN_INT_TEST', 'SALE_DRAFT_TEST')) {
         [Environment]::SetEnvironmentVariable($prefix + '_DB_URL', 'jdbc:postgresql://127.0.0.1:55452/sale_ai_test', 'Process')
