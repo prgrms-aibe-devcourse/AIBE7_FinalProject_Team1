@@ -34,16 +34,36 @@ systemd, JDK 17, local Valkey/Redis and Nginx. Create the `pastport` service acc
 `/etc/pastport/pastport.env` mode 0600. Install scripts root-owned, not writable
 by the service user. systemd loads the root-only env before dropping privileges.
 The service writes only its StateDirectory and private temp; port is loopback
-8080. Logs default to `/var/lib/pastport/logs` plus journal.
+8080. The checker fixes the application log to `/var/lib/pastport/logs/app.log`
+inside the writable StateDirectory, alongside journal logging.
 
 Env format is literal `KEY=value`, one key per line; no shell sourcing, interpolation,
 quotes or whitespace. Use independently generated high-entropy base64url secrets
 (32+ UTF-8 bytes). Run `bash deploy/scripts/check-env.sh <env-file>` as root.
 It outputs key names and SET/INVALID only, never partial values. Include all keys
 listed in its `required` array and `REDIS_PASSWORD` (explicit empty is permitted
-only for approved loopback Redis). AI flags must be explicit; no key is needed
-when disabled. Set `DOTENV_PATH=/etc/pastport/disabled.env` to avoid working-dir
-dotenv fallback. `prod,supabase` order is required so Supabase datasource wins.
+only for approved loopback Redis). AI flags must be explicit. This full-feature
+release always requires a nonempty `GEMINI_API_KEY`, even when optional AI flags
+are false: document extraction reads it directly. `AI_API_KEY` remains a listing
+AI fallback and does not replace the document extraction key. An intentionally
+AI-free limited deployment needs a separately reviewed feature/acceptance policy;
+do not bypass this gate with an empty key.
+
+Required production settings (the secret placeholder is not a deployable value):
+
+```ini
+GEMINI_API_KEY=<secret>
+LOG_FILE=/var/lib/pastport/logs/app.log
+DOTENV_PATH=/etc/pastport/disabled.env
+```
+
+The checker requires both paths exactly; alternate log paths conflict with
+`ProtectSystem=strict` / `ReadWritePaths=/var/lib/pastport`. The optional dotenv
+import target need not exist: its fixed disabled path prevents fallback to a
+stray `.env` in WorkingDirectory. Check results print only key names and status,
+not secret values, lengths, prefixes or even configured path values. Keep real
+values out of PRs, logs and command lines; use the approved root-only env file.
+`prod,supabase` order is required so Supabase datasource wins.
 Do not add static AWS credentials, JVM/JSON property overrides, debug/wire logging,
 alternate config locations or Flyway overrides to the approved environment.
 

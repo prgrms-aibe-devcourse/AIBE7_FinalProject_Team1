@@ -28,6 +28,13 @@ chmod +x "$temporary/bin/"*
 count=0
 pass() { count=$((count+1)); printf 'ok %s - %s\n' "$count" "$1"; }
 reject() { if "$@" >"$temporary/rejected" 2>&1; then printf 'unexpected success\n' >&2; exit 1; fi; }
+assert_no_values() {
+    local output=$1 fixture=$2 key value
+    while IFS='=' read -r key value; do
+        [[ -z $value ]] && continue
+        if grep -Fq -- "$value" "$output"; then printf 'value disclosed for %s\n' "$key" >&2; exit 1; fi
+    done < "$fixture"
+}
 env_file="$temporary/pastport.env"
 cat > "$env_file" <<'ENV'
 SPRING_PROFILES_ACTIVE=prod,supabase
@@ -55,12 +62,35 @@ TRADE_P3_ENABLED=false
 TRADE_P4_ENABLED=false
 AI_SUMMARY_ENABLED=false
 AI_LISTING_ENABLED=false
+GEMINI_API_KEY=synthetic-gemini-key-never-print
+LOG_FILE=/var/lib/pastport/logs/app.log
+DOTENV_PATH=/etc/pastport/disabled.env
 ENV
 chmod 600 "$env_file"
 bash "$scripts/check-env.sh" "$env_file" > "$temporary/env-output"
 ! grep -Eq 'NEVER_PRINT|synthetic|jdbc:|https://' "$temporary/env-output"
+assert_no_values "$temporary/env-output" "$env_file"
+for key in GEMINI_API_KEY LOG_FILE DOTENV_PATH; do grep -qx "$key: SET" "$temporary/env-output"; done
 pass 'valid env; no values printed'
 cp "$env_file" "$temporary/valid.env"
+for key in GEMINI_API_KEY LOG_FILE DOTENV_PATH; do
+    cp "$temporary/valid.env" "$env_file"
+    sed -i "/^$key=/d" "$env_file"
+    reject bash "$scripts/check-env.sh" "$env_file"
+    [[ $(cat "$temporary/rejected") == "$key: INVALID"$'\nRESULT: FAIL' ]]
+    assert_no_values "$temporary/rejected" "$temporary/valid.env"
+    pass "missing $key rejected without values"
+done
+for replacement in 'GEMINI_API_KEY=' 'LOG_FILE=' 'DOTENV_PATH=' 'LOG_FILE=/var/log/pastport/app.log' 'LOG_FILE=./logs/app.log' 'LOG_FILE=/tmp/pastport.log' 'DOTENV_PATH=.env' 'DOTENV_PATH=/var/lib/pastport/.env'; do
+    cp "$temporary/valid.env" "$env_file"
+    key=${replacement%%=*}; sed -i "/^$key=/d" "$env_file"; printf '%s\n' "$replacement" >> "$env_file"
+    reject bash "$scripts/check-env.sh" "$env_file"
+    [[ $(cat "$temporary/rejected") == "$key: INVALID"$'\nRESULT: FAIL' ]]
+    assert_no_values "$temporary/rejected" "$temporary/valid.env"
+    assert_no_values "$temporary/rejected" "$env_file"
+    pass "invalid $key rejected without values"
+done
+cp "$temporary/valid.env" "$env_file"
 printf 'JWT_SECRET=NEVER_PRINT_DUPLICATE\n' >> "$env_file"
 reject bash "$scripts/check-env.sh" "$env_file"
 ! grep -q NEVER_PRINT "$temporary/rejected"
