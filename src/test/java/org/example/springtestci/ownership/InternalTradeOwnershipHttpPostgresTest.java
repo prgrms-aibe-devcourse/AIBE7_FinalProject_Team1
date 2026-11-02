@@ -659,7 +659,7 @@ class InternalTradeOwnershipHttpPostgresTest {
             pending.attemptId(),
             queuedAt.minusSeconds(1),
             false,
-            queuedAt);
+            queuedAt.minusSeconds(1));
     var job = context.getBean(ListingSummaryStore.class).claim(pending);
     assertNotNull(job);
     var entered = new CountDownLatch(1);
