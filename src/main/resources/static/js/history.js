@@ -206,6 +206,7 @@
     state.documentRequestVersion += 1;
     root()?.querySelector('[data-history-form-slot]')?.replaceChildren();
   };
+  /** 이벤트 유형에 맞는 부품·사양 입력 영역과 필수 상태를 동기화한다. */
   const syncConditionalFields = (form) => {
     if (!form) return;
     const type = form.elements.eventType.value;
@@ -220,20 +221,22 @@
       : '부품 교체 사실을 기록하지 않고 현재 사양값만 바로잡거나 변경할 때 사용합니다.';
     syncSelectedSpec(form);
   };
-  const syncSelectedSpec = (form, clearPrevious = false) => {
+  /** 선택한 사양 입력만 표시하되 다른 사양에 입력한 값은 함께 제출할 수 있도록 보존한다. */
+  const syncSelectedSpec = (form) => {
     const selected = form.elements.specKey.value;
-    const previous = form.dataset.selectedSpec || '';
-    if (clearPrevious && previous && previous !== selected && !state.editingId) {
-      const previousInput = form.elements[previous];
-      if (previousInput) previousInput.value = '';
-    }
     form.dataset.selectedSpec = selected;
+    const specificationFields = form.querySelector('[data-history-spec-fields]');
     form.querySelectorAll('[data-history-spec-field]').forEach((field) => {
       field.hidden = field.dataset.historySpecField !== selected;
       const input = field.querySelector('input, select');
-      if (input) input.required = Boolean(selected) && field.dataset.historySpecField === selected;
+      if (input) {
+        input.required = !specificationFields.hidden
+          && Boolean(selected)
+          && field.dataset.historySpecField === selected;
+      }
     });
   };
+  /** 현재 이력 유형에서 사용 가능한 사양 입력값만 API 요청 객체로 만든다. */
   const specsPayload = (form) => {
     if (!['PART_REPLACEMENT', 'SPEC_CHANGE'].includes(form.elements.eventType.value)) return null;
     const values = {
@@ -378,7 +381,7 @@
   document.addEventListener('change', (event) => {
     const form = event.target.closest?.('[data-history-form]');
     if (form && event.target.name === 'eventType') syncConditionalFields(form);
-    if (form && event.target.name === 'specKey') syncSelectedSpec(form, true);
+    if (form && event.target.name === 'specKey') syncSelectedSpec(form);
   });
   document.addEventListener('submit', (event) => {
     const form = event.target.closest?.('[data-history-form]');

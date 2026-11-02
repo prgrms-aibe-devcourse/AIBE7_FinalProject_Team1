@@ -426,6 +426,15 @@ class HistoryServiceTest {
     assertEquals(
         List.of("발생일 정정", "제목 정정", "중복 이력"),
         response.changes().stream().map(change -> change.reason()).toList());
+    assertEquals(
+        List.of("HISTORY_CORRECTED", "HISTORY_CORRECTED", "HISTORY_VOIDED"),
+        response.changes().stream().map(change -> change.action()).toList());
+    assertEquals(
+        List.of(
+            OffsetDateTime.parse("2026-10-20T01:00:00Z"),
+            OffsetDateTime.parse("2026-10-20T02:00:00Z"),
+            OffsetDateTime.parse("2026-10-20T03:00:00Z")),
+        response.changes().stream().map(change -> change.changedAt()).toList());
     assertEquals("HISTORY_VOIDED", response.changeAction());
     assertEquals("중복 이력", response.changeReason());
   }

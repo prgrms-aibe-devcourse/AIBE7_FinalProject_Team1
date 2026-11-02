@@ -74,6 +74,14 @@ class HistoryRepositoryTest {
         "{\"title\":\"수정\"}",
         "중복 기록 무효화",
         "HISTORY_VOIDED");
+    jdbc.update(
+        "UPDATE audit_logs SET created_at = ? WHERE event_id = ? AND action = 'HISTORY_CORRECTED'",
+        OffsetDateTime.parse("2026-10-20T03:00:00Z"),
+        eventId);
+    jdbc.update(
+        "UPDATE audit_logs SET created_at = ? WHERE event_id = ? AND action = 'HISTORY_VOIDED'",
+        OffsetDateTime.parse("2026-10-20T01:00:00Z"),
+        eventId);
 
     assertEquals(eventId, historyRepository.findTimeline(productId).get(0).eventId());
     assertEquals(List.of(documentId), historyRepository.findDocumentIds(productId).get(eventId));

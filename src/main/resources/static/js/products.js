@@ -204,6 +204,7 @@
       <div class="product-form-actions"><button class="button" type="button" data-product-edit-cancel>취소</button><button class="button primary" type="submit" data-product-edit-submit>변경 사항 저장</button></div>
     </form>`;
   };
+  /** 소유 제품의 상세 정보와 이미지·문서·이력 관리 컨트롤을 렌더링한다. */
   const renderDetail = (product) => {
     const container = document.querySelector('#passport [data-product-detail]');
     const status = document.querySelector('#passport [data-product-detail-status]');
@@ -219,9 +220,10 @@
           ? `<img data-product-gallery-main data-protected-image="${escapeHtml(firstImage.url)}" alt="${escapeHtml(product.title)} 제품 이미지 1">`
           : '<div class="product-gallery-empty"><div class="laptop" aria-hidden="true"></div></div>'}</div>
           <div class="product-gallery-tools">
-            <span>JPG, PNG, WEBP · 최대 ${10 - images.length}장 더 추가</span>
+            ${images.length < 10 ? `<span>JPG, PNG, WEBP · 최대 ${10 - images.length}장 더 추가</span>
             <label class="button primary" for="product-detail-images">＋ 이미지 추가</label>
-            <input id="product-detail-images" type="file" accept="image/jpeg,image/png,image/webp" multiple data-product-detail-images>
+            <input id="product-detail-images" type="file" accept="image/jpeg,image/png,image/webp" multiple data-product-detail-images>`
+              : '<span>이미지는 최대 10장까지 등록할 수 있습니다.</span>'}
           </div>
           ${images.length > 1 ? `<div class="product-thumbnails" aria-label="제품 이미지 선택">${images.map((image, index) => `<button type="button" data-product-thumbnail data-image-index="${index}" aria-label="${index + 1}번째 이미지" aria-pressed="${image.imageId === firstImage.imageId}"><img data-protected-image="${escapeHtml(image.url)}" alt=""></button>`).join('')}</div>` : ''}</div>
         <section class="product-detail-card">

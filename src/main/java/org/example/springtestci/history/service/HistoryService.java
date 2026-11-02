@@ -336,6 +336,7 @@ public class HistoryService {
         List.of());
   }
 
+  /** 이벤트별 변경 기록 전체와 마지막 변경 요약을 권한 정보가 포함된 API 응답으로 변환한다. */
   private HistoryEventResponse toResponse(
       long ownerId,
       HistoryEventRecord event,
