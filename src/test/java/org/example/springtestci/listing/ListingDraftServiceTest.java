@@ -9,6 +9,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import org.example.springtestci.listing.repository.ListingDraftQueryRepository;
 import org.example.springtestci.listing.repository.ListingDraftRepository;
+import org.example.springtestci.listing.repository.ListingRepository;
 import org.example.springtestci.listing.service.ListingDraftService;
 import org.example.springtestci.product.dto.ProductPageResponse;
 import org.example.springtestci.product.dto.ProductResponse;
@@ -22,7 +23,10 @@ class ListingDraftServiceTest {
     ProductService products = mock(ProductService.class);
     ListingDraftService service =
         new ListingDraftService(
-            mock(ListingDraftRepository.class), products, mock(ListingDraftQueryRepository.class));
+            mock(ListingDraftRepository.class),
+            products,
+            mock(ListingDraftQueryRepository.class),
+            mock(ListingRepository.class));
     ProductResponse first = product(101L);
     when(products.listMine(7L, 0, 100, null, null))
         .thenReturn(ProductPageResponse.of(List.of(first), 0, 100, 101, 1, true));
