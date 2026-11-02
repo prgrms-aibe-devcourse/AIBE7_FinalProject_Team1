@@ -43,6 +43,7 @@
   <link rel="stylesheet" href="/css/product-questions.css?v=20261102-question-composer">
   <link rel="stylesheet" href="/css/brand.css?v=20261031">
   <link rel="stylesheet" href="/css/listing-market-detail.css">
+  <link rel="stylesheet" href="/css/section-navigation.css?v=20261102">
 </head>
 <body>
   <header class="site-header"><div class="landing-shell">
@@ -53,29 +54,22 @@
           </div>
           <nav class="landing-nav">
             <button class="nav-all" id="nav-all" aria-expanded="false" aria-controls="mega"><span class="burger" aria-hidden="true"></span>전체메뉴</button>
-            <div class="nav-item"><button data-page="landing">홈</button></div><div class="nav-item"><button data-page="home">제품 여권</button><div class="nav-drop"><button data-page="home"><b>제품 여권 보기</b><small>내 제품 목록과 공개 가능한 이력 확인</small></button><button data-page="register"><b>새 여권 등록</b><small>구매 정보와 문서를 함께 등록</small></button><button data-page="documents"><b>문서 보관함</b><small>영수증·보증서·수리 문서 모아보기</small></button></div></div><div class="nav-item"><button data-page="market">중고거래</button><div class="nav-drop"><button data-page="market"><b>중고 상품 둘러보기</b><small>이력이 확인된 노트북 보기</small></button><button data-page="sell"><b>판매글 작성</b><small>제품 여권과 함께 판매글 등록</small></button></div></div><div class="nav-item"><button data-page="my-listings">내 거래</button><div class="nav-drop"><button data-page="my-listings"><b>내 판매글</b><small>등록한 판매글 목록 관리</small></button><button data-page="deals"><b>채팅</b><small>문의부터 예약까지 한눈에</small></button></div></div><div class="nav-item"><button data-page="receive">소유권 이전</button><div class="nav-drop"><button data-page="receive"><b>소유권 이전 받기</b><small>외부 이전용 · QR로 제품과 기록 이어받기</small></button><button data-page="trade"><b>안심 거래 · 소유권 이전</b><small>외부 이전용 · 일회성 QR로 안전하게 인계</small></button></div></div><button class="landing-nav-more">내 제품의 기록을 한 곳에서 관리하세요.</button>
+            <div class="nav-item"><button data-page="landing">홈</button></div><div class="nav-item"><button data-page="home">제품 여권</button><div class="nav-drop"><button data-page="home" data-nav-related="passport"><b>제품 여권 보기</b><small>내 제품 목록과 공개 가능한 이력 확인</small></button><button data-page="register"><b>새 여권 등록</b><small>구매 정보와 문서를 함께 등록</small></button><button data-page="documents" data-nav-related="docmask"><b>문서 보관함</b><small>영수증·보증서·수리 문서 모아보기</small></button></div></div><div class="nav-item"><button data-page="market">중고거래</button><div class="nav-drop"><button data-page="market" data-nav-related="detail"><b>중고 상품 둘러보기</b><small>이력이 확인된 노트북 보기</small></button><button data-page="sell"><b>판매글 작성</b><small>제품 여권과 함께 판매글 등록</small></button></div></div><div class="nav-item"><button data-page="my-listings">내 거래</button><div class="nav-drop"><button data-page="my-listings"><b>내 판매글</b><small>등록한 판매글 목록 관리</small></button><button data-page="deals"><b>채팅</b><small>문의부터 예약까지 한눈에</small></button></div></div><div class="nav-item"><button data-page="receive">소유권 이전</button><div class="nav-drop"><button data-page="receive"><b>소유권 이전 받기</b><small>외부 이전용 · QR로 제품과 기록 이어받기</small></button><button data-page="trade"><b>안심 거래 · 소유권 이전</b><small>외부 이전용 · 일회성 QR로 안전하게 인계</small></button></div></div><button class="landing-nav-more">내 제품의 기록을 한 곳에서 관리하세요.</button>
           </nav>
   </div>
   <div class="mega" id="mega" hidden><div class="landing-shell"><div class="mega-grid" id="mega-grid"></div></div></div></header>
   <div class="app">
-    <aside class="side" id="side">
-      <div class="side-current"><span>현재 페이지</span><strong id="side-crumb">내 제품</strong></div>
-      <button class="logo pastport-brand" type="button" data-page="landing" aria-label="PastPort 홈"><img class="pastport-logo" src="/images/brand/pastport-logo-v1.png" alt="PastPort" width="2172" height="724"></button>
-      <div class="side-label">WORKSPACE</div>
-      <nav class="nav">
-        <button class="active" data-page="home"><span class="nav-icon">▦</span>내 제품</button>
-        <button data-page="documents"><span class="nav-icon">▧</span>문서 보관함</button>
-        <button data-page="my-listings"><span class="nav-icon" aria-hidden="true">≡</span>내 판매글</button>
-        <button data-page="deals"><span class="nav-icon" aria-hidden="true">☏</span>채팅</button>
-        <button data-page="ai"><span class="nav-icon">✦</span>AI 이력 검색</button>
-        <div class="side-divider"></div>
-        <button data-page="trade"><span class="nav-icon">⇄</span>거래 · 소유권 이전</button>
-      </nav>
+    <aside class="side" id="side" aria-labelledby="side-section" hidden>
+      <div class="side-section-head">
+        <div><p>현재 메뉴</p><h2 id="side-section"></h2></div>
+        <button type="button" data-section-nav-close aria-label="현재 메뉴 닫기">닫기</button>
+      </div>
+      <nav class="nav" data-section-nav></nav>
       <div class="account" data-side-account><span class="avatar" data-side-avatar>?</span><div><strong data-side-name>로그인 필요</strong><span data-side-sub>내 계정</span></div></div>
     </aside>
     <main class="main">
       <section class="landing-page page active" id="landing"></section>
-      <header class="top"><div class="crumb"><button class="mobile-menu" id="menu">☰</button><span>⌂</span><span>/</span><strong id="crumb">내 제품</strong></div><div class="top-right"><span>예시 데이터로 둘러보기</span><span>◦</span><span>기록이 만드는 더 나은 거래</span></div></header>
+      <header class="top"><div class="crumb"><button class="mobile-menu" id="menu" type="button" aria-expanded="false" aria-controls="side">현재 메뉴 열기</button><span>⌂</span><span>/</span><strong id="crumb">내 제품</strong></div><div class="top-right"><span>예시 데이터로 둘러보기</span><span>◦</span><span>기록이 만드는 더 나은 거래</span></div></header>
 
       <section class="page" id="home"></section>
       <section class="page" id="passport"></section>
@@ -96,9 +90,9 @@
   </div>
   <script src="/js/auth-session.js?v=20261101-bounded"></script>
   <script src="/js/pages.js"></script>
-  <script src="/js/app.js?v=20261031-admin-session"></script>
+  <script src="/js/app.js?v=20261102-section-navigation"></script>
   <script src="/js/trade.js"></script>
-  <script src="/js/menu.js"></script>
+  <script src="/js/menu.js?v=20261102-section-navigation"></script>
   <script src="/js/categories.js"></script>
   <script src="/js/landing-find.js"></script>
   <script src="/js/interest-brands.js"></script>

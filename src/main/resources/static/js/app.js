@@ -15,7 +15,6 @@ const show=(name,mode='push')=>{
   document.querySelectorAll('.page').forEach(page=>page.classList.toggle('active',page.id===target));
   document.querySelectorAll('[data-page]').forEach(button=>button.classList.toggle('active',button.dataset.page===name));
   document.querySelector('#crumb').textContent=pageNames[name];
-  document.querySelector('#side-crumb').textContent=pageNames[name];
   document.querySelector('#side').classList.remove('open');
   window.scrollTo(0,0);
   try{sessionStorage.setItem('pastport.page',name);}catch{}
@@ -152,4 +151,3 @@ window.addEventListener('popstate',(event)=>{
   const page=event.state?.page;
   if(page&&pageNames[page]&&!pendingPages.has(page))show(page,'pop');
 });
-document.querySelector('#menu').addEventListener('click',()=>document.querySelector('#side').classList.toggle('open'));
