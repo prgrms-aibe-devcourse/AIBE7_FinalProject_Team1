@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -186,6 +187,7 @@ class AuthServiceTest {
     when(passwordEncoder.matches("Passw0rd!", "hashed")).thenReturn(true);
     when(jwtTokenProvider.createAccessToken(user)).thenReturn("access");
     when(jwtTokenProvider.accessTokenExpiresInSeconds()).thenReturn(900L);
+    when(refreshTokenStore.startSession(7L)).thenReturn(true);
     when(refreshTokenStore.issue(7L)).thenReturn("refresh");
 
     AuthTokens tokens = authService.login(new LoginRequest(" User@Example.com", "Passw0rd!"), IP);
@@ -194,6 +196,59 @@ class AuthServiceTest {
     assertEquals("refresh", tokens.refreshToken());
     assertEquals(900L, tokens.expiresIn());
     assertEquals(7L, tokens.user().id());
+  }
+
+  /** 이미 다른 곳에서 로그인 중이면 비밀번호가 맞아도 새 로그인을 거부하고 토큰을 발급하지 않는다. */
+  @Test
+  void loginIsRefusedWhileTheAccountIsLoggedInElsewhere() {
+    User user = user(7L, "user@example.com", "hashed");
+    when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+    when(passwordEncoder.matches("Passw0rd!", "hashed")).thenReturn(true);
+    when(refreshTokenStore.startSession(7L)).thenReturn(false);
+
+    CommonException exception =
+        assertThrows(
+            CommonException.class,
+            () -> authService.login(new LoginRequest("user@example.com", "Passw0rd!"), IP));
+
+    assertEquals(ErrorCode.ALREADY_LOGGED_IN, exception.errorCode());
+    verify(refreshTokenStore, never()).issue(anyLong());
+    verifyNoInteractions(jwtTokenProvider);
+  }
+
+  /** 같은 브라우저의 본인 토큰이 함께 오면 재로그인으로 보고 이전 토큰을 폐기한 뒤 다시 발급한다. */
+  @Test
+  void loginFromTheSameBrowserReplacesItsOwnSession() throws Exception {
+    User user = user(7L, "user@example.com", "hashed");
+    when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+    when(passwordEncoder.matches("Passw0rd!", "hashed")).thenReturn(true);
+    when(refreshTokenStore.peekOwner("mine")).thenReturn(Optional.of(7L));
+    when(refreshTokenStore.startSession(7L)).thenReturn(true);
+    when(jwtTokenProvider.createAccessToken(user)).thenReturn("access");
+    when(jwtTokenProvider.accessTokenExpiresInSeconds()).thenReturn(900L);
+    when(refreshTokenStore.issue(7L)).thenReturn("refresh");
+
+    AuthTokens tokens =
+        authService.login(new LoginRequest("user@example.com", "Passw0rd!"), IP, "mine");
+
+    assertEquals("refresh", tokens.refreshToken());
+    verify(refreshTokenStore).revoke("mine");
+  }
+
+  /** 다른 회원의 토큰이 함께 와도 내 계정의 중복 로그인 확인을 건너뛰지 않는다. */
+  @Test
+  void anotherUsersTokenDoesNotBypassTheDuplicateLoginCheck() {
+    User user = user(7L, "user@example.com", "hashed");
+    when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+    when(passwordEncoder.matches("Passw0rd!", "hashed")).thenReturn(true);
+    when(refreshTokenStore.peekOwner("theirs")).thenReturn(Optional.of(8L));
+    when(refreshTokenStore.startSession(7L)).thenReturn(false);
+
+    assertThrows(
+        CommonException.class,
+        () -> authService.login(new LoginRequest("user@example.com", "Passw0rd!"), IP, "theirs"));
+
+    verify(refreshTokenStore, never()).revoke("theirs");
   }
 
   /** 틀린 비밀번호는 거부하고 토큰을 발급하지 않는다. */
@@ -239,6 +294,7 @@ class AuthServiceTest {
     when(emailVerificationService.confirmIfVerified("user@example.com")).thenReturn(true);
     when(jwtTokenProvider.createAccessToken(user)).thenReturn("access");
     when(jwtTokenProvider.accessTokenExpiresInSeconds()).thenReturn(900L);
+    when(refreshTokenStore.startSession(7L)).thenReturn(true);
     when(refreshTokenStore.issue(7L)).thenReturn("refresh");
 
     AuthTokens tokens = authService.login(new LoginRequest("user@example.com", "Passw0rd!"), IP);
@@ -341,6 +397,7 @@ class AuthServiceTest {
     when(passwordEncoder.matches("wrong", "hashed")).thenReturn(false);
     when(passwordEncoder.matches("Passw0rd!", "hashed")).thenReturn(true);
     when(jwtTokenProvider.createAccessToken(user)).thenReturn("access");
+    when(refreshTokenStore.startSession(7L)).thenReturn(true);
     when(refreshTokenStore.issue(7L)).thenReturn("refresh");
 
     assertThrows(
@@ -363,6 +420,8 @@ class AuthServiceTest {
 
     verify(refreshTokenStore).revoke("token");
     verify(accessTokenBlocklist).block(jwt);
+    // Refresh Token 없이도 로그인 중 표시가 지워진다.
+    verify(refreshTokenStore).endSession(7L);
   }
 
   /** 이미 유효하지 않은 Access Token은 차단하지 않고 넘어간다. */

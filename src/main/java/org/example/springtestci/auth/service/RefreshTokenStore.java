@@ -17,15 +17,19 @@ import org.springframework.stereotype.Component;
 public class RefreshTokenStore {
 
   private static final String KEY_PREFIX = "auth:refresh:";
+
   /** 회원이 지금 로그인 중임을 나타내는 표시. 토큰을 발급·갱신할 때마다 연장하고, 로그아웃하면 지운다. */
   private static final String SESSION_PREFIX = "auth:session:";
+
   /** 회원의 현재 Refresh Token 키. 새 로그인이 시작되면 이전 기기의 토큰을 바로 폐기하는 데 쓴다. */
   private static final String CURRENT_PREFIX = "auth:session-token:";
+
   /**
-   * 마지막 토큰 발급·갱신 뒤 이 시간 동안은 "로그인 중"으로 보고 다른 곳의 로그인을 막는다. Access Token(15분)이 만료될 때마다 갱신되므로 사용 중인 세션은 계속 유지되고,
-   * 로그아웃 없이 창을 닫은 경우에도 이 시간이 지나면 다시 로그인할 수 있다.
+   * 마지막 토큰 발급·갱신 뒤 이 시간 동안은 "로그인 중"으로 보고 다른 곳의 로그인을 막는다. Access Token(15분)이 만료될 때마다 갱신되므로 사용 중인 세션은
+   * 계속 유지되고, 로그아웃 없이 창을 닫은 경우에도 이 시간이 지나면 다시 로그인할 수 있다.
    */
   static final Duration SESSION_LEASE = Duration.ofMinutes(30);
+
   private static final int TOKEN_BYTES = 32;
 
   private final StringRedisTemplate redisTemplate;
@@ -44,9 +48,7 @@ public class RefreshTokenStore {
     secureRandom.nextBytes(bytes);
     String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     String tokenKey = key(token);
-    redisTemplate
-        .opsForValue()
-        .set(tokenKey, String.valueOf(userId), properties.refreshTokenTtl());
+    redisTemplate.opsForValue().set(tokenKey, String.valueOf(userId), properties.refreshTokenTtl());
     // 현재 토큰을 기억하고 로그인 중 표시를 연장한다. 토큰 갱신(rotation)도 이 경로를 지난다.
     redisTemplate
         .opsForValue()
@@ -69,8 +71,8 @@ public class RefreshTokenStore {
   }
 
   /**
-   * 새 로그인을 시작한다. 이미 로그인 중이면 {@code false}를 돌려주고 아무것도 바꾸지 않는다. 표시가 없으면(처음이거나 오래 사용하지 않아 만료) 원자적으로 표시를 만들어,
-   * 동시에 로그인해도 한 곳만 성공한다. 이때 이전 기기에 남은 Refresh Token은 함께 폐기한다.
+   * 새 로그인을 시작한다. 이미 로그인 중이면 {@code false}를 돌려주고 아무것도 바꾸지 않는다. 표시가 없으면(처음이거나 오래 사용하지 않아 만료) 원자적으로
+   * 표시를 만들어, 동시에 로그인해도 한 곳만 성공한다. 이때 이전 기기에 남은 Refresh Token은 함께 폐기한다.
    */
   public boolean startSession(long userId) {
     Boolean created =

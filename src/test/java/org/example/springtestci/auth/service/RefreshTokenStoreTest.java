@@ -71,12 +71,73 @@ class RefreshTokenStoreTest {
   }
 
   @Test
-  void revokeDeletesTheHashedKey() {
+  void revokeDeletesTheHashedKeyAndEndsTheOwnersSession() {
+    when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+    ArgumentCaptor<String> removed = ArgumentCaptor.forClass(String.class);
+    when(valueOperations.getAndDelete(removed.capture())).thenReturn("7", (String) null);
+
     store.revoke("token");
 
-    ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
-    verify(redisTemplate).delete(key.capture());
-    assertTrue(key.getValue().startsWith("auth:refresh:"));
-    assertFalse(key.getValue().contains("token"));
+    assertTrue(removed.getAllValues().get(0).startsWith("auth:refresh:"));
+    assertFalse(removed.getAllValues().get(0).contains("token"));
+    verify(redisTemplate).delete("auth:session:7");
+  }
+
+  @Test
+  void issueRefreshesTheLoginLeaseAndRemembersTheCurrentToken() {
+    when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+    store.issue(7L);
+
+    verify(valueOperations).set("auth:session:7", "1", RefreshTokenStore.SESSION_LEASE);
+    verify(valueOperations)
+        .set(
+            org.mockito.ArgumentMatchers.eq("auth:session-token:7"),
+            org.mockito.ArgumentMatchers.startsWith("auth:refresh:"),
+            org.mockito.ArgumentMatchers.eq(Duration.ofDays(14)));
+  }
+
+  @Test
+  void startSessionIsRefusedWhileTheAccountIsAlreadyLoggedIn() {
+    when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+    when(valueOperations.setIfAbsent("auth:session:7", "1", RefreshTokenStore.SESSION_LEASE))
+        .thenReturn(false);
+
+    assertFalse(store.startSession(7L));
+
+    verify(valueOperations, org.mockito.Mockito.never()).getAndDelete(anyString());
+  }
+
+  @Test
+  void startSessionSucceedsOnceAndRevokesTheTokenLeftOnAnotherDevice() {
+    when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+    when(valueOperations.setIfAbsent("auth:session:7", "1", RefreshTokenStore.SESSION_LEASE))
+        .thenReturn(true);
+    when(valueOperations.getAndDelete("auth:session-token:7")).thenReturn("auth:refresh:old");
+
+    assertTrue(store.startSession(7L));
+
+    verify(redisTemplate).delete("auth:refresh:old");
+  }
+
+  @Test
+  void peekOwnerReadsTheOwnerWithoutRemovingTheToken() {
+    when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+    when(valueOperations.get(anyString())).thenReturn("7");
+
+    assertEquals(Optional.of(7L), store.peekOwner("token"));
+    assertEquals(Optional.empty(), store.peekOwner(null));
+    verify(valueOperations, org.mockito.Mockito.never()).getAndDelete(anyString());
+  }
+
+  @Test
+  void endSessionRemovesTheLeaseAndTheCurrentToken() {
+    when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+    when(valueOperations.getAndDelete("auth:session-token:7")).thenReturn("auth:refresh:cur");
+
+    store.endSession(7L);
+
+    verify(redisTemplate).delete("auth:refresh:cur");
+    verify(redisTemplate).delete("auth:session:7");
   }
 }

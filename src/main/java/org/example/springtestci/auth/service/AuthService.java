@@ -103,8 +103,9 @@ public class AuthService {
   }
 
   /**
-   * 한 계정은 한 곳에서만 로그인할 수 있다. 이미 로그인 중이면 새 로그인을 {@code ALREADY_LOGGED_IN}으로 거부한다. 비밀번호가 맞은 뒤에만 확인해 틀린 비밀번호로는 로그인 여부를
-   * 알 수 없다. 이 요청이 가져온 Refresh Token이 같은 회원의 것이면(같은 브라우저의 재로그인) 막지 않고 이전 토큰을 폐기한 뒤 새로 발급한다.
+   * 한 계정은 한 곳에서만 로그인할 수 있다. 이미 로그인 중이면 새 로그인을 {@code ALREADY_LOGGED_IN}으로 거부한다. 비밀번호가 맞은 뒤에만 확인해 틀린
+   * 비밀번호로는 로그인 여부를 알 수 없다. 이 요청이 가져온 Refresh Token이 같은 회원의 것이면(같은 브라우저의 재로그인) 막지 않고 이전 토큰을 폐기한 뒤 새로
+   * 발급한다.
    */
   public AuthTokens login(LoginRequest request, String clientIp, String currentRefreshToken) {
     String email = normalizeEmail(request.email());
