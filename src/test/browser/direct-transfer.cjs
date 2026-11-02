@@ -82,6 +82,8 @@ async function noStoredSecret(page, token) {
 async function receiveFixture(page, token, expected) {
   await page.goto(new URL('/receive?token=' + encodeURIComponent(token), base).href);
   await ready(page);
+  await page.waitForFunction(() => Boolean(auth.user) || !document.querySelector('[data-receive-login]')?.hidden);
+  if (!await page.evaluate(() => Boolean(auth.user))) await login(page, process.env.P5_UI_BUYER_EMAIL, true);
   await page.locator('[data-receive-message]').filter({ hasText: expected }).waitFor();
   ensure(new URL(page.url()).search === '', 'Receiver address cleared');
   ensure(await page.locator('[data-receive-accept]').isDisabled(), 'Terminal acceptance disabled');
@@ -138,6 +140,8 @@ async function decodeSharedQr(page, sharedLink) {
     await receiver.page.screenshot({ path: path.join(evidence, 'receive-expired.png'), fullPage: true });
     await receiveFixture(receiver.page, process.env.P5_UI_CANCELLED_TOKEN, '취소');
     await receiver.page.screenshot({ path: path.join(evidence, 'receive-cancelled.png'), fullPage: true });
+    await receiver.page.locator('.landing-account [data-auth-logout]').click();
+    await receiver.page.waitForFunction(() => !auth.user);
     record('Expired and cancelled token views differ; no acceptance or browser storage');
     step = 'anonymous-login-explicit-accept-and-logout';
     await receiver.page.goto(sharedLink); await ready(receiver.page);
@@ -167,7 +171,12 @@ async function decodeSharedQr(page, sharedLink) {
     await receiver.page.locator('[data-receive-retry]').click();
     await receiver.page.locator('[data-receive-accept]:not(:disabled)').waitFor();
     await receiver.page.locator('[data-receive-accept]').evaluate(element => { element.click(); element.click(); });
-    await receiver.page.locator('[data-receive-message]').filter({ hasText: '소유권 이전이 완료되었습니다' }).waitFor();
+    await receiver.page.locator('[data-receive-message]').filter({ hasText: '최종 승인 후' }).waitFor();
+    await seller.page.getByRole('button', { name: '상태 새로고침', exact: true }).click();
+    await seller.page.getByRole('button', { name: '확인한 수신자에게 최종 이전 승인', exact: true }).click();
+    await seller.page.locator('[data-ownership-message]').filter({ hasText: '이전이 완료' }).waitFor();
+    await receiver.page.locator('[data-receive-retry]').click();
+    await receiver.page.locator('[data-receive-message]').filter({ hasText: '이미 완료된 이전 요청' }).waitFor();
     ensure(counts.accept === 2, 'One aborted request and one actual acceptance despite duplicate click');
     await noStoredSecret(receiver.page, new URL(sharedLink).searchParams.get('token'));
     await seller.page.getByRole('button', { name: '상태 새로고침', exact: true }).click();

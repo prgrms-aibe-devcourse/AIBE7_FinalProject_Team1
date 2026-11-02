@@ -28,6 +28,7 @@ export class Node {
   }
   append(...children) { for (const child of children) { child.parent = this; this.children.push(child); } }
   appendChild(child) { this.append(child); }
+  after(node) { const index = this.parent.children.indexOf(this); node.parent = this.parent; this.parent.children.splice(index + 1, 0, node); }
   remove() { if (this.parent) this.parent.children = this.parent.children.filter(x => x !== this); this.parent = null; }
   contains(child) { return !!child && (child === this || this.children.some(x => x.contains(child))); }
   setAttribute(key, value) { this.attributes.set(key, String(value)); }

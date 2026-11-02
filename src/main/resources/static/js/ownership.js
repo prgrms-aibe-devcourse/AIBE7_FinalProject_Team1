@@ -6,6 +6,7 @@
   let version = 0;
   let busy = false;
   let timer = null;
+  let accountId = auth.user?.id == null ? null : String(auth.user.id);
   const root = () => document.querySelector('[data-ownership-root]');
   const api = async (path, options = {}) => {
     const response = await window.PastportApi.fetch(path, { ...options, cache: 'no-store' });
@@ -34,13 +35,19 @@
     target.replaceChildren();
     const heading = document.createElement('h2'); heading.textContent = '외부 소유권 이전';
     const note = document.createElement('p');
-    note.textContent = '판매글·내부 예약이 없는 제품을 직접 인계할 때 사용하세요. 받는 사람이 로그인 후 명시적으로 수락해야 완료됩니다.';
+    note.textContent = '수신자가 로그인해 수락하면 수신자와 제품을 확인한 뒤 최종 승인해 주세요. 발급 후 24시간 안에 승인해야 하며, 승인 전까지 취소할 수 있습니다.';
     const status = document.createElement('p'); status.dataset.ownershipMessage = ''; status.setAttribute('role', 'status');
     const pending = transfer?.status === 'PENDING' && !transfer.expired;
     status.textContent = transfer
       ? `${transfer.expired ? '만료됨' : ({ PENDING: '수락 대기 중', COMPLETED: '이전 완료', CANCELLED: '취소됨', EXPIRED: '만료됨' }[transfer.status] || transfer.status)} · 만료 ${new Date(transfer.expiresAt).toLocaleString('ko-KR')}`
       : '현재 대기 중인 외부 이전이 없습니다.';
     const actions = document.createElement('div'); actions.className = 'ownership-actions';
+    if (pending && transfer.recipientAcceptedAt) {
+      const recipient = document.createElement('p');
+      recipient.textContent = `${transfer.productTitle} · 수신자 ${transfer.recipientNickname || '회원'} (#${transfer.recipientId}) · 제품 버전 ${transfer.factsVersion} · 수락 ${new Date(transfer.recipientAcceptedAt).toLocaleString('ko-KR')} · 최종 승인 대기`;
+      target.append(recipient);
+      actions.append(button('확인한 수신자에게 최종 이전 승인', () => approve()));
+    }
     actions.append(button('상태 새로고침', () => load()));
     if (pending) actions.append(button('이전 요청 취소', () => cancel()), button('취소 후 새 링크 발급', () => reissue()));
     else actions.append(button('새 링크 · QR 발급', () => issue()));
@@ -87,7 +94,7 @@
     if (busy || !productId) return;
     busy = true;
     const selected = productId;
-    const requestVersion = version;
+    const requestVersion = ++version;
     render();
     try { await operation(selected, requestVersion); }
     catch (error) {
@@ -107,6 +114,21 @@
     render();
   };
   const issue = () => mutate(issueRequest);
+  const approve = () => {
+    if (!transfer?.recipientAcceptedAt || !confirm(`${transfer.productTitle}\n${transfer.recipientNickname || '회원'} (#${transfer.recipientId})에게 소유권과 증빙을 이전할까요?`)) return;
+    const confirmed = { ...transfer };
+    mutate(async (selected, requestVersion) => {
+      try {
+        await api(`${API}/${confirmed.transferId}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRecipientId: confirmed.recipientId, expectedFactsVersion: confirmed.factsVersion }) });
+      } catch (error) {
+        const result = await api(`${API}/${confirmed.transferId}`);
+        if (result.status !== 'COMPLETED') throw error;
+      }
+      if (requestVersion !== version || selected !== productId) return;
+      clearShare(); transfer = { ...confirmed, status: 'COMPLETED' }; render();
+      message('이전이 완료되었습니다. 내 제품 목록을 새로고침해 주세요.');
+    });
+  };
   const cancelRequest = async (selected, requestVersion) => {
     const transferId = transfer.transferId;
     await api(`${API}/${transferId}/cancel`, { method: 'POST' });
@@ -120,9 +142,14 @@
   };
   document.addEventListener('pastport:product-detail-rendered', (event) => {
     reset(); productId = event.detail.product.productId; render(); load();
-    timer = setInterval(() => { if (transfer && Date.now() >= Date.parse(transfer.expiresAt) && !transfer.expired) { transfer.expired = true; clearShare(); render(); } }, 1000);
+    timer = setInterval(() => { if (transfer?.status === 'PENDING') load(); }, 5000);
   });
   document.addEventListener('pastport:page-shown', (event) => { if (event.detail.id !== 'passport') reset(); });
   document.addEventListener('pastport:logout', reset);
+  document.addEventListener('pastport:auth-changed', () => {
+    const nextAccount = auth.user?.id == null ? null : String(auth.user.id);
+    if (nextAccount !== accountId) reset();
+    accountId = nextAccount;
+  });
   window.addEventListener('pagehide', reset);
 })();
