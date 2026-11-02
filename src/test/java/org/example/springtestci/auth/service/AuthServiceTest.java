@@ -200,7 +200,7 @@ class AuthServiceTest {
 
   /** 이미 다른 곳에서 로그인 중이면 비밀번호가 맞아도 새 로그인을 거부하고 토큰을 발급하지 않는다. */
   @Test
-  void loginIsRefusedWhileTheAccountIsLoggedInElsewhere() {
+  void loginIsRefusedWhileTheAccountIsLoggedInElsewhere() throws Exception {
     User user = user(7L, "user@example.com", "hashed");
     when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
     when(passwordEncoder.matches("Passw0rd!", "hashed")).thenReturn(true);
@@ -237,7 +237,7 @@ class AuthServiceTest {
 
   /** 다른 회원의 토큰이 함께 와도 내 계정의 중복 로그인 확인을 건너뛰지 않는다. */
   @Test
-  void anotherUsersTokenDoesNotBypassTheDuplicateLoginCheck() {
+  void anotherUsersTokenDoesNotBypassTheDuplicateLoginCheck() throws Exception {
     User user = user(7L, "user@example.com", "hashed");
     when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
     when(passwordEncoder.matches("Passw0rd!", "hashed")).thenReturn(true);
