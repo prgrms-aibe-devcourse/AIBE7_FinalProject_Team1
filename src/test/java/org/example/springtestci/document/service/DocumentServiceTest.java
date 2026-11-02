@@ -26,8 +26,10 @@ import org.example.springtestci.common.storage.FileStorage;
 import org.example.springtestci.document.dto.FileUrlResponse;
 import org.example.springtestci.document.entity.Document;
 import org.example.springtestci.document.entity.DocumentExtraction;
+import org.example.springtestci.document.entity.DocumentReplacement;
 import org.example.springtestci.document.entity.ExtractionStatus;
 import org.example.springtestci.document.repository.DocumentExtractionRepository;
+import org.example.springtestci.document.repository.DocumentReplacementRepository;
 import org.example.springtestci.document.repository.DocumentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,6 +49,7 @@ class DocumentServiceTest {
 
   @Mock private DocumentRepository documentRepository;
   @Mock private DocumentExtractionRepository extractionRepository;
+  @Mock private DocumentReplacementRepository replacementRepository;
   @Mock private FileStorage fileStorage;
   @Mock private ObjectProvider<FileStorage> storageProvider;
   @Mock private ProductOwnerReader productOwnerReader;
@@ -60,6 +63,7 @@ class DocumentServiceTest {
         new DocumentService(
             documentRepository,
             extractionRepository,
+            replacementRepository,
             storageProvider,
             new DocumentFileValidator(),
             productOwnerReader,
@@ -245,6 +249,14 @@ class DocumentServiceTest {
     verify(fileStorage, never()).delete(anyString());
   }
 
+  private static byte[] sha256(byte[] content) {
+    try {
+      return java.security.MessageDigest.getInstance("SHA-256").digest(content);
+    } catch (java.security.NoSuchAlgorithmException exception) {
+      throw new IllegalStateException(exception);
+    }
+  }
+
   private Document replace(Long userId, boolean maskingConfirmed) {
     return service.replace(5L, userId, maskingConfirmed, "masked.pdf", "application/pdf", PDF);
   }
@@ -267,6 +279,47 @@ class DocumentServiceTest {
     // 이력 연결(보호)은 교체해도 유지된다.
     assertTrue(replaced.isProtected());
     verify(fileStorage).delete("documents/100/k.pdf");
+  }
+
+  @Test
+  void 교체하면_보호_여부와_파일_정보가_교체_기록에_남는다() throws IOException {
+    Document document = document(OWNER);
+    document.protect(NOW);
+    when(documentRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(document));
+    ownerIs(OWNER);
+    when(fileStorage.store(eq("documents/100"), eq("pdf"), any(InputStream.class)))
+        .thenReturn("documents/100/new.pdf");
+
+    Document replaced = replace(OWNER, true);
+
+    org.mockito.ArgumentCaptor<DocumentReplacement> captor =
+        org.mockito.ArgumentCaptor.forClass(DocumentReplacement.class);
+    verify(replacementRepository).save(captor.capture());
+    DocumentReplacement record = captor.getValue();
+    assertEquals(1, record.getFromVersion());
+    assertEquals(2, record.getToVersion());
+    assertEquals(OWNER, record.getReplacedById());
+    assertTrue(record.isWasProtected());
+    assertEquals(10, record.getOldByteSize());
+    assertEquals(PDF.length, record.getNewByteSize());
+    // 같은 내용이면 항상 같은 해시가 나와야 나중에 비교할 수 있다.
+    assertEquals(java.util.HexFormat.of().formatHex(sha256(PDF)), record.getNewSha256());
+    assertEquals(1, replaced.getReplacementCount());
+    assertEquals(NOW, replaced.getLastReplacedAt());
+  }
+
+  @Test
+  void 교체에_실패하면_교체_기록도_남기지_않는다() throws IOException {
+    Document document = document(OWNER);
+    when(documentRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(document));
+    ownerIs(OWNER);
+    when(fileStorage.store(eq("documents/100"), eq("pdf"), any(InputStream.class)))
+        .thenReturn("documents/100/new.pdf");
+    when(documentRepository.save(any(Document.class))).thenThrow(new IllegalStateException());
+
+    assertThrows(IllegalStateException.class, () -> replace(OWNER, true));
+
+    verify(replacementRepository, never()).save(any());
   }
 
   @Test

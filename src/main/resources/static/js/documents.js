@@ -35,7 +35,9 @@
   }
   function row(item) {
     const line = create('div', null, 'doc-row');
-    const info = create('div'); info.append(create('b', '문서 #' + item.id), create('small', day(item.maskConfirmedAt) + ' · ' + size(item.byteSize) + ' · v' + item.version));
+    // 재마스킹으로 사본을 바꾼 문서는 횟수와 마지막 교체일을 보여 준다. 이력에 연결된 뒤 바뀐 증빙을 알아볼 수 있게 한다.
+    const replaced = item.replacementCount > 0 ? ' · 사본 교체 ' + item.replacementCount + '회(' + day(item.lastReplacedAt) + ')' : '';
+    const info = create('div'); info.append(create('b', '문서 #' + item.id), create('small', day(item.maskConfirmedAt) + ' · ' + size(item.byteSize) + ' · v' + item.version + replaced));
     const open = create('button', '보기', 'button small'); open.type = 'button';
     open.addEventListener('click', async () => {
       try { const file = await api('/api/v1/documents/' + item.id + '/file-url'); window.open(file.url, '_blank', 'noopener'); }

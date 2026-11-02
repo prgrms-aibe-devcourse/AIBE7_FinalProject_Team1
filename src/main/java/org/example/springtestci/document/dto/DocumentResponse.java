@@ -12,7 +12,9 @@ public record DocumentResponse(
     int version,
     Instant maskConfirmedAt,
     boolean redactionRequired,
-    boolean deletable) {
+    boolean deletable,
+    int replacementCount,
+    Instant lastReplacedAt) {
 
   /** {@code currentUserId}가 이 문서를 직접 삭제할 수 있는지는 업로더이고 보호되지 않았을 때만 참이다. */
   public static DocumentResponse from(Document document, Long currentUserId) {
@@ -24,6 +26,8 @@ public record DocumentResponse(
         document.getVersion(),
         document.getMaskConfirmedAt(),
         document.isRedactionRequired(),
-        document.isUploadedBy(currentUserId) && !document.isProtected());
+        document.isUploadedBy(currentUserId) && !document.isProtected(),
+        document.getReplacementCount(),
+        document.getLastReplacedAt());
   }
 }
