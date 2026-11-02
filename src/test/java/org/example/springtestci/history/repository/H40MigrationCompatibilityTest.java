@@ -114,6 +114,7 @@ class H40MigrationCompatibilityTest {
       Files.copy(input, legacyResources.resolve(CURRENT_OWNERSHIP));
     }
     Flyway.configure()
+        .configuration(java.util.Map.of("flyway.postgresql.transactional.lock", "false"))
         .dataSource(source)
         .schemas(schema)
         .defaultSchema(schema)
@@ -152,6 +153,7 @@ class H40MigrationCompatibilityTest {
     Flyway current = candidate("classpath:db/migration");
 
     Flyway.configure()
+        .configuration(java.util.Map.of("flyway.postgresql.transactional.lock", "false"))
         .dataSource(source)
         .schemas(schema)
         .defaultSchema(schema)
@@ -170,16 +172,18 @@ class H40MigrationCompatibilityTest {
                 Integer.class,
                 CURRENT_OWNERSHIP))
         .isEqualTo(1);
-    assertThat(jdbc.queryForList("SELECT * FROM ownership_transfers ORDER BY id"))
-        .isEqualTo(beforeRows);
+    var upgradedRows = jdbc.queryForList("SELECT * FROM ownership_transfers ORDER BY id");
+    assertThat(upgradedRows)
+        .allSatisfy(row -> assertThat(row.remove("recipient_accepted_at")).isNull());
+    assertThat(upgradedRows).isEqualTo(beforeRows);
     assertThat(jdbc.queryForMap("SELECT * FROM products WHERE id=1")).isEqualTo(beforeProduct);
     assertThat(
             jdbc.queryForList(
-                "SELECT column_name,data_type FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='ownership_transfers' ORDER BY ordinal_position"))
+                "SELECT column_name,data_type FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='ownership_transfers' AND column_name <> 'recipient_accepted_at' ORDER BY ordinal_position"))
         .isEqualTo(beforeColumns);
     assertThat(
             jdbc.queryForList(
-                "SELECT constraint_name,constraint_type FROM information_schema.table_constraints WHERE table_schema=current_schema() AND table_name='ownership_transfers' ORDER BY constraint_name"))
+                "SELECT constraint_name,constraint_type FROM information_schema.table_constraints WHERE table_schema=current_schema() AND table_name='ownership_transfers' AND constraint_name <> 'chk_direct_recipient_consent' ORDER BY constraint_name"))
         .isEqualTo(beforeConstraints);
     assertThatThrownBy(
             () ->
@@ -213,6 +217,7 @@ class H40MigrationCompatibilityTest {
       }
     }
     Flyway.configure()
+        .configuration(java.util.Map.of("flyway.postgresql.transactional.lock", "false"))
         .dataSource(source)
         .schemas(schema)
         .defaultSchema(schema)
@@ -257,11 +262,48 @@ class H40MigrationCompatibilityTest {
 
   private Flyway candidate(String... locations) {
     return Flyway.configure()
+        .configuration(java.util.Map.of("flyway.postgresql.transactional.lock", "false"))
         .dataSource(source)
         .schemas(schema)
         .defaultSchema(schema)
         .locations(locations)
         .load();
+  }
+
+  @Test
+  void consentMigrationPreservesLegacyCompletedAndPendingDirectWithoutFabricatedConsent() {
+    Flyway.configure()
+        .configuration(java.util.Map.of("flyway.postgresql.transactional.lock", "false"))
+        .dataSource(source)
+        .schemas(schema)
+        .defaultSchema(schema)
+        .locations("classpath:db/migration")
+        .target("2026110202")
+        .load()
+        .migrate();
+    jdbc.update(
+        "INSERT INTO users(id,email,password_hash,nickname,role,created_at,updated_at) VALUES(1,'consent-owner@fixture.invalid','unused','owner','USER',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),(2,'consent-buyer@fixture.invalid','unused','buyer','USER',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)");
+    jdbc.update(
+        "INSERT INTO products(id,category,manufacturer,manufacturer_normalized,model_name,title,owner_id,serial_number_fingerprint,serial_number_ciphertext) VALUES(1,'LAPTOP','maker','MAKER','model','preserved',1,'consent-fixture','synthetic')");
+    jdbc.update(
+        "INSERT INTO ownership_transfers(product_id,from_user_id,to_user_id,token_hash,expires_at,transfer_type,status,pending_slot,completed_at) VALUES(1,1,2,?,?,'DIRECT','COMPLETED',NULL,CURRENT_TIMESTAMP),(1,1,NULL,?,?,'DIRECT','PENDING',1,NULL)",
+        "a".repeat(64),
+        Timestamp.from(Instant.now().plusSeconds(3600)),
+        "b".repeat(64),
+        Timestamp.from(Instant.now().plusSeconds(3600)));
+    var before = jdbc.queryForList("SELECT * FROM ownership_transfers ORDER BY id");
+    var current = candidate("classpath:db/migration");
+    current.migrate();
+    current.validate();
+    var after = jdbc.queryForList("SELECT * FROM ownership_transfers ORDER BY id");
+    assertThat(after).allSatisfy(row -> assertThat(row.remove("recipient_accepted_at")).isNull());
+    assertThat(after).isEqualTo(before);
+    assertThat(current.migrate().migrationsExecuted).isZero();
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "UPDATE ownership_transfers SET recipient_accepted_at=CURRENT_TIMESTAMP WHERE status='PENDING'"))
+        .isInstanceOf(DataIntegrityViolationException.class);
   }
 
   private List<Map<String, Object>> history() {
