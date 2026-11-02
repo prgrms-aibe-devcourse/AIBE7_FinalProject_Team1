@@ -74,17 +74,20 @@
         rows(list('listings'), data.items, item => ({ page: 'my-listings', cells: [cell(item.title || '판매글', true), cell(statusLabel[item.status] || '종료'), cell(won(item.price))] }));
       }, list('listings'), '판매글 목록을 불러오지 못했어요.'),
       section(signal, async () => {
-        const data = await get('/api/v1/products', signal);
+        const data = await get(`/api/v1/products?page=0&size=${LIMIT}`, signal);
         if (stale()) return;
-        if (!Array.isArray(data) || !data.length) return message(list('products'), '아직 등록한 제품이 없어요.', { page: 'register', label: '새 여권 등록하기' });
-        rows(list('products'), data.slice(0, LIMIT), item => ({ page: 'home', cells: [cell(item.title || item.modelName || '제품', true), cell(item.manufacturer || '-'), cell(item.purchaseDate || '-')] }));
+        if (!Array.isArray(data?.items) || data.items.some(item => !item || typeof item !== 'object')) throw new Error('invalid product page');
+        if (!data.items.length) return message(list('products'), '아직 등록한 제품이 없어요.', { page: 'register', label: '새 여권 등록하기' });
+        rows(list('products'), data.items.slice(0, LIMIT), item => ({ page: 'home', cells: [cell(item.title || item.modelName || '제품', true), cell(item.manufacturer || '-'), cell(item.purchaseDate || '-')] }));
       }, list('products'), '제품 목록을 불러오지 못했어요.')
     ]);
   }
 
   document.addEventListener('pastport:page-shown', event => { if (event.detail?.id === 'mypage') load(); });
   document.addEventListener('pastport:auth-changed', event => {
-    if (!root.classList.contains('active')) return;
-    if (event.detail?.signedIn) load(); else generation++;
+    generation++; current?.abort();
+    ['chats', 'listings', 'products'].forEach(key => list(key)?.replaceChildren());
+    if (root.classList.contains('active') && event.detail?.signedIn) load();
   });
+  document.addEventListener('pastport:page-shown', event => { if (event.detail?.id !== 'mypage') { generation++; current?.abort(); } });
 })();

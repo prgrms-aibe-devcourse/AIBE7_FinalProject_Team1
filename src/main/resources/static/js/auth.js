@@ -3,6 +3,7 @@
 const auth = (() => {
   let user = null;
   let sessionVersion = 0;
+  let ownedCountVersion = 0;
   const session = window.PastportSession;
 
   /** 쓰기 요청이면 XSRF-TOKEN 쿠키 값을 X-XSRF-TOKEN 헤더로 만들어 돌려준다. */
@@ -78,6 +79,7 @@ const auth = (() => {
   // 마이페이지: 로그인 여부에 따라 안내/계정 정보를 보여준다. 화면 HTML이 늦게 로드될 수 있어 둘 다에서 호출한다.
   /** 마이페이지에 로그인 여부별 안내 또는 계정 정보를 보여준다. */
   const renderMyPage = () => {
+    ownedCountVersion++;
     const root = document.querySelector('#mypage');
     if (!root) return;
     const guest = root.querySelector('[data-mp="guest"]');
@@ -104,14 +106,20 @@ const auth = (() => {
     const el = member.querySelector('[data-mp-field="ownedCount"]');
     if (!el) return;
     const owner = user?.id;
+    const requestVersion = ++ownedCountVersion;
     el.textContent = '-';
     try {
-      const response = await (window.PastportApi?.fetch || fetch)('/api/v1/products', { credentials: 'same-origin', cache: 'no-store' });
+      const response = await (window.PastportApi?.fetch || fetch)('/api/v1/products?page=0&size=1', { credentials: 'same-origin', cache: 'no-store' });
       const payload = await response.json().catch(() => null);
-      if (user?.id !== owner) return;
-      el.textContent = response.ok && Array.isArray(payload?.data) ? String(payload.data.length) : '-';
+      if (user?.id !== owner || requestVersion !== ownedCountVersion) return;
+      const data = payload?.data;
+      const count = Number.isSafeInteger(data?.page?.totalElements) && data.page.totalElements >= 0
+        ? data.page.totalElements
+        : Number.isSafeInteger(data?.summary?.registered) && data.summary.registered >= 0
+          ? data.summary.registered : null;
+      el.textContent = response.ok && count !== null ? String(count) : '-';
     } catch {
-      if (user?.id === owner) el.textContent = '-';
+      if (user?.id === owner && requestVersion === ownedCountVersion) el.textContent = '-';
     }
   };
 
