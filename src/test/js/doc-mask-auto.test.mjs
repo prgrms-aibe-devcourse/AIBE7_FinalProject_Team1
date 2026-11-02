@@ -129,3 +129,51 @@ test('라벨 뒤에 숫자 없는 일반 단어가 오면 일련번호로 보지
   const { findPiiBoxes, groupLines } = load();
   assert.equal(findPiiBoxes(groupLines(row(100, [['Serial', 0], ['number', 8], ['printed', 8]]))).length, 0);
 });
+
+test('고객명 계열 라벨 뒤의 이름을 가리고, "고객 지원" 같은 안내 문구는 가리지 않는다', () => {
+  const { findPiiBoxes, groupLines } = load();
+  for (const labelWords of [['고객명'], ['고객', '성함'], ['고', '객', '명']]) {
+    const words = row(100, [...labelWords.map((w, i) => [w, i ? 3 : 0]), ['홍길동', 20]]);
+    assert.deepEqual(kinds(findPiiBoxes(groupLines(words))), ['이름'], labelWords.join(''));
+  }
+  assert.equal(findPiiBoxes(groupLines(row(100, [['고객', 0], ['지원', 10], ['문의', 10]]))).length, 0);
+});
+
+test('라벨이 깨져 읽혀도 일련번호 모양의 단독 토큰은 가린다', () => {
+  const { findPiiBoxes, groupLines } = load();
+  const garbled = row(100, [['Qlgils', 0], ['CORFQZELSAPR', 30]]);
+  const withDigits = row(200, [['일련번호', 0], ['CXV5J3Y2RD', 20]]);
+  const boxes = findPiiBoxes(groupLines([...garbled, ...withDigits]));
+  assert.deepEqual(kinds(boxes), ['일련번호', '일련번호']);
+});
+
+test('깨진 라벨 "련 호" 뒤의 값도 일련번호로 가린다', () => {
+  const { findPiiBoxes, groupLines } = load();
+  assert.deepEqual(kinds(findPiiBoxes(groupLines(row(100, [['련', 0], ['호', 6], ['C02TQ26SAP', 12]])))), ['일련번호']);
+});
+
+test('부품번호·URL·영어 단어·숫자뿐인 번호는 일련번호로 오탐하지 않는다', () => {
+  const { findPiiBoxes, groupLines } = load();
+  const words = row(100, [['MC6T4KH/A', 0], ['support.apple.com/ko-kr/HT201440', 8], ['APPLECARE', 8], ['MACBOOKPRO', 8], ['1208184429', 8]]);
+  assert.equal(findPiiBoxes(groupLines(words)).length, 0);
+});
+
+test('부품번호는 일련번호와 모양이 같아도 가리지 않는다', () => {
+  const { findPiiBoxes, groupLines } = load();
+  const cases = [
+    row(100, [['부품', 0], ['번호', 4], ['SUWC2ZX3KH9', 12]]),
+    row(100, [['부품번호:', 0], ['MC6T4KH2A9X', 12]]),
+    row(100, [['Part', 0], ['Number', 6], ['NT950XGK9X1', 12]]),
+    row(100, [['모델번호', 0], ['SM950XGKC51', 12]]),
+    row(100, [['MRMG3KH123/A', 0]]),
+  ];
+  for (const words of cases) assert.equal(findPiiBoxes(groupLines(words)).length, 0, words.map((w) => w.text).join(' '));
+});
+
+test('같은 줄에 부품번호와 일련번호가 함께 있으면 일련번호만 가린다', () => {
+  const { findPiiBoxes, groupLines } = load();
+  const words = row(100, [['부품번호', 0], ['SUWC2ZX3KH9', 12], ['일련번호', 20], ['CXV5J3Y2RD', 12]]);
+  const boxes = findPiiBoxes(groupLines(words));
+  assert.deepEqual(kinds(boxes), ['일련번호']);
+  assert.ok(boxes[0].x >= words[3].x0 - 4);
+});
