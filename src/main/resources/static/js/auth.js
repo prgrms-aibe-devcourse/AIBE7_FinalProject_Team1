@@ -242,10 +242,7 @@ const auth = (() => {
       message(form, '');
       setSession(data);
       if (returnToAdmin()) return;
-      // 이전 링크를 비로그인으로 열었다면 로그인 뒤 그 화면으로 돌아가 이어서 확인한다.
-      let pendingTransfer = false;
-      try { pendingTransfer = Boolean(sessionStorage.getItem('pastport.pendingTransferToken')); } catch {}
-      if (pendingTransfer) return goto('receive');
+      if (window.PastportReceive?.resumeAfterLogin()) return;
       const listingId = new URL(window.location.href).searchParams.get('listingId');
       if (/^[1-9]\d*$/.test(listingId || '') && window.PastportPublishedListing) window.PastportPublishedListing.open(listingId);
       else if (new URL(window.location.href).searchParams.get('myListings') === '1') goto('my-listings');
@@ -398,6 +395,7 @@ const auth = (() => {
   });
   document.addEventListener('click', async (event) => {
     if (!event.target.closest?.('[data-auth-logout]')) return;
+    document.dispatchEvent(new CustomEvent('pastport:logout', { detail: {} }));
     const current = ++sessionVersion;
     try {
       await session.exclusive(async () => {

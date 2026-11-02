@@ -23,6 +23,7 @@ public record HistoryEventResponse(
     HistoryEventSource source,
     boolean editable,
     List<Long> documentIds,
+    List<HistoryChangeResponse> changes,
     String changeAction,
     String changeReason,
     OffsetDateTime changedAt,

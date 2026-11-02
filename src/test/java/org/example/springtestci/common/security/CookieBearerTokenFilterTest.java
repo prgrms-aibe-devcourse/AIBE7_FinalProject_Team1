@@ -2,18 +2,32 @@ package org.example.springtestci.common.security;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.BadJwtException;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 
 class CookieBearerTokenFilterTest {
 
-  private final CookieBearerTokenFilter filter = new CookieBearerTokenFilter();
+  private final JwtDecoder decoder = mock(JwtDecoder.class);
+  private final CookieBearerTokenFilter filter = new CookieBearerTokenFilter(decoder);
+
+  @AfterEach
+  void clearAuthentication() {
+    SecurityContextHolder.clearContext();
+  }
 
   /** API 요청의 Access Token 쿠키를 Authorization 헤더로 바꿔 넘긴다. */
   @Test
@@ -57,13 +71,36 @@ class CookieBearerTokenFilterTest {
   /** 공개 판매글 목록은 만료된 쿠키가 있어도 비회원으로 조회된다. */
   @Test
   void ignoresTheCookieForPublicListingReads() throws Exception {
+    when(decoder.decode("expired")).thenThrow(new BadJwtException("test-only expired cookie"));
     MockHttpServletRequest list = request("GET", "/api/v1/listings");
     list.setCookies(new Cookie(SecurityConfig.ACCESS_TOKEN_COOKIE, "expired"));
     MockHttpServletRequest thumbnail = request("GET", "/api/v1/listings/3/thumbnail");
     thumbnail.setCookies(new Cookie(SecurityConfig.ACCESS_TOKEN_COOKIE, "expired"));
 
     assertNull(forwarded(list).getHeader(HttpHeaders.AUTHORIZATION));
+    assertNull(SecurityContextHolder.getContext().getAuthentication());
     assertNull(forwarded(thumbnail).getHeader(HttpHeaders.AUTHORIZATION));
+  }
+
+  /** 공개 목록의 쿠키도 검증하고 기존 JWT 인증과 같은 회원·권한을 다음 필터에 전달한다. */
+  @Test
+  void authenticatesAValidCookieOnThePublicList() throws Exception {
+    when(decoder.decode("valid"))
+        .thenReturn(
+            Jwt.withTokenValue("valid")
+                .header("alg", "HS256")
+                .subject("7")
+                .claim("scope", "USER")
+                .build());
+    var request = request("GET", "/api/v1/listings");
+    request.setCookies(new Cookie(SecurityConfig.ACCESS_TOKEN_COOKIE, "valid"));
+
+    assertNull(forwarded(request).getHeader(HttpHeaders.AUTHORIZATION));
+    var authentication = SecurityContextHolder.getContext().getAuthentication();
+    assertEquals("7", authentication.getName());
+    assertTrue(
+        authentication.getAuthorities().stream()
+            .anyMatch(authority -> authority.getAuthority().equals("SCOPE_USER")));
   }
 
   /** 쿠키가 없거나 비어 있으면 헤더를 만들지 않는다. */

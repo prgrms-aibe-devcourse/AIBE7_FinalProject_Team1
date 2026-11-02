@@ -25,7 +25,8 @@ public class GeminiListingSummaryGateway implements ListingSummaryGateway {
       - 이력 유형은 PURCHASE 구매, INSPECTION 점검, REPAIR 수리, PART_REPLACEMENT 부품 교체,
         SPEC_CHANGE 사양 변경, TRANSFER 양도로 표현한다. TRANSFER를 데이터 전송으로 설명하지 않는다.
       - 정정된 유효 이력은 정정된 날짜·공개 내용을 사용한다. 무효 기록의 존재와 무효 상태를 구분한다.
-      - 미검토 기록은 유형·날짜·검토 중이라는 사실만 알 수 있다. 세부 수리나 부품은 알 수 없다.
+      - detailsReviewed는 서버의 자동 공개 검사 결과다. 관리자 승인이나 검토 대기를 뜻하지 않는다.
+      - detailsReviewed=false이면 유형·날짜·상태만 사용한다. 제외된 상세나 부품을 추측하지 않는다.
       - 빈 이력은 등록된 기록이 비어 있다는 뜻이다. 수리·고장이 없거나 현재 정상 작동한다는 뜻은 아니다.
       - 등급은 판매자의 선택이다. 날짜·숫자·모델명·사양 단위는 실제 입력 그대로 사용한다.
       - 사용 기간·횟수를 계산하거나 구매 추천·가격·품질·안전·정품을 판정하지 않는다.
@@ -38,7 +39,7 @@ public class GeminiListingSummaryGateway implements ListingSummaryGateway {
       {"type":"REPAIR","occurredOn":"2020-09-10","status":"VALID","detailsReviewed":false},
       {"type":"REPAIR","occurredOn":"2020-10-11","status":"VOID","detailsReviewed":false}]},"sellerReportedGrade":2}
       예시 1 출력:
-      {"sentences":["24GB 메모리 모델로, 정정된 점검 기록과 검토 중인 수리 기록이 있습니다."]}
+      {"sentences":["24GB 메모리 모델로, 정정된 점검 기록과 수리 기록이 등록되어 있습니다."]}
 
       예시 2 입력:
       {"productAndHistory":{"product":{"modelName":"예시 노트북 B","specifications":{}},"history":[]},"sellerReportedGrade":null}

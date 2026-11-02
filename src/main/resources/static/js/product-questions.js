@@ -24,7 +24,7 @@
       parts.push(facts.status === 'VOID' ? '무효 기록 · 실제 사건 집계 제외' : '유효 기록');
       if (facts.corrected) parts.push('정정 반영');
       if (facts.previousOwner) parts.push('이전 소유자 기록');
-      if (!facts.detailsReviewed) parts.push('세부 내용 미검토');
+      if (!facts.detailsReviewed) parts.push('공개된 세부 내용 없음');
       if (facts.title) parts.push(facts.title);
       if (facts.content) parts.push(facts.content);
       if (facts.replacedPart) parts.push('교체 부품: ' + facts.replacedPart);
@@ -38,7 +38,7 @@
     row.append(create('p', parts.filter(Boolean).join(' · '))); return row;
   }
   function mount(container, context) {
-    if (!container || !/^[1-9]\d*$/.test(String(context.id)) || !['products','listings'].includes(context.scope)) return;
+    if (!container || !/^[1-9]\d*$/.test(String(context.id)) || context.scope !== 'listings') return;
     clear(context.scope);
     const root = create('section', null, 'product-questions'); root.setAttribute('aria-label', '제품 이력 Q&A');
     root.append(create('h2', '제품 이력에 질문하기'), create('p', '등록된 사양·보증·이력을 근거로 답해요. 답변 아래에서 사용한 기록을 함께 확인해 주세요.', 'pq-help'));
@@ -56,8 +56,7 @@
       button.addEventListener('click', () => { if (!panel.busy) { input.value = question; input.focus(); } }); examples.append(button);
     }
     root.append(examples, form, message, output);
-    if (context.scope === 'products' && container.querySelector('[data-history-root]')) container.querySelector('[data-history-root]').before(root);
-    else container.append(root);
+    container.append(root);
     const controls = () => {
       const seconds = Math.max(0, Math.ceil((panel.until - Date.now()) / 1000));
       submit.disabled = panel.busy || seconds > 0; input.disabled = panel.busy;
@@ -104,11 +103,7 @@
       }
     });
   }
-  document.addEventListener('pastport:product-detail-rendered', event => {
-    mount(document.querySelector('#passport [data-product-detail]'), {scope:'products', id:event.detail.product.productId});
-  });
   document.addEventListener('pastport:page-shown', event => {
-    if (event.detail.id !== 'passport') clear('products');
     if (event.detail.id !== 'detail') clear('listings');
   });
   document.addEventListener('pastport:auth-changed', () => clear());

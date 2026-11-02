@@ -4,6 +4,7 @@ import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import org.example.springtestci.ownership.entity.OwnershipTransfer;
 import org.example.springtestci.ownership.entity.TransferStatus;
+import org.example.springtestci.ownership.entity.TransferType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -34,4 +35,7 @@ public interface OwnershipTransferRepository extends JpaRepository<OwnershipTran
   Optional<OwnershipTransfer> findByProductIdAndStatus(Long productId, TransferStatus status);
 
   boolean existsByProductIdAndStatus(Long productId, TransferStatus status);
+
+  Optional<OwnershipTransfer> findFirstByProductIdAndFromUserIdAndTransferTypeOrderByIdDesc(
+      Long productId, Long fromUserId, TransferType transferType);
 }

@@ -48,6 +48,39 @@ class ProductRepositoryTest {
   }
 
   @Test
+  void ownedProductIncludesHistoryCountAndMostRecentRecord() {
+    long productId = insert(21L, "APPLE", "fp-history-summary");
+    jdbc.update(
+        "INSERT INTO product_events (product_id, author_id, event_type, occurred_on, title) VALUES (?, ?, 'INSPECTION', ?, ?)",
+        productId,
+        21L,
+        LocalDate.of(2026, 10, 1),
+        "초기 점검");
+    jdbc.update(
+        "INSERT INTO product_events (product_id, author_id, event_type, occurred_on, title) VALUES (?, ?, 'REPAIR', ?, ?)",
+        productId,
+        21L,
+        LocalDate.of(2026, 10, 2),
+        "키보드 수리");
+
+    ProductResponse product = repository.findOwned(productId, 21L).orElseThrow();
+
+    assertEquals(2L, product.historyCount());
+    assertEquals("REPAIR", product.recentHistory().eventType());
+    assertEquals("키보드 수리", product.recentHistory().title());
+    assertEquals(LocalDate.of(2026, 10, 2), product.recentHistory().occurredOn());
+  }
+
+  @Test
+  void replacingFieldAuthorTransfersEditResponsibilityToCurrentOwner() {
+    long productId = insert(22L, "APPLE", "fp-field-author");
+
+    repository.replaceFieldAuthor(productId, "TITLE", 23L);
+
+    assertEquals(23L, repository.findFieldAuthor(productId, "TITLE").orElseThrow());
+  }
+
+  @Test
   void anotherUserCannotReadOrLockTheProduct() {
     long productId = insert(2L, "APPLE", "fp-other-user");
 
@@ -90,6 +123,18 @@ class ProductRepositoryTest {
         "구매 증빙 확인",
         jdbc.queryForObject(
             "SELECT reason FROM audit_logs WHERE product_id = ?", String.class, productId));
+  }
+
+  @Test
+  void ownershipTransferChangesOwnerAndIncrementsFactsVersionOnce() {
+    long productId = insert(15L, "APPLE", "fp-owner-transfer");
+
+    repository.updateOwner(productId, 16L);
+
+    ProductResponse product = repository.findOwned(productId, 16L).orElseThrow();
+    assertEquals(16L, repository.findOwnerId(productId).orElseThrow());
+    assertEquals(2L, product.factsVersion());
+    assertTrue(repository.findOwned(productId, 15L).isEmpty());
   }
 
   @Test

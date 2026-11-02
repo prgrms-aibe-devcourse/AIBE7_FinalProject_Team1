@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import org.example.springtestci.history.dto.CorrectHistoryEventRequest;
@@ -65,10 +66,31 @@ class HistoryRepositoryTest {
         "{\"title\":\"수정\"}",
         "제목 오기 수정",
         "HISTORY_CORRECTED");
+    historyRepository.insertAudit(
+        productId,
+        101L,
+        eventId,
+        "{\"title\":\"수정\"}",
+        "{\"title\":\"수정\"}",
+        "중복 기록 무효화",
+        "HISTORY_VOIDED");
+    jdbc.update(
+        "UPDATE audit_logs SET created_at = ? WHERE event_id = ? AND action = 'HISTORY_CORRECTED'",
+        OffsetDateTime.parse("2026-10-20T03:00:00Z"),
+        eventId);
+    jdbc.update(
+        "UPDATE audit_logs SET created_at = ? WHERE event_id = ? AND action = 'HISTORY_VOIDED'",
+        OffsetDateTime.parse("2026-10-20T01:00:00Z"),
+        eventId);
 
     assertEquals(eventId, historyRepository.findTimeline(productId).get(0).eventId());
     assertEquals(List.of(documentId), historyRepository.findDocumentIds(productId).get(eventId));
-    assertEquals("제목 오기 수정", historyRepository.findLatestChanges(productId).get(eventId).reason());
+    assertEquals("중복 기록 무효화", historyRepository.findLatestChanges(productId).get(eventId).reason());
+    assertEquals(
+        List.of("제목 오기 수정", "중복 기록 무효화"),
+        historyRepository.findChanges(productId).get(eventId).stream()
+            .map(HistoryRepository.HistoryChangeRecord::reason)
+            .toList());
     assertNotNull(
         jdbc.queryForObject(
             "SELECT protected_at FROM documents WHERE id = ?", Object.class, documentId));
@@ -108,6 +130,31 @@ class HistoryRepositoryTest {
         2L,
         jdbc.queryForObject(
             "SELECT facts_version FROM products WHERE id = ?", Long.class, productId));
+  }
+
+  @Test
+  void onlyAnUnexpiredPendingDirectTransferBlocksNewHistory() {
+    long productId = insertProduct(109L, "history-fingerprint-transfer-block");
+    jdbc.update(
+        "INSERT INTO users(id,email,password_hash,nickname,role,created_at,updated_at) VALUES(109,'history-transfer@fixture.invalid','unused','hist109','USER',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)");
+    jdbc.update(
+        """
+        INSERT INTO ownership_transfers
+            (product_id, from_user_id, token_hash, status, transfer_type, expires_at, pending_slot)
+        VALUES (?, ?, ?, 'PENDING', 'DIRECT', ?, 1)
+        """,
+        productId,
+        109L,
+        "history-pending-direct-token",
+        OffsetDateTime.now().plusDays(1));
+
+    assertTrue(historyRepository.hasPendingDirectTransfer(productId));
+
+    jdbc.update(
+        "UPDATE ownership_transfers SET expires_at = ? WHERE product_id = ?",
+        OffsetDateTime.now().minusDays(1),
+        productId);
+    assertFalse(historyRepository.hasPendingDirectTransfer(productId));
   }
 
   @Test

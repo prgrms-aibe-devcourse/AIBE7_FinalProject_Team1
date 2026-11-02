@@ -14,7 +14,8 @@ public record ListingSummaryState(
     String errorCode,
     Instant updatedAt,
     int formatVersion) {
-  public static final int CARD_FORMAT_VERSION = 1;
+  // 공개 이력 본문을 입력에 포함하는 정책이다. 이전 메타데이터 전용 요약은 다시 생성한다.
+  public static final int CARD_FORMAT_VERSION = 2;
   public static final int CARD_MAX_LENGTH = 90;
 
   /** 미요청 → 대기 → 처리 중 → 완료/실패를 구분해 화면 안내와 재시도 가능 여부를 판단한다. */

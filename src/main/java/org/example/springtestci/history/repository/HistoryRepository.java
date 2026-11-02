@@ -51,6 +51,20 @@ public class HistoryRepository {
         .isEmpty();
   }
 
+  /** 제품 잠금 이후 호출해 유효한 외부 직접 승계 요청과 사용자 이력 등록의 경합을 막는다. */
+  public boolean hasPendingDirectTransfer(long productId) {
+    return Boolean.TRUE.equals(
+        jdbc.queryForObject(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM ownership_transfers
+                 WHERE product_id = ? AND transfer_type = 'DIRECT'
+                   AND status = 'PENDING' AND expires_at > CURRENT_TIMESTAMP)
+            """,
+            Boolean.class,
+            productId));
+  }
+
   public ProductSpecifications findSpecifications(long productId) {
     return jdbc.queryForObject(
         """
@@ -145,6 +159,60 @@ public class HistoryRepository {
         },
         keys);
     return keys.getKey().longValue();
+  }
+
+  /** 소유권 모듈이 제품 행을 잠근 뒤 호출하며, 이전 요청당 시스템 이력 한 건만 저장한다. */
+  public long insertTransferEvent(
+      long productId, long transferRequestId, LocalDate occurredOn, OffsetDateTime completedAt) {
+    GeneratedKeyHolder keys = new GeneratedKeyHolder();
+    jdbc.update(
+        connection -> {
+          PreparedStatement statement =
+              connection.prepareStatement(
+                  """
+                  INSERT INTO product_events
+                      (product_id, author_id, event_type, occurred_on, title, content,
+                       service_provider, cost, replaced_part, specs_before, specs_after,
+                       status, transfer_request_id, visibility, public_text_reviewed,
+                       created_at, updated_at)
+                  VALUES (?, NULL, 'TRANSFER', ?, '소유권 이전 완료', NULL,
+                          NULL, NULL, NULL, NULL, NULL, 'VALID', ?, 'PRIVATE', TRUE, ?, ?)
+                  """,
+                  new String[] {"id"});
+          statement.setLong(1, productId);
+          statement.setDate(2, Date.valueOf(occurredOn));
+          statement.setLong(3, transferRequestId);
+          statement.setObject(4, completedAt);
+          statement.setObject(5, completedAt);
+          return statement;
+        },
+        keys);
+    return keys.getKey().longValue();
+  }
+
+  public Optional<TransferEventIdentity> findTransferEvent(long transferRequestId) {
+    return jdbc
+        .query(
+            "SELECT id, product_id FROM product_events WHERE transfer_request_id = ?",
+            (row, index) -> new TransferEventIdentity(row.getLong("id"), row.getLong("product_id")),
+            transferRequestId)
+        .stream()
+        .findFirst();
+  }
+
+  public boolean isCurrentOwner(long productId, long ownerId) {
+    Integer count =
+        jdbc.queryForObject(
+            "SELECT COUNT(*) FROM products WHERE id = ? AND owner_id = ? AND archived_at IS NULL",
+            Integer.class,
+            productId,
+            ownerId);
+    return count != null && count == 1;
+  }
+
+  /** 소유권 이전 완료와 같은 트랜잭션에서 해당 제품의 누적 이력을 모두 비공개로 전환한다. */
+  public void makeAllPrivate(long productId) {
+    jdbc.update("UPDATE product_events SET visibility = 'PRIVATE' WHERE product_id = ?", productId);
   }
 
   public List<HistoryEventRecord> findTimeline(long productId) {
@@ -247,6 +315,7 @@ public class HistoryRepository {
     return result;
   }
 
+  /** 감사 로그의 삽입 순서를 기준으로 이벤트별 마지막 정정·무효 기록을 반환한다. */
   public Map<Long, HistoryChangeRecord> findLatestChanges(long productId) {
     Map<Long, HistoryChangeRecord> result = new LinkedHashMap<>();
     jdbc.query(
@@ -254,7 +323,7 @@ public class HistoryRepository {
         SELECT event_id, action, reason, created_at
           FROM audit_logs
          WHERE product_id = ? AND event_id IS NOT NULL
-         ORDER BY event_id, created_at, id
+         ORDER BY event_id, id
         """,
         (org.springframework.jdbc.core.RowCallbackHandler)
             row ->
@@ -264,6 +333,30 @@ public class HistoryRepository {
                         row.getString("action"),
                         row.getString("reason"),
                         row.getObject("created_at", OffsetDateTime.class))),
+        productId);
+    return result;
+  }
+
+  /** 타임라인에서 정정 후 무효 처리까지 빠짐없이 표시할 수 있도록 변경 기록을 발생 순서대로 묶는다. */
+  public Map<Long, List<HistoryChangeRecord>> findChanges(long productId) {
+    Map<Long, List<HistoryChangeRecord>> result = new LinkedHashMap<>();
+    jdbc.query(
+        """
+        SELECT event_id, action, reason, created_at
+          FROM audit_logs
+         WHERE product_id = ? AND event_id IS NOT NULL
+         ORDER BY event_id, id
+        """,
+        (org.springframework.jdbc.core.RowCallbackHandler)
+            row ->
+                result
+                    .computeIfAbsent(
+                        row.getLong("event_id"), ignored -> new java.util.ArrayList<>())
+                    .add(
+                        new HistoryChangeRecord(
+                            row.getString("action"),
+                            row.getString("reason"),
+                            row.getObject("created_at", OffsetDateTime.class))),
         productId);
     return result;
   }
@@ -351,4 +444,6 @@ public class HistoryRepository {
       OffsetDateTime updatedAt) {}
 
   public record HistoryChangeRecord(String action, String reason, OffsetDateTime changedAt) {}
+
+  public record TransferEventIdentity(long eventId, long productId) {}
 }

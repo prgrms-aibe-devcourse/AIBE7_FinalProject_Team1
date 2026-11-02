@@ -32,6 +32,7 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class ProductService {
 
+  // 한 제품에 저장할 수 있는 이미지 수를 한곳에서 관리하기 위한 업무 규칙 상수다.
   static final int MAX_IMAGES_PER_PRODUCT = 10;
 
   private static final Logger log = LoggerFactory.getLogger(ProductService.class);
@@ -58,6 +59,7 @@ public class ProductService {
     this.events = events;
   }
 
+  /** 제품·노트북 상세·필드 작성자를 하나의 트랜잭션에서 저장한다. */
   @Transactional
   public ProductResponse create(long ownerId, CreateProductRequest request) {
     validateDates(request.purchaseDate(), request.warrantyExpiresAt());
@@ -84,11 +86,13 @@ public class ProductService {
     return get(ownerId, productId);
   }
 
+  /** 소유 제품 목록을 조회하고 각 제품의 이미지 정보를 결합한다. */
   @Transactional(readOnly = true)
   public List<ProductResponse> listMine(long ownerId) {
     return productRepository.findAllOwned(ownerId).stream().map(this::withImages).toList();
   }
 
+  /** 소유권을 확인한 뒤 암호화된 일련번호를 복호화해 상세 응답에 포함한다. */
   @Transactional(readOnly = true)
   public ProductResponse get(long ownerId, long productId) {
     ProductResponse product = getForListing(ownerId, productId);
@@ -126,10 +130,10 @@ public class ProductService {
             .findOwned(productId, ownerId)
             .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND));
 
-    requireFieldAuthor(productId, ownerId, "TITLE", before.title(), request.title());
-    requireFieldAuthor(
+    replaceFieldAuthor(productId, ownerId, "TITLE", before.title(), request.title());
+    replaceFieldAuthor(
         productId, ownerId, "PURCHASE_DATE", before.purchaseDate(), request.purchaseDate());
-    requireFieldAuthor(
+    replaceFieldAuthor(
         productId,
         ownerId,
         "WARRANTY_EXPIRES_AT",
@@ -161,12 +165,14 @@ public class ProductService {
   @Transactional
   public ProductResponse addImage(
       long ownerId, long productId, String filename, String contentType, byte[] content) {
+    // 같은 제품의 동시 이미지 추가가 최대 개수 검사를 통과하지 못하도록 제품 행을 먼저 잠근다.
     requireOwnedLock(ownerId, productId);
     ProductImageValidator.ImageKind kind = imageValidator.validate(filename, contentType, content);
     if (productRepository.countImages(productId) >= MAX_IMAGES_PER_PRODUCT) {
       throw new CommonException(ErrorCode.PRODUCT_IMAGE_LIMIT_EXCEEDED);
     }
 
+    // DB에는 파일 자체가 아니라 파일 저장소에서 찾을 때 사용하는 storageKey를 보관한다.
     String storageKey = store(productId, kind.extension(), content);
     try {
       productRepository.insertImage(productId, storageKey, kind.contentType(), content.length);
@@ -183,6 +189,7 @@ public class ProductService {
     requireOwnedLock(ownerId, productId);
     List<Long> current =
         productRepository.findImages(productId).stream().map(ProductImageRecord::imageId).toList();
+    // Set은 중복을 제거하고 현재 이미지 ID 집합과 요청 ID 집합이 같은지 비교하기 위해 사용한다.
     Set<Long> requested = new HashSet<>(request.imageIds());
     if (requested.size() != request.imageIds().size()
         || !requested.equals(new HashSet<>(current))
@@ -233,18 +240,10 @@ public class ProductService {
     }
   }
 
-  private void requireFieldAuthor(
+  private void replaceFieldAuthor(
       long productId, long ownerId, String fieldName, Object before, Object after) {
     if (Objects.equals(before, after)) return;
-    OptionalLongAuthor author =
-        productRepository
-            .findFieldAuthor(productId, fieldName)
-            .map(OptionalLongAuthor::known)
-            .orElseGet(OptionalLongAuthor::missing);
-    if (author.known() && author.authorId() != ownerId) {
-      throw new CommonException(ErrorCode.ACCESS_DENIED);
-    }
-    if (!author.known()) productRepository.insertFieldAuthor(productId, fieldName, ownerId);
+    productRepository.replaceFieldAuthor(productId, fieldName, ownerId);
   }
 
   private String auditJson(ProductResponse product) {
@@ -271,6 +270,7 @@ public class ProductService {
   }
 
   private ProductResponse withImages(ProductResponse product) {
+    // DB의 이미지 레코드를 API 응답 전용 Image DTO로 변환한다.
     List<ProductResponse.Image> images =
         productRepository.findImages(product.productId()).stream()
             .map(
@@ -314,16 +314,6 @@ public class ProductService {
         return;
       }
       throw new CommonException(ErrorCode.INTERNAL_ERROR);
-    }
-  }
-
-  private record OptionalLongAuthor(boolean known, long authorId) {
-    static OptionalLongAuthor known(long authorId) {
-      return new OptionalLongAuthor(true, authorId);
-    }
-
-    static OptionalLongAuthor missing() {
-      return new OptionalLongAuthor(false, 0);
     }
   }
 

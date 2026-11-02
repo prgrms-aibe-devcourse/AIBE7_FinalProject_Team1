@@ -153,6 +153,17 @@ class ListingSummaryTextPolicyTest {
                 source));
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"010\u20111234\u20115678", "수리비 50000"})
+  void storedCardsCannotReusePreviouslyAcceptedPrivateOrCostText(String value) {
+    assertFalse(policy.reusableStored("MacBook Pro 14이며 " + value + "입니다."));
+    String source =
+        INPUT.replace("\"history\":[]", "\"history\":[{\"content\":\"" + value + "\"}]");
+    assertThrows(
+        CommonException.class,
+        () -> policy.validate(List.of("MacBook Pro 14이며 " + value + "입니다."), source));
+  }
+
   @Test
   void hidesLegacyLongAndInstructionTextOnRead() {
     assertTrue(policy.reusableStored(String.join(" ", valid)));

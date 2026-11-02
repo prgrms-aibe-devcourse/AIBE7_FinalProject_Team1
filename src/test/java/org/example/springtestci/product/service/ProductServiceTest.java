@@ -127,8 +127,6 @@ class ProductServiceTest {
     when(productRepository.lockOwned(PRODUCT, OWNER)).thenReturn(true);
     when(productRepository.findOwned(PRODUCT, OWNER))
         .thenReturn(Optional.of(product()), Optional.of(after));
-    when(productRepository.findFieldAuthor(eq(PRODUCT), anyString()))
-        .thenReturn(Optional.of(OWNER));
     when(productRepository.findSerialCiphertextOwned(PRODUCT, OWNER))
         .thenReturn(Optional.of(protector.encrypt(CIPHERTEXT_SECRET)));
     when(productRepository.findImages(PRODUCT)).thenReturn(List.of());
@@ -143,14 +141,22 @@ class ProductServiceTest {
   }
 
   @Test
-  void updateRejectsAFieldWrittenByAPreviousOwner() {
+  void currentOwnerCanUpdateAFieldWrittenByAPreviousOwner() {
+    UpdateProductRequest request = updateRequest();
+    ProductResponse after = product(2L, request.title(), null);
     when(productRepository.lockOwned(PRODUCT, OWNER)).thenReturn(true);
-    when(productRepository.findOwned(PRODUCT, OWNER)).thenReturn(Optional.of(product()));
-    when(productRepository.findFieldAuthor(PRODUCT, "TITLE")).thenReturn(Optional.of(99L));
+    when(productRepository.findOwned(PRODUCT, OWNER))
+        .thenReturn(Optional.of(product()), Optional.of(after));
+    when(productRepository.findSerialCiphertextOwned(PRODUCT, OWNER))
+        .thenReturn(Optional.of(protector.encrypt(CIPHERTEXT_SECRET)));
+    when(productRepository.findImages(PRODUCT)).thenReturn(List.of());
 
-    assertCode(ErrorCode.ACCESS_DENIED, () -> service.update(OWNER, PRODUCT, updateRequest()));
+    ProductResponse response = service.update(OWNER, PRODUCT, request);
 
-    verify(productRepository, never()).updateProduct(anyLong(), any());
+    assertEquals(request.title(), response.title());
+    verify(productRepository).replaceFieldAuthor(PRODUCT, "TITLE", OWNER);
+    verify(productRepository).replaceFieldAuthor(PRODUCT, "WARRANTY_EXPIRES_AT", OWNER);
+    verify(productRepository).updateProduct(PRODUCT, request);
   }
 
   @Test

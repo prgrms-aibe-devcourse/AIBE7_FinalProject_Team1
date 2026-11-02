@@ -231,6 +231,22 @@ class ListingBrowseHttpTest {
   }
 
   @Test
+  void memberCardsAcceptBrowserAccessCookieWithoutAnAuthorizationHeader() throws Exception {
+    String text = "18GB 메모리 모델로, 정정된 점검 기록이 있습니다.";
+    readyCard(text);
+    HISTORY_STATE.set(State.UNAVAILABLE);
+    var response =
+        getWithHeader(
+            "/api/v1/listings?manufacturer=Apple", "Cookie", "access_token=" + token("2"));
+    var ai = data(response).at("/items/0/aiSummary");
+    assertEquals("READY", ai.get("status").asString());
+    assertEquals(text, ai.get("text").asString());
+    assertTrue(String.join(",", response.headers().allValues("Vary")).contains("Cookie"));
+    assertTrue(response.headers().firstValue("Cache-Control").orElseThrow().contains("no-store"));
+    assertEquals(0, HISTORY_READS.get());
+  }
+
+  @Test
   void cardsHideLegacyAndChangedFactsAndMarkRetainedTextDuringRefresh() throws Exception {
     readyCard("18GB 메모리 모델입니다.");
     jdbc.update(
@@ -271,8 +287,9 @@ class ListingBrowseHttpTest {
 
   private void readyCard(String text) {
     jdbc.update(
-        "UPDATE listings SET summary_status='READY',summary_text=?,summary_format_version=1,summary_attempt_id=?,summary_source_product_version=(SELECT facts_version FROM products WHERE id=101),summary_source_listing_version=content_version,summary_requested_at=CURRENT_TIMESTAMP,summary_available_at=CURRENT_TIMESTAMP,summary_error_code=NULL,summary_updated_at=CURRENT_TIMESTAMP WHERE id=11",
+        "UPDATE listings SET summary_status='READY',summary_text=?,summary_format_version=?,summary_attempt_id=?,summary_source_product_version=(SELECT facts_version FROM products WHERE id=101),summary_source_listing_version=content_version,summary_requested_at=CURRENT_TIMESTAMP,summary_available_at=CURRENT_TIMESTAMP,summary_error_code=NULL,summary_updated_at=CURRENT_TIMESTAMP WHERE id=11",
         text,
+        org.example.springtestci.ai.entity.ListingSummaryState.CARD_FORMAT_VERSION,
         UUID.randomUUID());
   }
 

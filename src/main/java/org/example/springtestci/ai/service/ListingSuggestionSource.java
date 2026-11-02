@@ -39,7 +39,7 @@ public class ListingSuggestionSource {
     var owned = products.getForListing(userId, productId);
     if (publication.history().status() != State.READY)
       throw new CommonException(ErrorCode.AI_SOURCE_UNAVAILABLE);
-    // 무효 이력·미검토 자유 입력은 실제 사실로 사용하지 않는다. 존재·날짜·상태는 전부 남긴다.
+    // 자동 검사 후 공개 가능한 유효 상세만 사용한다. 무효·상세 제외 이력도 존재·날짜·상태는 남긴다.
     var events = publication.history().items().stream().map(AiEvent::from).toList();
     var data = new Input(publication.product(), events);
     String source = json.writeValueAsString(data);

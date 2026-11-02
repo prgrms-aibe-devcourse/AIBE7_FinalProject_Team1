@@ -2,7 +2,6 @@ package org.example.springtestci.ownership.repository;
 
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.example.springtestci.trade.service.InternalTradeCompletionPort;
@@ -143,38 +142,12 @@ public class InternalTradeOwnershipRepository {
         c.confirmedFactsVersion());
   }
 
-  /** 시스템 TRANSFER 이력은 작성자 없이 생성하고 기존 transfer_request_id UNIQUE로 중복 생성을 막는다. */
-  public void insertTransferEvent(long productId, long transferId, LocalDate date, Instant at) {
-    jdbc.update(
-        "INSERT INTO product_events(product_id,author_id,event_type,occurred_on,title,status,transfer_request_id,created_at,updated_at) VALUES(?,NULL,'TRANSFER',?,'소유권 이전','VALID',?,?,?)",
-        productId,
-        java.sql.Date.valueOf(date),
-        transferId,
-        Timestamp.from(at),
-        Timestamp.from(at));
-  }
-
-  /** 완료 재요청 시 같은 이전의 유효한 시스템 이력이 정확히 한 건인지 확인한다. */
-  public boolean hasTransferEvent(long productId, long transferId) {
-    return jdbc.queryForObject(
-            "SELECT count(*) FROM product_events WHERE product_id=? AND transfer_request_id=? AND event_type='TRANSFER' AND author_id IS NULL AND status='VALID'",
-            Long.class,
-            productId,
-            transferId)
-        == 1;
-  }
-
   /** 승계된 마스킹 사본은 삭제 제한만 추가한다. 업로더·파일·재마스킹 차단 상태는 보존한다. */
   public void protectDocuments(long productId, Instant at) {
     jdbc.update(
         "UPDATE documents SET protected_at=COALESCE(protected_at,?) WHERE product_id=?",
         Timestamp.from(at),
         productId);
-  }
-
-  /** SOLD 전환과 같은 트랜잭션에서 정식 이력 공개 메타데이터도 비공개로 맞춘다. 원문·검토 결과는 보존한다. */
-  public void makeHistoryPrivate(long productId) {
-    jdbc.update("UPDATE product_events SET visibility='PRIVATE' WHERE product_id=?", productId);
   }
 
   public record Product(long ownerId, long factsVersion, boolean archived) {}
