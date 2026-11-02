@@ -43,8 +43,8 @@ public class SecurityConfig {
 
   /** CSRF 검증, 쿠키 인증, 접근 규칙을 설정한다. */
   @Bean
-  SecurityFilterChain securityFilterChain(HttpSecurity http, AdminAccessService adminAccess)
-      throws Exception {
+  SecurityFilterChain securityFilterChain(
+      HttpSecurity http, AdminAccessService adminAccess, JwtDecoder jwtDecoder) throws Exception {
     var entryPoint = new AdminPageAuthenticationEntryPoint();
     http.csrf(
             csrf ->
@@ -55,7 +55,8 @@ public class SecurityConfig {
         // 인증 성공 시 기존 CSRF 쿠키가 지워지므로, 인증 후 새 토큰을 읽어 다음 요청용 쿠키를 발급한다.
         .addFilterAfter(new CsrfCookieFilter(), SessionManagementFilter.class)
         // 쿠키 요청이 CSRF 검사를 받은 뒤에 쿠키를 Authorization 헤더로 바꿔 넘긴다.
-        .addFilterBefore(new CookieBearerTokenFilter(), BearerTokenAuthenticationFilter.class)
+        .addFilterBefore(
+            new CookieBearerTokenFilter(jwtDecoder), BearerTokenAuthenticationFilter.class)
         // CSRF 검사에 실패하면 인증 문제(401)가 아니라 요청 거부(403)로 응답한다.
         .exceptionHandling(
             handling ->

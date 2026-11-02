@@ -3,6 +3,7 @@ package org.example.springtestci.listing.dto;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import org.example.springtestci.listing.service.ListingHistoryReader.ChangeAction;
 import org.example.springtestci.listing.service.ListingHistoryReader.EventStatus;
 import org.example.springtestci.listing.service.ListingHistoryReader.EventType;
 import org.example.springtestci.listing.service.ListingHistoryReader.State;
@@ -55,5 +56,9 @@ public record ListingPublicationResponse(Product product, History history) {
   }
 
   public record Correction(
-      long correctionId, Instant correctedAt, String reason, DetailsStatus detailsStatus) {}
+      long correctionId,
+      Instant correctedAt,
+      String reason,
+      DetailsStatus detailsStatus,
+      ChangeAction action) {}
 }

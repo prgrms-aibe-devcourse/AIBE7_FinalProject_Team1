@@ -95,7 +95,7 @@ public class JdbcListingHistoryReader implements ListingHistoryReader {
       var changes =
           jdbc.query(
               """
-          SELECT a.id, a.event_id, a.created_at, e.event_type, %s AS reason
+          SELECT a.id, a.event_id, a.created_at, a.action, e.event_type, %s AS reason
             FROM audit_logs a JOIN product_events e ON e.id = a.event_id AND e.product_id = a.product_id
            WHERE e.product_id = ? AND a.action IN ('HISTORY_CORRECTED', 'HISTORY_VOIDED')
            ORDER BY a.event_id, a.created_at DESC, a.id DESC LIMIT ?
@@ -108,7 +108,8 @@ public class JdbcListingHistoryReader implements ListingHistoryReader {
                           row.getLong("id"),
                           instant(row, "created_at"),
                           row.getString("reason"),
-                          columns.reason() && !"TRANSFER".equals(row.getString("event_type")))),
+                          columns.reason() && !"TRANSFER".equals(row.getString("event_type")),
+                          ChangeAction.valueOf(required(row.getString("action"))))),
               productId,
               MAX_CHANGES + 1);
       if (changes.size() > MAX_CHANGES) throw unavailable();

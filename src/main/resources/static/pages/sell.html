@@ -30,10 +30,10 @@
     <section class="sc-card">
       <h2>판매 정보</h2>
       <p class="sub">아직 작성하지 않은 항목이 있어도 임시저장할 수 있어요.</p>
-      <label class="sc-field"><span>제목</span><input data-sale-title aria-label="판매글 제목" placeholder="판매글 제목을 입력해 주세요" maxlength="60" disabled><small data-sale-title-count>0 / 60자</small></label>
-      <label class="sc-field sl-price"><span>판매 가격</span><input data-sale-price aria-label="판매 가격" placeholder="가격 입력" inputmode="numeric" disabled></label>
-      <div class="sc-field"><span>제품 상태 등급</span>
-        <div class="sl-grade" role="radiogroup" aria-label="제품 상태 등급">
+      <label class="sc-field" data-sale-title-field><span>제목</span><input data-sale-title aria-label="판매글 제목" aria-required="true" aria-describedby="sale-title-error" placeholder="판매글 제목을 입력해 주세요" maxlength="60" disabled><small data-sale-title-count>0 / 60자</small><small class="sl-field-error" id="sale-title-error" data-sale-title-error aria-live="polite" hidden></small></label>
+      <label class="sc-field sl-price" data-sale-price-field><span>판매 가격</span><input data-sale-price aria-label="판매 가격" aria-required="true" aria-describedby="sale-price-error" placeholder="가격 입력" inputmode="numeric" disabled><small class="sl-field-error" id="sale-price-error" data-sale-price-error aria-live="polite" hidden></small></label>
+      <div class="sc-field" data-sale-grade-field><span>제품 상태 등급</span>
+        <div class="sl-grade" data-sale-grade-group role="radiogroup" aria-label="제품 상태 등급" aria-required="true" aria-describedby="sale-grade-error" tabindex="-1">
           <button type="button" data-sale-grade="1" role="radio" aria-checked="false" disabled><b>1등급</b><span>매우 나쁨</span></button>
           <button type="button" data-sale-grade="2" role="radio" aria-checked="false" disabled><b>2등급</b><span>나쁨</span></button>
           <button type="button" data-sale-grade="3" role="radio" aria-checked="false" disabled><b>3등급</b><span>보통</span></button>
@@ -41,8 +41,9 @@
           <button type="button" data-sale-grade="5" role="radio" aria-checked="false" disabled><b>5등급</b><span>최상</span></button>
         </div>
         <small>등급을 다시 누르면 선택을 해제할 수 있어요.</small>
+        <small class="sl-field-error" id="sale-grade-error" data-sale-grade-error aria-live="polite" hidden></small>
       </div>
-      <label class="sc-field"><span>상세 설명</span><textarea data-sale-description aria-label="상세 설명" maxlength="2000" placeholder="제품의 상태와 판매 내용을 적어 주세요." disabled></textarea><small data-sale-description-count>0 / 2,000자</small></label>
+      <label class="sc-field" data-sale-description-field><span>상세 설명</span><textarea data-sale-description aria-label="상세 설명" aria-required="true" aria-describedby="sale-description-error" maxlength="2000" placeholder="제품의 상태와 판매 내용을 적어 주세요." disabled></textarea><small data-sale-description-count>0 / 2,000자</small><small class="sl-field-error" id="sale-description-error" data-sale-description-error aria-live="polite" hidden></small></label>
     </section>
     <section class="sc-card sl-ai">
       <div class="sl-section-head"><div><h2>AI 제목·본문 제안</h2><p class="sub">공개 예정 제품 정보와 이전 소유자를 포함한 누적 핵심 이력을 Gemini에 보내 제목·설명을 제안받아요. 사진·증빙·채팅은 보내지 않아요.</p></div><span class="sc-badge">선택 기능</span></div>
@@ -56,9 +57,10 @@
         <button type="button" class="sc-btn" data-sale-ai-apply disabled>제목·설명에 적용</button>
       </div>
     </section>
-    <section class="sc-card">
-      <h2>공개할 사진</h2>
+    <section class="sc-card" data-sale-photos-field tabindex="-1" aria-labelledby="sale-photos-heading" aria-describedby="sale-photos-error">
+      <h2 id="sale-photos-heading">공개할 사진</h2>
       <p class="sub">등록된 제품 사진을 선택해 주세요. 첫 번째 선택 사진이 대표 사진이에요. 화살표나 드래그로 순서를 바꿀 수 있어요.</p>
+      <p class="sl-field-error" id="sale-photos-error" data-sale-photos-error aria-live="polite" hidden></p>
       <p class="sl-photo-empty" data-sale-photos-empty>제품을 선택하면 등록된 사진이 보여요.</p>
       <div class="sl-photos" data-sale-photos></div>
       <p class="sl-photo-caption" data-sale-photo-count>선택한 사진 0장</p>
@@ -77,6 +79,7 @@
       <p class="sub">개별 핵심 이력을 선택하거나 제외할 수 없어요. 과거 비용·시리얼·개인정보·증빙 문서와 문서 등록 여부는 제공하지 않아요.</p>
     </section>
     <div class="sl-bar">
+      <div class="sc-note danger sl-action-error" data-sale-action-error role="alert" tabindex="-1" hidden><i aria-hidden="true">!</i><span></span></div>
       <span class="saved" data-sale-saved role="status" aria-live="polite">아직 임시저장하지 않았어요.</span>
       <button type="submit" class="sc-btn primary" data-sale-save disabled>임시저장</button>
       <button type="button" class="sc-btn" data-sale-reload hidden>저장본 다시 불러오기</button>

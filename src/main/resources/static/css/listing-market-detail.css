@@ -1,0 +1,115 @@
+/* 게시된 판매글은 사진·가격·설명을 먼저 읽고 제품 여권으로 이어지는 마켓 화면으로 구성한다. */
+body:has(#detail.active) .side{display:none}
+body:has(#detail.active) .main{margin-left:0}
+body:has(#detail.active) .main>.top{display:none}
+#detail.page{max-width:1144px;margin:24px auto;padding:24px 32px 132px;background:#fff;border:1px solid var(--line);border-radius:16px}
+#detail .listing-page-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px}
+#detail .listing-page-head h1{font-size:24px;margin:16px 0 0}
+#detail.has-listing .listing-page-head h1{display:none}
+#detail .listing-back{padding:8px 0;color:var(--blue);font-size:14px;font-weight:600;min-height:40px}
+#detail .listing-page-head>.sc-btn{font-size:13px;min-height:36px}
+#detail [data-listing-status]:empty{display:none}
+#detail [data-listing-content]{margin-top:0}
+/* 1078px 안쪽 폭 = 사진/본문 710px + 간격 48px + 판매 정보 320px. */
+.listing-market-detail{display:grid;grid-template-columns:minmax(0,1fr) 320px;grid-template-areas:"gallery summary" "body summary";column-gap:48px;row-gap:0;align-items:start}
+.listing-market-detail>.dt-gallery{grid-area:gallery;min-width:0;display:grid;gap:12px}
+.listing-market-detail>.listing-detail-summary{grid-area:summary;min-width:0;padding:6px 0;background:transparent;border:0;box-shadow:none}
+.listing-market-detail>.listing-detail-body{grid-area:body;min-width:0}
+#detail .listing-detail-summary{position:sticky;top:calc(var(--hh,165px) + 24px)}
+.listing-market-detail .dt-stage{height:auto;aspect-ratio:4/3;position:relative;overflow:hidden;background:var(--soft);border-radius:12px}
+.listing-image-frame{display:grid;place-items:center;width:100%;height:100%;min-height:0;min-width:0}
+.listing-market-detail .dt-stage .listing-image-frame>img{display:block;width:100%;height:100%;object-fit:contain}
+.listing-image-empty{padding:32px;text-align:center;font-size:14px;color:#5c626c;line-height:1.7}
+.listing-gallery-count{position:absolute;right:18px;bottom:18px;padding:6px 12px;border-radius:999px;background:rgba(22,23,29,.65);color:#fff;font-size:13px;font-variant-numeric:tabular-nums}
+.listing-gallery-arrow{position:absolute;top:calc(50% - 22px);display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:#fff;color:var(--ink);font-size:30px;line-height:1;border:1px solid var(--line)}
+.listing-gallery-arrow.is-previous{left:12px}.listing-gallery-arrow.is-next{right:12px}
+.listing-gallery-arrow:hover{background:var(--soft)}
+.listing-market-detail .listing-detail-thumbs{display:flex;gap:10px;flex-wrap:nowrap;overflow-x:auto;padding:3px;scrollbar-width:thin}
+.listing-photo-thumb{flex:0 0 64px;width:64px;height:58px;overflow:hidden;border:2px solid transparent;border-radius:8px;background:var(--soft);padding:0}
+.listing-photo-thumb img{display:block;width:100%;height:100%;object-fit:cover}
+.listing-photo-thumb[aria-pressed=true]{border-color:var(--blue)}
+.listing-detail-meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:#5c626c;font-size:12px;line-height:1.6}
+.listing-sale-state{color:var(--blue);font-weight:700}
+.listing-detail-meta time{flex-basis:100%}
+.listing-market-detail .listing-detail-title{margin:18px 0 0;font-size:28px;line-height:1.45;letter-spacing:-.8px;word-break:keep-all;overflow-wrap:anywhere}
+.listing-market-detail .listing-detail-price{margin:18px 0 12px;font-size:30px;line-height:1.3;color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.listing-condition{margin:0 0 16px;font-size:14px;color:var(--ink)}
+.listing-model{margin:0 0 6px;font-size:14px;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.listing-spec-highlights{font-size:13px;color:#5c626c;line-height:1.8;margin:0;overflow-wrap:anywhere}
+.listing-passport-link{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;margin-top:28px;padding:18px;text-align:left;border-radius:8px;background:var(--blue-50);color:var(--blue)}
+.listing-passport-link strong{display:block;font-size:14px;font-weight:600}
+.listing-passport-link small{display:block;font-size:12px;margin-top:6px;line-height:1.6}
+.listing-passport-chevron{font-size:28px;line-height:1}
+.listing-passport-link:hover{outline:1px solid var(--blue)}
+.listing-trade-note{margin:16px 0 0;font-size:12px;line-height:1.8;color:#5c626c}
+.listing-market-detail .dt-sec{margin:0;padding:32px 0;border-bottom:1px solid var(--line);scroll-margin-top:calc(var(--hh,165px) + 24px)}
+.listing-market-detail .dt-sec>:is(h2,h3){font-size:18px;margin:0 0 18px;line-height:1.5}
+.listing-market-detail .listing-detail-description{font-size:15px;line-height:1.9;margin:0;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+#detail .listing-market-detail .sl-specs{grid-template-columns:repeat(2,minmax(0,1fr));gap:0 28px;margin:0}
+#detail .listing-market-detail .sl-specs>div{align-items:baseline;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);font-size:14px;line-height:1.7}
+#detail .sl-specs dt{color:#5c626c;flex-shrink:0}
+#detail .sl-specs dd{color:var(--ink);font-weight:500;min-width:0}
+#detail .sl-publication-event h4{font-size:15px;line-height:1.6}
+#detail .sl-publication-event p{font-size:14px;line-height:1.8;color:#4d5560}
+#detail .sl-publication-event-meta{font-size:12px}
+#detail .sl-publication-badge{font-size:11px}
+.listing-owner-summary{padding:24px 0;color:#5c626c;font-size:14px}
+.listing-owner-summary>summary{cursor:pointer;min-height:40px;line-height:40px}
+.listing-owner-summary .listing-ai-summary{padding:16px;background:var(--soft);border-radius:8px;margin-top:12px}
+#detail .product-questions{padding:24px;margin:0;background:var(--soft);border:0;border-radius:12px}
+#detail .product-questions h2{font-size:18px;line-height:1.5}
+#detail .pq-examples{gap:8px}
+#detail .pq-examples button{border-radius:999px;min-height:40px;background:#fff;font-size:13px}
+#detail .product-questions .pq-help{font-size:13px;color:#5c626c}
+#detail .product-questions textarea{background:#fff;min-height:88px;font-size:14px}
+#detail .product-questions .sc-btn{min-height:44px}
+#detail [data-listing-chats]{margin-top:28px;padding:24px;background:var(--soft);border:0;border-radius:12px;scroll-margin-top:calc(var(--hh,165px) + 24px)}
+#detail [data-listing-chats]>h2{font-size:18px;margin:0 0 16px}
+#detail .listing-delete-link{margin-top:24px;padding:0;border:0;background:none;color:#a12219;font-size:13px;text-decoration:underline;min-height:40px}
+#detail .listing-actionbar{position:fixed;inset:auto 0 0;z-index:45;padding:14px 24px calc(14px + env(safe-area-inset-bottom,0px));background:#fff;border-top:1px solid var(--line)}
+.listing-actionbar-inner{display:flex;align-items:center;justify-content:space-between;gap:24px;max-width:1080px;margin:0 auto}
+.listing-actionbar-price{display:grid;gap:4px;min-width:0}
+.listing-actionbar-price>span{font-size:12px;color:#5c626c}
+.listing-actionbar-price>strong{font-size:22px;line-height:1.25;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.listing-actionbar-buttons{display:flex;align-items:center;gap:10px}
+#detail .listing-actionbar .sc-btn{height:48px;min-width:140px;margin:0;border-radius:8px;font-size:15px;white-space:nowrap}
+#detail:has([data-listing-editor]:not([hidden])) .listing-actionbar{display:none}
+#sell .sl-preview .listing-market-detail{grid-template-columns:minmax(0,1fr) 280px;column-gap:28px}
+@media(max-width:1100px){
+  #detail.page{margin:16px;max-width:none;padding:24px 24px 128px}
+  .listing-market-detail{grid-template-columns:minmax(0,1fr) 280px;column-gap:28px}
+  .listing-market-detail .listing-detail-title{font-size:25px}
+  .listing-market-detail .listing-detail-price{font-size:28px}
+}
+@media(max-width:800px){
+  #detail.page{margin:0;border:0;border-radius:0;padding:18px 20px 124px}
+  #detail .listing-page-head{margin-bottom:16px}
+  .listing-market-detail,#sell .sl-preview .listing-market-detail{grid-template-columns:minmax(0,1fr);grid-template-areas:"gallery" "summary" "body";gap:0}
+  #detail .listing-detail-summary{position:static;padding:24px 0 28px;border-bottom:1px solid var(--line);grid-row:auto}
+  .listing-market-detail .listing-detail-title{margin-top:12px;font-size:24px}
+  .listing-market-detail .listing-detail-price{margin-top:14px;font-size:28px}
+  .listing-detail-meta time{flex-basis:auto}
+  .listing-market-detail .dt-stage{height:min(88vw,48svh,480px);aspect-ratio:auto}
+  .listing-passport-link{margin-top:22px}
+  .listing-trade-note{margin-bottom:0}
+  #detail .listing-market-detail .sl-specs{gap:0 22px}
+  #detail .listing-actionbar{padding-left:20px;padding-right:20px}
+  #detail .listing-actionbar .sc-btn{min-width:0;padding:0 18px}
+  .listing-actionbar-price>strong{font-size:19px}
+}
+@media(max-width:480px){
+  #detail .listing-page-head>.sc-btn{min-height:44px;font-size:12px;padding:0 12px}
+  #detail .listing-back,#detail .listing-delete-link{min-height:44px}
+  #detail .dt-gallery{margin:0 -20px}
+  #detail .dt-stage{border-radius:0}
+  #detail .listing-detail-thumbs{padding:12px 20px 3px}
+  #detail .listing-market-detail .sl-specs{grid-template-columns:minmax(0,1fr)}
+  #detail .product-questions{padding:20px}
+  #detail .pq-examples button{min-height:44px;font-size:12px;padding:8px 12px}
+  .listing-actionbar-inner{gap:10px}
+  .listing-actionbar-buttons{gap:6px;flex:1;min-width:0;justify-content:flex-end}
+  #detail .listing-actionbar.is-owner .listing-actionbar-price{display:none}
+  #detail .listing-actionbar .sc-btn{padding:0 12px;font-size:13px;flex:1}
+  #detail [data-listing-chat]{max-width:142px;white-space:normal;line-height:1.5}
+  .listing-actionbar-price>strong{font-size:18px}
+}

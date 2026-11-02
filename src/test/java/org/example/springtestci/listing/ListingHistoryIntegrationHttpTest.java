@@ -347,6 +347,7 @@ class ListingHistoryIntegrationHttpTest {
     var corrected = data(get("/api/v1/listings/11", "2")).at("/history/items/0");
     assertEquals("충전과 방전 동작 점검 완료", corrected.get("content").asString());
     assertEquals("점검 내용 오기입 정정", corrected.at("/corrections/0/reason").asString());
+    assertEquals("HISTORY_CORRECTED", corrected.at("/corrections/0/action").asString());
     processPending();
     assertEquals("충전과 방전 동작 점검 완료", aiEvent(2).get("content").asString());
 
@@ -355,6 +356,10 @@ class ListingHistoryIntegrationHttpTest {
     var voided = data(get("/api/v1/listings/11", "2")).at("/history/items/0");
     assertEquals("VOID", voided.get("status").asString());
     assertEquals("중복 등록으로 무효 처리", voided.at("/corrections/0/reason").asString());
+    assertEquals("HISTORY_VOIDED", voided.at("/corrections/0/action").asString());
+    assertEquals("HISTORY_CORRECTED", voided.at("/corrections/1/action").asString());
+    assertEquals("점검 내용 오기입 정정", voided.at("/corrections/1/reason").asString());
+    assertEquals(voided, data(get(PUBLICATION, "1")).at("/history/items/0"));
     processPending();
     assertEquals("VOID", aiEvent(2).get("status").asString());
     assertTrue(aiEvent(2).get("content").isNull());

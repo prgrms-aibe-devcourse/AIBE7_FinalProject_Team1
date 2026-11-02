@@ -42,6 +42,11 @@ public interface ListingHistoryReader {
     VOID
   }
 
+  enum ChangeAction {
+    HISTORY_CORRECTED,
+    HISTORY_VOIDED
+  }
+
   /** authorId는 이전 소유자 여부 계산에만 사용하며 판매용 응답으로 내보내지 않는다. */
   record Event(
       long eventId,
@@ -71,9 +76,19 @@ public interface ListingHistoryReader {
   }
 
   /** 정정·무효 사유에도 같은 자동 제외 규칙을 적용한다. 감사 전후 원문·수행자·증빙은 전달하지 않는다. */
-  record Correction(long correctionId, Instant correctedAt, String reason, boolean reviewed) {
+  record Correction(
+      long correctionId,
+      Instant correctedAt,
+      String reason,
+      boolean reviewed,
+      ChangeAction action) {
     public Correction {
       reason = reviewed ? PublicHistoryTextPolicy.clean(reason, 500) : null;
+    }
+
+    /** 기존 공급자의 유형 없는 기록은 현재 이력 상태로 정정·무효 여부를 추측하지 않는다. */
+    public Correction(long correctionId, Instant correctedAt, String reason, boolean reviewed) {
+      this(correctionId, correctedAt, reason, reviewed, null);
     }
   }
 }
