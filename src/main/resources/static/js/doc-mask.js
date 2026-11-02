@@ -102,6 +102,12 @@
   async function open(file) {
     fail('');
     if (!file) return;
+    // 제품을 고르기 전에는 마스킹 화면으로 넘어가지 않는다. 같은 파일을 다시 고를 수 있도록 선택값은 비운다.
+    if (!find('[data-dm-product]').value) {
+      find('[data-dm-file]').value = '';
+      fail('먼저 증빙을 연결할 제품을 선택해 주세요.');
+      return;
+    }
     if (!/^image\/(jpeg|png)$/.test(file.type)) {
       fail('JPG 또는 PNG 사진만 선택할 수 있어요. PDF는 곧 지원돼요.');
       return;
@@ -436,6 +442,7 @@
     wrapCanvas.addEventListener('pointerup', onPointerUp);
     wrapCanvas.addEventListener('pointercancel', cancelDrag);
     find('[data-dm-file]').addEventListener('change', (event) => open(event.target.files[0]));
+    find('[data-dm-product]').addEventListener('change', () => fail(''));
     all('[data-dm-tool]').forEach((button) => button.addEventListener('click', () => setTool(button.dataset.dmTool)));
     find('[data-dm-undo]').addEventListener('click', () => {
       if (!history.length) return;
