@@ -10,6 +10,18 @@ try {
     if ($LASTEXITCODE -ne 0 -or $version -notmatch '^(openjdk|java) 17\.') { throw 'JDK 17 required' }
     $env:JAVA_HOME = $JavaHome
     if (git status --porcelain) { throw 'Clean worktree required' }
+    Get-ChildItem Env: | Where-Object Name -Match '^(DB_|REDIS_|AI_|GEMINI_|SUPABASE_|JWT_|STORAGE_|PRODUCT_SERIAL_|TEST_|SALE_DRAFT_|OWN_INT_|DEPLOY_DDL_|P[2345]_|SPRING_|DOTENV_|JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|GRADLE_OPTS)' | ForEach-Object { Remove-Item -LiteralPath ('Env:' + $_.Name) }
+    $env:DOTENV_PATH = 'build/disabled-env/.env'
+    $env:JWT_SECRET = 'release-build-synthetic-test-secret-at-least-32-bytes'
+    $env:AI_SUMMARY_ENABLED = 'false'
+    $env:AI_LISTING_ENABLED = 'false'
+    $env:DB_URL = 'jdbc:h2:mem:release_build;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH'
+    $env:DB_DRIVER = 'org.h2.Driver'
+    $env:DB_USERNAME = 'sa'
+    $env:DB_PASSWORD = ''
+    $env:REDIS_HOST = '127.0.0.1'
+    $env:REDIS_PORT = '1'
+    $env:REDIS_PASSWORD = ''
     $commit = (git rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0 -or $commit -notmatch '^[0-9a-f]{40}$') { throw 'Cannot resolve commit' }
     Write-Output "commit=$commit"

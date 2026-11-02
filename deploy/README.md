@@ -73,6 +73,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deploy/scripts/build-release
 ```
 
 The script checks cleanliness/SHA before and after quality gates, runs Spotless,
+discards inherited DB/AWS-adjacent test opt-ins and application credentials from
+its build process, disables dotenv/AI and supplies synthetic H2 settings, then runs
 all Node tests and clean build (Java tests included). Outputs are ignored under
 `build/release`: `<sha8>.jar`, `<sha8>.jar.sha256`, `<sha8>.manifest.txt` with full
 commit, UTC build time, Java version and digest. Reproducible here means an

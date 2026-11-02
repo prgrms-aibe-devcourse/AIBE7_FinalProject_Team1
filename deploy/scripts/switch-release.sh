@@ -7,6 +7,7 @@ validate_sha; initialize
 bash "$(dirname -- "$0")/check-env.sh" "$env_file" >/dev/null || die 'environment check failed'
 [[ -f $go_file && ! -L $go_file && $(stat -c %u -- "$go_file") == 0 && $(stat -c %a -- "$go_file") == 600 ]] || die 'approved gate file required'
 for gate in CODE DB STORAGE HTTPS ENV ARTIFACT; do
+    [[ $(grep -c "^$gate=" "$go_file") == 1 ]] || die 'duplicate or conflicting gate'
     [[ $(grep -c "^$gate=GO$" "$go_file") == 1 ]] || die 'pre-start gate missing'
 done
 target="$root/releases/$sha.jar"; verify_release "$target"

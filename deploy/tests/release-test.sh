@@ -111,6 +111,9 @@ sed -i 's/^DB=GO$/DB=NO/' "$go_file"
 reject bash "$scripts/switch-release.sh" bbbbbbbb "$env_file" "$go_file" "$root"
 [[ $(readlink "$root/current.jar") == "$root/releases/aaaaaaaa.jar" ]]; pass 'DB NO prevents activation'
 sed -i 's/^DB=NO$/DB=GO/' "$go_file"
+printf 'DB=NO\n' >> "$go_file"
+reject bash "$scripts/switch-release.sh" bbbbbbbb "$env_file" "$go_file" "$root"
+sed -i '/^DB=NO$/d' "$go_file"; pass 'conflicting approval cannot override DB NO'
 printf corrupt >> "$root/releases/bbbbbbbb.jar"
 reject bash "$scripts/switch-release.sh" bbbbbbbb "$env_file" "$go_file" "$root"; pass 'activation verifies artifact again'
 cp "$FIXTURE/bbbbbbbb.jar" "$root/releases/bbbbbbbb.jar"
