@@ -27,7 +27,6 @@ h1,h2,h3,strong,.price{font-weight:700;letter-spacing:-.6px}
 .nav-all.open .burger{background:linear-gradient(var(--blue) 0 0) top/100% 2px no-repeat,linear-gradient(var(--blue) 0 0) center/100% 2px no-repeat,linear-gradient(var(--blue) 0 0) bottom/100% 2px no-repeat}
 .landing-nav .nav-item>button{position:relative;height:100%}
 .landing-nav .nav-item>button:after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:3px;background:var(--blue);transform:scaleX(0);transition:transform .18s ease}
-.nav-item:hover>button:after,.nav-item:focus-within>button:after{transform:scaleX(1)}
 .nav-drop{border-radius:8px;box-shadow:0 2px 12px 0 rgba(22,23,29,.1)}
 .nav-drop button{border-radius:4px}
 .nav-drop b{color:var(--ink)}
