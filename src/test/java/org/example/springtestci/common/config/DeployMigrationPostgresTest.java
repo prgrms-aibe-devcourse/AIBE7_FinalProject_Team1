@@ -58,20 +58,10 @@ class DeployMigrationPostgresTest {
     return new DriverManagerDataSource(url + separator + "currentSchema=" + schema, user, password);
   }
 
-  /** 배포용 복구 마이그레이션(2026110301~)이 생기기 전까지의 정식 마이그레이션만 적용한다. 공유 DB가 복구 이전에 이 상태였다. */
-  private static void migrateBeforeDeploy(DataSource dataSource) {
-    Flyway.configure()
-        .dataSource(dataSource)
-        .locations("classpath:db/migration")
-        .target("2026110201")
-        .ignoreMigrationPatterns("*:*")
-        .load()
-        .migrate();
-  }
-
   /** 실제 배포 설정처럼 이력 불일치로 멈추지 않도록 같은 무시 패턴을 쓴다. */
   private static void migrate(DataSource dataSource, boolean outOfOrder, String... locations) {
     Flyway.configure()
+        .configuration(java.util.Map.of("flyway.postgresql.transactional.lock", "false"))
         .dataSource(dataSource)
         .locations(locations)
         .outOfOrder(outOfOrder)
@@ -84,6 +74,19 @@ class DeployMigrationPostgresTest {
     Integer count =
         jdbc.queryForObject("select count(*) from (" + sql + ") t", Integer.class, args);
     return count != null && count > 0;
+  }
+
+  /** 복구 적용 전 DB를 재현한다. 신규 0305를 먼저 적용하면 더 낮은 복구 버전이 건너뛰어져 fixture의 의미가 달라진다. */
+  private static void migratePreDeploy(
+      DataSource dataSource, boolean outOfOrder, String... locations) {
+    Flyway.configure()
+        .configuration(java.util.Map.of("flyway.postgresql.transactional.lock", "false"))
+        .dataSource(dataSource)
+        .locations(locations)
+        .outOfOrder(outOfOrder)
+        .target("2026110202")
+        .load()
+        .migrate();
   }
 
   private static void assertDeployStructure(JdbcTemplate jdbc) {
@@ -130,9 +133,9 @@ class DeployMigrationPostgresTest {
   @Test
   void pending_경로로_이미_만든_DB에서도_복구_마이그레이션이_실패하지_않는다() {
     DataSource dataSource = newSchema();
-    migrateBeforeDeploy(dataSource);
+    migratePreDeploy(dataSource, false, "classpath:db/migration");
     // 팀이 기존에 쓰던 방식: 정식 경로 뒤에 pending P2·P3를 out-of-order로 적용한다.
-    migrate(
+    migratePreDeploy(
         dataSource,
         true,
         "classpath:db/migration",
@@ -148,7 +151,7 @@ class DeployMigrationPostgresTest {
   @Test
   void 이력은_적용됐지만_컬럼이_없는_DB는_복구_마이그레이션이_컬럼을_채운다() {
     DataSource dataSource = newSchema();
-    migrateBeforeDeploy(dataSource);
+    migratePreDeploy(dataSource, false, "classpath:db/migration");
     JdbcTemplate jdbc = new JdbcTemplate(dataSource);
     // 공유 DB 상황 재현: 그 버전은 적용된 것으로 기록돼 있으나 실제 구조에는 컬럼이 없다.
     jdbc.execute("drop index ix_product_events_publication");
@@ -173,7 +176,12 @@ class DeployMigrationPostgresTest {
     assertEquals(
         4,
         jdbc.queryForObject(
-            "select count(*) from flyway_schema_history where version like '202611030%'",
+            "select count(*) from flyway_schema_history where version in ('2026110301','2026110302','2026110303','2026110304')",
+            Integer.class));
+    assertEquals(
+        1,
+        jdbc.queryForObject(
+            "select count(*) from flyway_schema_history where version='2026110305'",
             Integer.class));
   }
 }

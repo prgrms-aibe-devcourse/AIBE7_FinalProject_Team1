@@ -2,7 +2,12 @@ package org.example.springtestci.product.repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.example.springtestci.product.dto.CreateProductRequest;
 import org.example.springtestci.product.dto.ProductResponse;
@@ -166,17 +171,41 @@ public class ProductRepository {
         .findFirst();
   }
 
-  /** 한 번에 돌려주는 내 제품 수의 상한. 목록이 무한히 커져 응답·이미지 조회가 느려지는 것을 막는다. 최신순으로 자른다. */
-  static final int MAX_OWNED_LIST = 200;
-
-  public List<ProductResponse> findAllOwned(long ownerId) {
+  /** 마지막으로 본 생성 시각·ID보다 뒤에 정렬되는 제품만 읽어 목록 변경 중에도 경계를 유지한다. */
+  public List<ProductResponse> findOwnedPage(
+      long ownerId, OffsetDateTime cursorCreatedAt, Long cursorProductId, int limit) {
+    if (cursorCreatedAt != null && cursorProductId != null) {
+      return jdbc.query(
+          PRODUCT_SELECT
+              + " WHERE p.owner_id = ? AND p.archived_at IS NULL"
+              + " AND (p.created_at < ? OR (p.created_at = ? AND p.id < ?))"
+              + " ORDER BY p.created_at DESC, p.id DESC LIMIT ?",
+          this::product,
+          ownerId,
+          cursorCreatedAt,
+          cursorCreatedAt,
+          cursorProductId,
+          limit);
+    }
     return jdbc.query(
         PRODUCT_SELECT
             + " WHERE p.owner_id = ? AND p.archived_at IS NULL"
             + " ORDER BY p.created_at DESC, p.id DESC LIMIT ?",
         this::product,
         ownerId,
-        MAX_OWNED_LIST);
+        limit);
+  }
+
+  public OwnedProductSummary summarizeOwned(long ownerId) {
+    return jdbc.queryForObject(
+        """
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN purchase_date IS NOT NULL THEN 1 ELSE 0 END), 0) AS purchased
+          FROM products
+         WHERE owner_id = ? AND archived_at IS NULL
+        """,
+        (row, index) -> new OwnedProductSummary(row.getLong("total"), row.getLong("purchased")),
+        ownerId);
   }
 
   public Optional<String> findSerialCiphertextOwned(long productId, long ownerId) {
@@ -351,6 +380,36 @@ public class ProductRepository {
         productId);
   }
 
+  /** 목록 페이지에 포함된 제품들의 이미지를 한 번에 읽어 제품별로 묶는다. */
+  public Map<Long, List<ProductImageRecord>> findImages(List<Long> productIds) {
+    if (productIds.isEmpty()) return Map.of();
+    String placeholders = String.join(",", Collections.nCopies(productIds.size(), "?"));
+    Map<Long, List<ProductImageRecord>> result = new LinkedHashMap<>();
+    jdbc.query(
+        """
+        SELECT product_id, id, storage_key, content_type, byte_size, sort_order, is_primary
+          FROM product_images
+         WHERE product_id IN (%s) AND deleted_at IS NULL
+         ORDER BY product_id, sort_order, id
+        """
+            .formatted(placeholders),
+        row -> {
+          long productId = row.getLong("product_id");
+          result
+              .computeIfAbsent(productId, ignored -> new ArrayList<>())
+              .add(
+                  new ProductImageRecord(
+                      row.getLong("id"),
+                      row.getString("storage_key"),
+                      row.getString("content_type"),
+                      row.getLong("byte_size"),
+                      row.getInt("sort_order"),
+                      row.getBoolean("is_primary")));
+        },
+        productIds.toArray());
+    return result;
+  }
+
   public Optional<ProductImageRecord> findImage(long productId, long imageId) {
     return findImages(productId).stream().filter(image -> image.imageId() == imageId).findFirst();
   }
@@ -465,4 +524,6 @@ public class ProductRepository {
       long byteSize,
       int sortOrder,
       boolean primary) {}
+
+  public record OwnedProductSummary(long total, long purchased) {}
 }

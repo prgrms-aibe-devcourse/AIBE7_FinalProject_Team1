@@ -195,6 +195,7 @@ class InternalTradeOwnershipHttpPostgresTest {
             System.getenv("SALE_DRAFT_TEST_DB_PASSWORD"));
     // 정식 history를 먼저 만든 뒤 기존 pending P2/P3를 적용한다. 버전 번호와 원본 SQL은 수정하지 않는다.
     Flyway.configure()
+        .configuration(Map.of("flyway.postgresql.transactional.lock", "false"))
         .dataSource(schemaSource)
         .schemas(schema)
         .defaultSchema(schema)
@@ -202,6 +203,7 @@ class InternalTradeOwnershipHttpPostgresTest {
         .load()
         .migrate();
     Flyway.configure()
+        .configuration(Map.of("flyway.postgresql.transactional.lock", "false"))
         .dataSource(schemaSource)
         .schemas(schema)
         .defaultSchema(schema)

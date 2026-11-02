@@ -15,6 +15,9 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
 
   long countByProductId(Long productId);
 
+  @Query("select d.productId from Document d where d.id = :id")
+  Optional<Long> findProductIdById(@Param("id") Long id);
+
   /** 저장 키로 문서를 찾는다. 다운로드 시점에 현재 소유자를 다시 확인할 때 쓴다. */
   Optional<Document> findByObjectKey(String objectKey);
 

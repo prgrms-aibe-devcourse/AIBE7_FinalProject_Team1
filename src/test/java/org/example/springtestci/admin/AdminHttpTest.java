@@ -54,6 +54,7 @@ class AdminHttpTest {
     if (postgres) {
       schemaSource = new DriverManagerDataSource(url, user, password);
       Flyway.configure()
+          .configuration(Map.of("flyway.postgresql.transactional.lock", "false"))
           .dataSource(schemaSource)
           .schemas(schema)
           .defaultSchema(schema)
@@ -61,6 +62,7 @@ class AdminHttpTest {
           .load()
           .migrate();
       Flyway.configure()
+          .configuration(Map.of("flyway.postgresql.transactional.lock", "false"))
           .dataSource(schemaSource)
           .schemas(schema)
           .defaultSchema(schema)

@@ -2,14 +2,17 @@ package org.example.springtestci.product.service;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
 import org.example.springtestci.common.storage.FileStorage;
 import org.example.springtestci.product.dto.CreateProductRequest;
+import org.example.springtestci.product.dto.ProductPageResponse;
 import org.example.springtestci.product.dto.ProductResponse;
 import org.example.springtestci.product.dto.UpdateProductImagesRequest;
 import org.example.springtestci.product.dto.UpdateProductRequest;
@@ -23,6 +26,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.Resource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
@@ -86,10 +90,36 @@ public class ProductService {
     return get(ownerId, productId);
   }
 
-  /** 소유 제품 목록을 조회하고 각 제품의 이미지 정보를 결합한다. */
-  @Transactional(readOnly = true)
-  public List<ProductResponse> listMine(long ownerId) {
-    return productRepository.findAllOwned(ownerId).stream().map(this::withImages).toList();
+  /** 소유 제품을 생성 시각·ID cursor 다음부터 조회하고 해당 구간의 이미지를 한 번에 결합한다. */
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+  public ProductPageResponse listMine(
+      long ownerId, int page, int size, OffsetDateTime cursorCreatedAt, Long cursorProductId) {
+    boolean hasCursor = cursorCreatedAt != null && cursorProductId != null;
+    if (page < 0
+        || size < 1
+        || size > 100
+        || (cursorCreatedAt == null) != (cursorProductId == null)
+        || (page == 0 && hasCursor)
+        || (page > 0 && !hasCursor)) {
+      throw new CommonException(ErrorCode.INVALID_INPUT);
+    }
+    List<ProductResponse> slice =
+        productRepository.findOwnedPage(
+            ownerId, cursorCreatedAt, cursorProductId, Math.addExact(size, 1));
+    boolean hasNext = slice.size() > size;
+    List<ProductResponse> products =
+        hasNext ? List.copyOf(slice.subList(0, size)) : List.copyOf(slice);
+    Map<Long, List<ProductImageRecord>> images =
+        productRepository.findImages(products.stream().map(ProductResponse::productId).toList());
+    List<ProductResponse> items =
+        products.stream()
+            .map(
+                product ->
+                    product.withImages(
+                        toImages(product.productId(), images.get(product.productId()))))
+            .toList();
+    var summary = productRepository.summarizeOwned(ownerId);
+    return ProductPageResponse.of(items, page, size, summary.total(), summary.purchased(), hasNext);
   }
 
   /** 소유권을 확인한 뒤 암호화된 일련번호를 복호화해 상세 응답에 포함한다. */
@@ -270,19 +300,23 @@ public class ProductService {
   }
 
   private ProductResponse withImages(ProductResponse product) {
+    return product.withImages(
+        toImages(product.productId(), productRepository.findImages(product.productId())));
+  }
+
+  private List<ProductResponse.Image> toImages(long productId, List<ProductImageRecord> records) {
+    if (records == null) return List.of();
     // DB의 이미지 레코드를 API 응답 전용 Image DTO로 변환한다.
-    List<ProductResponse.Image> images =
-        productRepository.findImages(product.productId()).stream()
-            .map(
-                image ->
-                    new ProductResponse.Image(
-                        image.imageId(),
-                        imageUrl(product.productId(), image.imageId()),
-                        image.primary(),
-                        image.sortOrder(),
-                        image.byteSize()))
-            .toList();
-    return product.withImages(images);
+    return records.stream()
+        .map(
+            image ->
+                new ProductResponse.Image(
+                    image.imageId(),
+                    imageUrl(productId, image.imageId()),
+                    image.primary(),
+                    image.sortOrder(),
+                    image.byteSize()))
+        .toList();
   }
 
   private static String imageUrl(long productId, long imageId) {

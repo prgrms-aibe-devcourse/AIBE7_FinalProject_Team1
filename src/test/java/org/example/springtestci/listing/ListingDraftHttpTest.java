@@ -1470,12 +1470,35 @@ class ListingDraftHttpTest {
     var original = savePublishableDraft();
     long listingId = data(publish(original, "1")).get("listingId").asLong();
     var next = savePublishableDraft();
-    assertEquals(409, publish(next, "1").statusCode());
-    jdbc.update("UPDATE listings SET status='RESERVED' WHERE id=?", listingId);
-    assertEquals(409, publish(next, "1").statusCode());
+    var savedNext = data(readDraft(101, "1"));
+    for (String status : List.of("ACTIVE", "RESERVED")) {
+      jdbc.update("UPDATE listings SET status=? WHERE id=?", status, listingId);
+      var composition = send("GET", "/api/v1/products/101/listing-draft/composition", "1", null);
+      assertEquals(409, composition.statusCode(), status);
+      assertEquals("SALE_002", JSON.readTree(composition.body()).get("code").asText());
+      var blockedPreview =
+          preview(101, next.get("draftId").asLong(), next.get("version").asLong(), "1", "");
+      assertEquals(409, blockedPreview.statusCode(), status);
+      assertEquals("SALE_002", JSON.readTree(blockedPreview.body()).get("code").asText());
+      assertEquals(409, publish(next, "1").statusCode(), status);
+      // 다른 사용자는 판매 상태를 알아내기 전에 기존 소유권 검사로 거부한다.
+      assertEquals(
+          404,
+          send("GET", "/api/v1/products/101/listing-draft/composition", "2", null).statusCode());
+      assertEquals(savedNext, data(readDraft(101, "1")));
+    }
     assertEquals(1, listingCount());
     assertEquals(200, readDraft(101, "1").statusCode());
-    jdbc.update("UPDATE listings SET status='CANCELLED', active_slot=NULL WHERE id=?", listingId);
+    for (String status : List.of("SOLD", "CANCELLED")) {
+      jdbc.update("UPDATE listings SET status=?, active_slot=NULL WHERE id=?", status, listingId);
+      assertEquals(
+          200,
+          send("GET", "/api/v1/products/101/listing-draft/composition", "1", null).statusCode());
+      assertEquals(
+          200,
+          preview(101, next.get("draftId").asLong(), next.get("version").asLong(), "1", "")
+              .statusCode());
+    }
     assertEquals(201, publish(next, "1").statusCode());
     assertEquals(2, listingCount());
   }

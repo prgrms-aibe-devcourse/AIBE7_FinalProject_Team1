@@ -94,9 +94,11 @@ INTERNAL/PENDING 이전 취소
 
 `OwnershipTransferController → OwnershipTransferService`는 실제 제품 ID로 현재 소유자의 링크 발급·상태 조회·취소와 인증된 수신자의 명시 수락을 처리한다. verify는 읽기 전용이며 INTERNAL 토큰은 404로 숨기고 외부 수락·취소는 기존 409 차단 계약을 유지한다.
 
-제품→판매글→이전 행 순서로 잠근 뒤 소유자·보관·판매·수신자·만료 정각을 재검사한다. 같은 트랜잭션에서 owner/facts·COMPLETED·슬롯 해제·실제 PK의 시스템 TRANSFER·PRIVATE·증빙 보호·감사를 확정한다. 정식 `InternalTransferHistoryWriter`가 시스템 이력 생성과 누적 공개 종료를 처리하고 `InternalTradeOwnershipRepository.protectDocuments()`가 증빙을 보호한다. `OwnershipTransferred`는 동기 초안 정리에, `ProductFactsChanged`는 커밋 후 AI 갱신에 한 번씩 발행한다. 허용 마스킹 사본의 승계와 재마스킹·업로더·삭제 제한은 현행 `DocumentService`를 따른다.
+제품→판매글→이전 행 순서로 잠근 뒤 소유자·보관·판매·수신자·만료 정각을 재검사한다. 수신자의 accept는 동의 시각만 기록하고 PENDING을 유지한다. 최초 발신자인 현재 소유자의 approve가 확인한 수신자 ID·factsVersion을 재검사한 뒤 같은 트랜잭션에서 owner/facts·COMPLETED·슬롯 해제·실제 PK의 시스템 TRANSFER·PRIVATE·증빙 보호·감사를 확정한다. 정식 `InternalTransferHistoryWriter`가 시스템 이력 생성과 누적 공개 종료를 처리하고 `InternalTradeOwnershipRepository.protectDocuments()`가 증빙을 보호한다. `OwnershipTransferred`는 동기 초안 정리에, `ProductFactsChanged`는 커밋 후 AI 갱신에 한 번씩 발행한다. 허용 마스킹 사본의 승계와 재마스킹·업로더·삭제 제한은 현행 `DocumentService`를 따른다.
 
-`ownership.js`는 제품 상세의 발급·취소·재발급과 로컬 QR을, `receive.js`는 토큰 주소 정리·메모리 내 로그인 복귀·명시 수락·응답 유실 후 재확인을 담당한다. Web Locks 인증 흐름과 INTERNAL 거래 화면은 유지한다.
+`ownership.js`는 제품 상세의 발급·취소·재발급·최종 승인과 로컬 QR을, `receive.js`는 토큰 주소 정리·메모리 내 로그인 복귀·명시 동의·승인 대기·응답 유실 후 재확인을 담당한다. Web Locks 인증 흐름과 INTERNAL 거래 화면은 유지한다.
+
+문서 업로드·교체·삭제·추출 요청·확정·반려는 제품을 먼저 잠그고 소유권을 재검사한 뒤 문서를 잠근다. 제품 ID는 scalar 조회로 구해 잠금 전의 문서 버전이 영속성 컨텍스트에 남지 않게 한다. 다운로드는 사용자·문서 ID·버전·만료를 묶은 HMAC URL을 사용하고 같은 잠금 아래 현재 소유권·재마스킹 필요 여부·파일 가독성을 검사한다. 신규 사본은 DB 롤백 시 삭제하고 구 사본은 커밋 후 삭제하며 교체 감사는 같은 트랜잭션에서 유지한다. 공통 `FileStorage.load()`를 사용하며 운영 저장소 어댑터의 정식 제공은 별도 작업이다.
 
 ## 내 판매글 진입
 

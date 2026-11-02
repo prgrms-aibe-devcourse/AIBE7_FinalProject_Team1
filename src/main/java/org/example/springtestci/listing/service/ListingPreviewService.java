@@ -6,7 +6,6 @@ import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
 import org.example.springtestci.listing.dto.ListingDraftResponse;
 import org.example.springtestci.listing.dto.ListingPreviewResponse;
-import org.example.springtestci.product.service.ProductService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,13 +14,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class ListingPreviewService {
   private final ListingDraftService drafts;
   private final ListingPublicationService publications;
-  private final ProductService products;
 
-  public ListingPreviewService(
-      ListingDraftService drafts, ListingPublicationService publications, ProductService products) {
+  public ListingPreviewService(ListingDraftService drafts, ListingPublicationService publications) {
     this.drafts = drafts;
     this.publications = publications;
-    this.products = products;
   }
 
   /** 저장 직후의 버전을 고정해, 다른 탭의 수정·삭제나 소유권 변경이 섞인 화면을 방지한다. */
@@ -29,12 +25,11 @@ public class ListingPreviewService {
   public ListingPreviewResponse get(
       long productId, long draftId, long version, long userId, int page, int size) {
     var draft = currentDraft(productId, draftId, version, userId);
+    // 화면의 사전 확인 뒤 다른 탭에서 게시했어도 미리보기 단계에서 다시 차단한다.
+    var composition = drafts.composition(productId, userId);
     var publication = publications.get(productId, userId, page, size);
     var available = new HashSet<Long>();
-    products
-        .getForListing(userId, productId)
-        .images()
-        .forEach(image -> available.add(image.imageId()));
+    composition.images().forEach(image -> available.add(image.imageId()));
     if (!available.containsAll(draft.selectedImageIds())) {
       throw new CommonException(ErrorCode.DRAFT_CONFLICT);
     }

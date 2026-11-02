@@ -4,12 +4,13 @@ import java.time.Instant;
 import org.example.springtestci.ownership.entity.TransferStatus;
 
 public record VerifyTransferResponse(
-    long transferId,
-    long productId,
+    Long transferId,
+    Long productId,
     String productTitle,
-    long fromUserId,
+    Long fromUserId,
     String fromUserNickname,
     Instant expiresAt,
     TransferStatus status,
     boolean isExpired,
-    boolean canAccept) {}
+    boolean canAccept,
+    Instant recipientAcceptedAt) {}

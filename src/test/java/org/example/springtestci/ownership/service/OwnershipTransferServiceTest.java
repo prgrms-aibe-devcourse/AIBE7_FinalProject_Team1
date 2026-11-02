@@ -48,6 +48,108 @@ import org.springframework.test.util.ReflectionTestUtils;
 @ExtendWith(MockitoExtension.class)
 class OwnershipTransferServiceTest {
 
+  private OwnershipTransfer approvalFixture() {
+    var transfer =
+        OwnershipTransfer.create(
+            10L,
+            1L,
+            2L,
+            "approval-hash",
+            TransferType.DIRECT,
+            null,
+            Instant.now().plusSeconds(3600));
+    ReflectionTestUtils.setField(transfer, "id", 200L);
+    transfer.acceptRecipient(2L, Instant.now());
+    given(transferRepository.findProductIdByTransferId(200L)).willReturn(Optional.of(10L));
+    given(productRepository.lockForTransfer(10L)).willReturn(true);
+    given(transferRepository.findByIdForUpdate(200L)).willReturn(Optional.of(transfer));
+    return transfer;
+  }
+
+  @Test
+  void ownerApprovalCompletesAllEffectsOnce() {
+    var transfer = approvalFixture();
+    var product =
+        org.mockito.Mockito.mock(org.example.springtestci.product.dto.ProductResponse.class);
+    given(product.factsVersion()).willReturn(7L);
+    given(productRepository.findOwned(10L, 1L)).willReturn(Optional.of(product));
+    given(userRepository.existsById(2L)).willReturn(true);
+    given(userRepository.existsById(1L)).willReturn(true);
+    var request = new org.example.springtestci.ownership.dto.ApproveTransferRequest(2L, 7L);
+    var completed = service.approveTransfer(1L, 200L, request);
+    assertThat(transfer.getStatus()).isEqualTo(TransferStatus.COMPLETED);
+    assertThat(service.approveTransfer(1L, 200L, request)).isEqualTo(completed);
+    var order =
+        inOrder(
+            productRepository,
+            transferRepository,
+            historyWriter,
+            effects,
+            events,
+            tradeAuditRepository);
+    order.verify(productRepository).updateOwner(10L, 2L);
+    order.verify(transferRepository).flush();
+    order
+        .verify(historyWriter)
+        .recordCompletedTransfer(
+            new InternalTransferHistoryWriter.Command(10L, 200L, 1L, 2L, completed.completedAt()));
+    order.verify(effects).protectDocuments(10L, completed.completedAt());
+    order.verify(events).publishEvent(new OwnershipTransferred(10L, 1L, 2L));
+    verify(tradeAuditRepository)
+        .log(eq(10L), eq(1L), eq(200L), eq("OWNERSHIP_TRANSFERRED"), any(), any(), any());
+  }
+
+  @Test
+  void approvalRejectsWrongActorRecipientAndChangedFacts() {
+    approvalFixture();
+    var request = new org.example.springtestci.ownership.dto.ApproveTransferRequest(2L, 7L);
+    assertThatThrownBy(() -> service.approveTransfer(2L, 200L, request))
+        .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ACCESS_DENIED);
+    var product =
+        org.mockito.Mockito.mock(org.example.springtestci.product.dto.ProductResponse.class);
+    given(product.factsVersion()).willReturn(8L);
+    given(productRepository.findOwned(10L, 1L)).willReturn(Optional.of(product));
+    assertThatThrownBy(() -> service.approveTransfer(1L, 200L, request))
+        .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+    assertThatThrownBy(
+            () ->
+                service.approveTransfer(
+                    1L,
+                    200L,
+                    new org.example.springtestci.ownership.dto.ApproveTransferRequest(3L, 8L)))
+        .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+    verify(productRepository, never()).updateOwner(anyLong(), anyLong());
+    verifyNoInteractions(historyWriter, effects, events);
+  }
+
+  @Test
+  void approvalRequiresConsentAndUnexpiredNonSaleRequest() {
+    var transfer = approvalFixture();
+    var request = new org.example.springtestci.ownership.dto.ApproveTransferRequest(2L, 7L);
+    ReflectionTestUtils.setField(transfer, "recipientAcceptedAt", null);
+    assertThatThrownBy(() -> service.approveTransfer(1L, 200L, request))
+        .hasFieldOrPropertyWithValue("errorCode", ErrorCode.OWNERSHIP_TRANSFER_BLOCKED);
+    transfer.acceptRecipient(2L, Instant.now());
+    given(guard.lockSales(10L)).willReturn(true);
+    assertThatThrownBy(() -> service.approveTransfer(1L, 200L, request))
+        .hasFieldOrPropertyWithValue("errorCode", ErrorCode.OWNERSHIP_TRANSFER_BLOCKED);
+    ReflectionTestUtils.setField(transfer, "expiresAt", Instant.EPOCH);
+    assertThatThrownBy(() -> service.approveTransfer(1L, 200L, request))
+        .hasFieldOrPropertyWithValue("errorCode", ErrorCode.OWNERSHIP_EXPIRED);
+    verifyNoInteractions(historyWriter, effects, events);
+  }
+
+  @Test
+  void verifyRejectsOtherDesignatedRecipientBeforeSummaryLookup() {
+    var transfer =
+        OwnershipTransfer.create(
+            10L, 1L, 2L, "hash", TransferType.DIRECT, null, Instant.now().plusSeconds(3600));
+    given(transferRepository.findByTokenHash(anyString())).willReturn(Optional.of(transfer));
+    assertThatThrownBy(() -> service.verifyTransfer(3L, "token"))
+        .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ACCESS_DENIED);
+    verifyNoInteractions(productRepository, userRepository);
+  }
+
   @Mock private OwnershipTransferRepository transferRepository;
   @Mock private ProductRepository productRepository;
   @Mock private UserRepository userRepository;
@@ -337,7 +439,7 @@ class OwnershipTransferServiceTest {
   }
 
   @Test
-  @DisplayName("구매자가 일회성 토큰으로 이전을 수락하면 소유자가 변경되고 상태가 COMPLETED로 전환된다")
+  @DisplayName("수신자 수락은 동의만 저장하고 소유자 승인을 기다린다")
   void acceptTransfer_success() {
     String rawToken = "accept-raw-token-1234567890";
     String tokenHash = OwnershipTransferService.hashToken(rawToken);
@@ -367,39 +469,22 @@ class OwnershipTransferServiceTest {
 
     assertThat(accepted.transferId()).isEqualTo(200L);
     assertThat(accepted.productId()).isEqualTo(productId);
-    assertThat(accepted.newOwnerId()).isEqualTo(buyerId);
-    assertThat(transfer.getStatus()).isEqualTo(TransferStatus.COMPLETED);
-
-    var order =
-        inOrder(
-            productRepository,
-            transferRepository,
-            historyWriter,
-            effects,
-            events,
-            tradeAuditRepository);
-    order.verify(productRepository).updateOwner(productId, buyerId);
-    order.verify(transferRepository).flush();
-    order
-        .verify(historyWriter)
-        .recordCompletedTransfer(
-            new InternalTransferHistoryWriter.Command(
-                productId, 200L, fromUserId, buyerId, accepted.completedAt()));
-    order.verify(effects).protectDocuments(productId, accepted.completedAt());
-    order.verify(events).publishEvent(new OwnershipTransferred(productId, fromUserId, buyerId));
-    order
-        .verify(tradeAuditRepository)
-        .log(
-            eq(productId), eq(buyerId), eq(200L), eq("OWNERSHIP_TRANSFERRED"), any(), any(), any());
+    assertThat(accepted.stage()).isEqualTo("AWAITING_OWNER_APPROVAL");
+    assertThat(transfer.getStatus()).isEqualTo(TransferStatus.PENDING);
+    assertThat(transfer.getToUserId()).isEqualTo(buyerId);
+    assertThat(transfer.getRecipientAcceptedAt()).isNotNull();
+    verify(productRepository, never()).updateOwner(anyLong(), anyLong());
+    verifyNoInteractions(historyWriter, effects, events);
+    service.acceptTransfer(buyerId, new AcceptTransferRequest(rawToken));
     verify(tradeAuditRepository)
         .log(
             eq(productId),
             eq(buyerId),
             eq(200L),
-            eq("OWNERSHIP_TRANSFERRED"),
-            eq("fromOwner=1"),
-            eq("toOwner=2"),
-            anyString());
+            eq("OWNERSHIP_RECIPIENT_ACCEPTED"),
+            any(),
+            any(),
+            any());
   }
 
   @Test

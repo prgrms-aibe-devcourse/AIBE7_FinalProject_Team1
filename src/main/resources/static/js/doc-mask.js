@@ -18,6 +18,12 @@
   let sourceType = 'image/png';
   let saving = false;
   let autoRunning = false;
+  // 제품 등록 화면에서 넘긴 원본은 서버에 보내지 않고, 이 화면이 열릴 때 한 번만 소비한다.
+  let pendingProductId = null;
+  let pendingFile = null;
+  let entryVersion = 0;
+  // data-docmask-replace-id가 있으면 새 문서를 올리는 대신 해당 문서의 사본을 교체한다.
+  let pendingReplaceId = null;
   // 값이 있으면 새 문서를 올리는 대신 이 문서 번호의 사본을 교체한다. (문서 보관함의 "다시 마스킹")
   let replaceId = null;
   // cleanup()마다 올라가서, 그 전에 시작한 이미지 열기·미리보기가 늦게 끝나도 결과를 버릴 수 있게 한다.
@@ -471,6 +477,7 @@
     wrapCanvas.addEventListener('pointercancel', cancelDrag);
     find('[data-dm-file]').addEventListener('change', (event) => open(event.target.files[0]));
     find('[data-dm-product]').addEventListener('change', () => fail(''));
+    find('[data-dm-products-retry]').addEventListener('click', enterPendingDocument);
     all('[data-dm-tool]').forEach((button) => button.addEventListener('click', () => setTool(button.dataset.dmTool)));
     find('[data-dm-undo]').addEventListener('click', () => {
       if (!history.length) return;
@@ -507,12 +514,13 @@
     if (!section || !section.querySelector('[data-dm]')) return;
     root = section;
     bind();
-    loadProducts(new URLSearchParams(window.location.search).get('productId'));
   }
 
-  // 내 제품 목록을 드롭다운에 채운다. wanted(제품 번호)가 목록에 있으면 선택해 둔다.
+  /** 모든 제품 페이지를 드롭다운에 채우고 wanted 제품이 있으면 선택한다. 실패 여부를 호출자에 돌려준다. */
   async function loadProducts(wanted) {
+    const version = entryVersion;
     const select = find('[data-dm-product]');
+    const retry = find('[data-dm-products-retry]');
     const keep = wanted || select.value;
     const setOptions = (placeholder, products = []) => {
       select.replaceChildren(new Option(placeholder, ''));
@@ -521,31 +529,48 @@
         select.add(new Option(`#${product.productId} ${label}`, String(product.productId)));
       }
     };
+    retry.hidden = true;
     setOptions('제품을 불러오는 중이에요');
     try {
-      const response = await api('/api/v1/products');
-      if (response.status === 401) {
-        setOptions('로그인 후 제품을 선택할 수 있어요');
-        return;
-      }
-      if (!response.ok) throw new Error('products');
-      const products = (await response.json()).data || [];
+      const products = [];
+      let page = 0;
+      let cursor = null;
+      do {
+        const params = new URLSearchParams({ page: String(page), size: '100' });
+        if (cursor) {
+          params.set('cursorCreatedAt', cursor.createdAt);
+          params.set('cursorProductId', String(cursor.productId));
+        }
+        const response = await api(`/api/v1/products?${params}`);
+        if (version !== entryVersion) return false;
+        if (response.status === 401) {
+          setOptions('로그인 후 제품을 선택할 수 있어요');
+          return false;
+        }
+        if (!response.ok) throw new Error('products');
+        const result = (await response.json()).data;
+        if (version !== entryVersion) return false;
+        products.push(...(result?.items || []));
+        cursor = result?.page?.nextCursor || null;
+        page += 1;
+      } while (cursor);
       if (products.length === 0) {
         setOptions('등록된 제품이 없어요. 제품을 먼저 등록해 주세요');
-        return;
+        return true;
       }
       setOptions('증빙을 연결할 제품을 선택해 주세요', products);
       if (keep && products.some((product) => String(product.productId) === String(keep))) select.value = String(keep);
+      return true;
     } catch (error) {
-      setOptions('제품 목록을 불러오지 못했어요. 화면을 다시 열어 주세요');
+      if (version !== entryVersion) return false;
+      setOptions('제품 목록을 불러오지 못했어요. 아래 버튼으로 다시 시도해 주세요');
+      retry.hidden = false;
+      return false;
     }
   }
 
   // 다른 화면의 버튼이 data-docmask-product-id="제품번호"를 달고 data-page="docmask"로 이동하면 그 제품을 미리 선택한다.
   // 화면 전환(app.js의 click 처리)보다 먼저 값을 받아 두려고 캡처 단계에서 듣는다.
-  let pendingProductId = null;
-  // data-docmask-replace-id가 함께 있으면 새 문서 대신 그 문서의 사본을 교체하는 모드로 연다.
-  let pendingReplaceId = null;
   document.addEventListener('click', (event) => {
     const button = event.target.closest?.('[data-docmask-product-id]');
     if (button) {
@@ -554,27 +579,55 @@
     }
   }, true);
 
+  /** 제품 목록 로딩 성공 뒤에만 등록 화면에서 인계한 제품·원본을 소비한다. */
+  async function enterPendingDocument() {
+    if (!root) return;
+    const version = ++entryVersion;
+    const productId = pendingProductId || new URLSearchParams(window.location.search).get('productId');
+    const file = pendingFile;
+    const replacementId = pendingReplaceId;
+    find('[data-dm-to-passport]').hidden = !productId;
+    applyMode(replacementId);
+    const loaded = await loadProducts(productId);
+    if (version !== entryVersion || !root.classList.contains('active')) return;
+    if (!loaded) return;
+    pendingProductId = null;
+    pendingFile = null;
+    pendingReplaceId = null;
+    if (file) await open(file);
+  }
+
   document.addEventListener('pastport:page-loaded', (event) => {
-    if (event.detail.id === 'docmask') init();
+    if (event.detail.id !== 'docmask') return;
+    init();
+    if (document.querySelector('#docmask')?.classList.contains('active')) enterPendingDocument();
   });
   init();
 
   // 다른 화면으로 이동하면 선택한 원본과 만든 사본의 메모리 참조를 정리한다.
   document.addEventListener('pastport:page-shown', (event) => {
-    if (root && event.detail.id !== 'docmask') reset();
+    if (root && event.detail.id !== 'docmask') {
+      entryVersion += 1;
+      pendingProductId = null;
+      pendingFile = null;
+      pendingReplaceId = null;
+      reset();
+    }
     // 다른 화면에서 제품을 등록하거나 로그인했을 수 있으니 돌아올 때마다 목록을 새로 받는다.
     if (root && event.detail.id === 'docmask') {
-      // 제품 여권의 버튼으로 들어왔을 때만 저장 후 그 제품 여권으로 돌아가는 버튼을 보여 준다.
-      find('[data-dm-to-passport]').hidden = !pendingProductId;
-      applyMode(pendingReplaceId);
-      loadProducts(pendingProductId);
-      pendingProductId = null;
-      pendingReplaceId = null;
+      // 제품 여권·문서 교체·등록 화면에서 넘어온 상태를 적용하고, 등록 화면의 원본이 있으면 바로 연다.
+      enterPendingDocument();
     }
   });
   window.addEventListener('pagehide', reset);
 
   window.PastportDocMask = {
+    /** 등록 성공 전에는 업로드하지 않은 원본과 새 제품 ID를 다음 마스킹 화면에 인계한다. */
+    prepare(productId, file) {
+      pendingProductId = String(productId);
+      pendingFile = file;
+      pendingReplaceId = null;
+    },
     setProduct(id) {
       if (root) find('[data-dm-product]').value = id;
     },

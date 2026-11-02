@@ -52,6 +52,9 @@ public class OwnershipTransfer {
   @Column(name = "completed_at")
   private Instant completedAt;
 
+  @Column(name = "recipient_accepted_at")
+  private Instant recipientAcceptedAt;
+
   @Column(name = "cancelled_at")
   private Instant cancelledAt;
 
@@ -89,6 +92,11 @@ public class OwnershipTransfer {
     this.pendingSlot = null;
     this.toUserId = receiverId;
     this.completedAt = now;
+  }
+
+  public void acceptRecipient(Long receiverId, Instant now) {
+    this.toUserId = receiverId;
+    this.recipientAcceptedAt = now;
   }
 
   public void cancel(Instant now) {

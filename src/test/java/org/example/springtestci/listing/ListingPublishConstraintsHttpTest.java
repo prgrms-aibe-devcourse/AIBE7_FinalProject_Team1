@@ -302,6 +302,20 @@ class ListingPublishConstraintsHttpTest {
             "2",
             JSON.writeValueAsString(Map.of("token", data(created).get("rawToken").asText())));
     assertEquals(200, accepted.statusCode(), accepted.body());
+    assertEquals(1L, jdbc.queryForObject("SELECT owner_id FROM products WHERE id=101", Long.class));
+    var approved =
+        send(
+            "POST",
+            TRANSFER + "/" + data(created).get("transferId").asLong() + "/approve",
+            "1",
+            JSON.writeValueAsString(
+                Map.of(
+                    "expectedRecipientId",
+                    2L,
+                    "expectedFactsVersion",
+                    jdbc.queryForObject(
+                        "SELECT facts_version FROM products WHERE id=101", Long.class))));
+    assertEquals(200, approved.statusCode(), approved.body());
     assertEquals(404, publish(draft).statusCode());
     assertEquals(0, count("listings"));
     assertEquals(0, count("listing_drafts"));
