@@ -15,9 +15,12 @@ import org.example.springtestci.common.error.ErrorCode;
 import org.example.springtestci.history.service.InternalTransferHistoryWriter;
 import org.example.springtestci.ownership.dto.AcceptTransferRequest;
 import org.example.springtestci.ownership.dto.AcceptTransferResponse;
+import org.example.springtestci.ownership.dto.ApproveTransferRequest;
+import org.example.springtestci.ownership.dto.ApproveTransferResponse;
 import org.example.springtestci.ownership.dto.CreateTransferRequest;
 import org.example.springtestci.ownership.dto.CreateTransferResponse;
 import org.example.springtestci.ownership.dto.OwnerTransferResponse;
+import org.example.springtestci.ownership.dto.TransferStatusResponse;
 import org.example.springtestci.ownership.dto.VerifyTransferResponse;
 import org.example.springtestci.ownership.entity.OwnershipTransfer;
 import org.example.springtestci.ownership.entity.TransferStatus;
@@ -103,7 +106,7 @@ public class OwnershipTransferService {
     boolean saleInProgress = guard.lockSales(req.productId());
 
     // 만료된 대기 요청이 새 이전 요청을 영영 막지 않도록 먼저 만료 처리한다.
-    Instant now = clock.instant();
+    Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
     transferRepository
         .findByProductIdAndStatus(req.productId(), TransferStatus.PENDING)
         .ifPresent(
@@ -156,7 +159,7 @@ public class OwnershipTransferService {
 
   /**
    * 원문 토큰의 DIRECT 이전만 읽기 전용으로 검증하며 INTERNAL 식별자는 노출하지 않는다. 로그인한 사용자에게만 보여 주고, 수신자가 지정된 요청은 수락 시점이
-   * 아니라 조회 시점에도 지정 수신자(와 발급자)만 볼 수 있어 토큰을 얻은 다른 사용자에게 제품명·판매자 정보가 노출되지 않는다.
+   * 아니라 조회 시점에도 지정 수신자만 볼 수 있어 토큰을 얻은 다른 사용자에게 제품명·판매자 정보가 노출되지 않는다. 발급자는 별도 소유자 상태 API를 사용한다.
    */
   public VerifyTransferResponse verifyTransfer(long actorId, String rawToken) {
     String tokenHash = hashToken(rawToken);
@@ -167,10 +170,12 @@ public class OwnershipTransferService {
 
     requireDirect(transfer);
 
-    if (transfer.getToUserId() != null
-        && !Objects.equals(transfer.getToUserId(), actorId)
-        && !Objects.equals(transfer.getFromUserId(), actorId)) {
+    if (transfer.getToUserId() != null && !Objects.equals(transfer.getToUserId(), actorId)) {
       throw new CommonException(ErrorCode.ACCESS_DENIED);
+    }
+
+    if (Objects.equals(transfer.getFromUserId(), actorId)) {
+      throw new CommonException(ErrorCode.OWNERSHIP_SELF_ACCEPT);
     }
 
     Instant now = clock.instant();
@@ -196,21 +201,19 @@ public class OwnershipTransferService {
                 .orElse("알 수 없는 사용자");
 
     return new VerifyTransferResponse(
-        transfer.getId(),
-        transfer.getProductId(),
+        canAccept ? transfer.getId() : null,
+        canAccept ? transfer.getProductId() : null,
         productTitle,
-        transfer.getFromUserId(),
+        canAccept ? transfer.getFromUserId() : null,
         fromUserNickname,
         transfer.getExpiresAt(),
         transfer.getStatus(),
         isExpired,
-        canAccept);
+        canAccept && transfer.getRecipientAcceptedAt() == null,
+        transfer.getRecipientAcceptedAt());
   }
 
-  /**
-   * 인증된 수신자가 DIRECT를 명시 수락한다. 제품→판매글→이전 잠금 뒤 권한·만료를 재검증하고 소유자/facts·TRANSFER·증빙·판매자 초안·감사를 같은
-   * 트랜잭션에서 확정한다. 실패는 JPA flush와 JDBC 효과를 모두 롤백한다.
-   */
+  /** 인증된 수신자의 동의만 저장한다. 제품→판매글→이전 잠금으로 수신자를 고정하고 소유권 변경은 소유자 최종 승인에 맡긴다. */
   @Transactional
   public AcceptTransferResponse acceptTransfer(long actorId, AcceptTransferRequest req) {
     String tokenHash = hashToken(req.token());
@@ -229,7 +232,7 @@ public class OwnershipTransferService {
       throw new CommonException(ErrorCode.OWNERSHIP_TRANSFER_BLOCKED);
     }
 
-    Instant now = clock.instant();
+    Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
     if (transfer.getStatus() != TransferStatus.PENDING || transfer.isExpired(now)) {
       throw new CommonException(ErrorCode.OWNERSHIP_EXPIRED);
     }
@@ -252,19 +255,80 @@ public class OwnershipTransferService {
     if (!userRepository.existsById(actorId)) {
       throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
     }
-    productRepository.updateOwner(productId, actorId);
-    transfer.complete(actorId, now);
+    if (transfer.getRecipientAcceptedAt() == null) {
+      transfer.acceptRecipient(actorId, now);
+      tradeAuditRepository.log(
+          productId,
+          actorId,
+          transfer.getId(),
+          "OWNERSHIP_RECIPIENT_ACCEPTED",
+          null,
+          "status=PENDING;recipient=" + actorId,
+          "수신자 동의 저장, 소유자 최종 승인 대기");
+    }
+    return new AcceptTransferResponse(
+        transfer.getId(),
+        productId,
+        "AWAITING_OWNER_APPROVAL",
+        transfer.getRecipientAcceptedAt(),
+        transfer.getExpiresAt());
+  }
+
+  /** 발신자가 확인한 수신자와 제품 버전을 재검사하고 모든 이전 효과를 같은 트랜잭션에서 확정한다. */
+  @Transactional
+  public ApproveTransferResponse approveTransfer(
+      long actorId, long transferId, ApproveTransferRequest request) {
+    long productId =
+        transferRepository
+            .findProductIdByTransferId(transferId)
+            .orElseThrow(() -> new CommonException(ErrorCode.OWNERSHIP_NOT_FOUND));
+    lockProduct(productId);
+    boolean saleInProgress = guard.lockSales(productId);
+    OwnershipTransfer transfer =
+        transferRepository
+            .findByIdForUpdate(transferId)
+            .orElseThrow(() -> new CommonException(ErrorCode.OWNERSHIP_NOT_FOUND));
+    requireDirect(transfer);
+    if (!Objects.equals(transfer.getFromUserId(), actorId)) {
+      throw new CommonException(ErrorCode.ACCESS_DENIED);
+    }
+    if (transfer.getStatus() == TransferStatus.COMPLETED) {
+      return new ApproveTransferResponse(transferId, transfer.getCompletedAt());
+    }
+    Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+    if (transfer.getStatus() != TransferStatus.PENDING || transfer.isExpired(now)) {
+      throw new CommonException(ErrorCode.OWNERSHIP_EXPIRED);
+    }
+    if (transfer.getRecipientAcceptedAt() == null || saleInProgress) {
+      throw new CommonException(ErrorCode.OWNERSHIP_TRANSFER_BLOCKED);
+    }
+    var product =
+        productRepository
+            .findOwned(productId, actorId)
+            .orElseThrow(() -> new CommonException(ErrorCode.ACCESS_DENIED));
+    if (!Objects.equals(transfer.getToUserId(), request.expectedRecipientId())
+        || !Objects.equals(product.factsVersion(), request.expectedFactsVersion())) {
+      throw new CommonException(ErrorCode.INVALID_INPUT);
+    }
+    long recipientId = transfer.getToUserId();
+    if (recipientId == actorId
+        || !userRepository.existsById(actorId)
+        || !userRepository.existsById(recipientId)) {
+      throw new CommonException(ErrorCode.INVALID_INPUT);
+    }
+    productRepository.updateOwner(productId, recipientId);
+    transfer.complete(recipientId, now);
     transferRepository.flush();
 
     // 소유자 변경과 같은 트랜잭션에서 개인정보 없는 시스템 이력을 남기고 누적 공개를 종료한다.
     historyWriter.recordCompletedTransfer(
         new InternalTransferHistoryWriter.Command(
-            transfer.getProductId(), transfer.getId(), transfer.getFromUserId(), actorId, now));
+            transfer.getProductId(), transfer.getId(), transfer.getFromUserId(), recipientId, now));
     effects.protectDocuments(productId, now);
 
     // 초안 삭제처럼 필수인 후처리는 커밋 전에 실행한다. 실패하면 소유자·이전 상태도 함께 되돌린다.
     events.publishEvent(
-        new OwnershipTransferred(transfer.getProductId(), transfer.getFromUserId(), actorId));
+        new OwnershipTransferred(transfer.getProductId(), transfer.getFromUserId(), recipientId));
 
     tradeAuditRepository.log(
         transfer.getProductId(),
@@ -272,12 +336,11 @@ public class OwnershipTransferService {
         transfer.getId(),
         "OWNERSHIP_TRANSFERRED",
         "fromOwner=" + transfer.getFromUserId(),
-        "toOwner=" + actorId,
+        "toOwner=" + recipientId,
         "소유권 이전 완료");
     events.publishEvent(new ProductFactsChanged(productId));
 
-    return new AcceptTransferResponse(
-        transfer.getId(), transfer.getProductId(), actorId, transfer.getCompletedAt());
+    return new ApproveTransferResponse(transfer.getId(), transfer.getCompletedAt());
   }
 
   /** 발신자만 DIRECT 대기 이전 ID를 취소하며, 제품→이전 잠금 안에서 슬롯과 감사를 함께 갱신한다. */
@@ -308,7 +371,7 @@ public class OwnershipTransferService {
     if (!Objects.equals(productRepository.findOwnerId(productId).orElse(null), actorId)) {
       throw new CommonException(ErrorCode.ACCESS_DENIED);
     }
-    Instant now = clock.instant();
+    Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
     transfer.cancel(now);
 
     tradeAuditRepository.log(
@@ -338,7 +401,44 @@ public class OwnershipTransferService {
         productId,
         transfer.getExpiresAt(),
         transfer.getStatus(),
-        transfer.isExpired(clock.instant()));
+        transfer.getStatus() == TransferStatus.PENDING
+            && transfer.isExpired(clock.instant().truncatedTo(ChronoUnit.MICROS)),
+        transfer.getToUserId(),
+        transfer.getToUserId() == null
+            ? null
+            : userRepository
+                .findById(transfer.getToUserId())
+                .map(u -> u.getNickname())
+                .orElse("알 수 없는 사용자"),
+        transfer.getRecipientAcceptedAt(),
+        productRepository.findTitle(productId).orElse("등록된 제품"),
+        productRepository
+            .findOwned(productId, actorId)
+            .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND))
+            .factsVersion());
+  }
+
+  /** 최초 발신자와 확정 수신자의 응답 유실 복구용 상태만 제공한다. 제품·문서 관리 권한은 부여하지 않는다. */
+  public TransferStatusResponse transferStatus(long actorId, long transferId) {
+    var transfer =
+        transferRepository
+            .findById(transferId)
+            .orElseThrow(() -> new CommonException(ErrorCode.OWNERSHIP_NOT_FOUND));
+    requireDirect(transfer);
+    if (transfer.getFromUserId() != actorId
+        && ((transfer.getRecipientAcceptedAt() == null
+                && transfer.getStatus() != TransferStatus.COMPLETED)
+            || !Objects.equals(transfer.getToUserId(), actorId))) {
+      throw new CommonException(ErrorCode.ACCESS_DENIED);
+    }
+    return new TransferStatusResponse(
+        transferId,
+        transfer.getStatus(),
+        transfer.getRecipientAcceptedAt(),
+        transfer.getCompletedAt(),
+        transfer.getExpiresAt(),
+        transfer.getStatus() == TransferStatus.PENDING
+            && transfer.isExpired(clock.instant().truncatedTo(ChronoUnit.MICROS)));
   }
 
   private void requireDirect(OwnershipTransfer transfer) {

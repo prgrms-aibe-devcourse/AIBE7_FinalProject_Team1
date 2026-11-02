@@ -93,7 +93,8 @@ class OwnershipTransferControllerTest {
             Instant.now().plus(1, ChronoUnit.DAYS),
             TransferStatus.PENDING,
             false,
-            true);
+            true,
+            null);
     given(service.verifyTransfer(2L, "test-token")).willReturn(response);
 
     mockMvc
@@ -111,7 +112,9 @@ class OwnershipTransferControllerTest {
   @Test
   @DisplayName("소유권 이전 수락 API")
   void acceptTransfer() throws Exception {
-    AcceptTransferResponse response = new AcceptTransferResponse(1L, 10L, 2L, Instant.now());
+    AcceptTransferResponse response =
+        new AcceptTransferResponse(
+            1L, 10L, "AWAITING_OWNER_APPROVAL", Instant.now(), Instant.now().plusSeconds(3600));
     given(service.acceptTransfer(eq(2L), any())).willReturn(response);
 
     mockMvc
@@ -122,7 +125,7 @@ class OwnershipTransferControllerTest {
                 .content("{\"token\": \"valid-token\"}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.success").value(true))
-        .andExpect(jsonPath("$.data.newOwnerId").value(2));
+        .andExpect(jsonPath("$.data.stage").value("AWAITING_OWNER_APPROVAL"));
   }
 
   @Test
