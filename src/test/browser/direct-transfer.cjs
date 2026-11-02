@@ -67,6 +67,7 @@ async function login(page, email, receive = false) {
 async function ownerProduct(page) {
   step = 'owner-home-navigation';
   await page.locator('.landing-nav .nav-item > [data-page="home"]').click();
+  await page.locator('.landing-nav .nav-drop [data-page="home"]').click();
   step = 'owner-product-101-list-card';
   await page.locator('#home [data-product-id="101"]').click();
   step = 'owner-product-101-detail-panel';
@@ -151,6 +152,7 @@ async function decodeSharedQr(page, sharedLink) {
     await receiver.page.waitForFunction(() => !auth.user);
     await receiver.page.locator('.landing-nav .nav-item > [data-page="market"]').hover();
     await receiver.page.locator('.landing-nav .nav-item > [data-page="receive"]').click();
+    await receiver.page.locator('.landing-nav .nav-drop [data-page="receive"]').click();
     await receiver.page.locator('[data-receive-message]').filter({ hasText: '이전 링크가 없거나' }).waitFor();
     record('Guest cannot accept; login resumes same in-memory transfer without POST; logout purges continuation');
     step = 'network-retry-and-explicit-completion';
@@ -176,6 +178,7 @@ async function decodeSharedQr(page, sharedLink) {
     await receiver.page.screenshot({ path: path.join(evidence, 'buyer-product-list.png'), fullPage: true });
     await receiver.page.locator('.landing-nav .nav-item > [data-page="market"]').hover();
     await receiver.page.locator('.landing-nav .nav-item > [data-page="receive"]').click();
+    await receiver.page.locator('.landing-nav .nav-drop [data-page="receive"]').click();
     await receiver.page.locator('[data-receive-message]').filter({ hasText: '이전 링크가 없거나' }).waitFor();
     record('Network failure requires verification retry; explicit accept guarded against double click; completion clears token; new owner sees product 101');
     step = 'current-registration-three-step-navigation';
