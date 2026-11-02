@@ -93,4 +93,6 @@
   }
   document.addEventListener('pastport:page-loaded', event => { if (event.detail.id === 'documents' && root().classList.contains('active')) open(); });
   document.addEventListener('pastport:page-shown', event => { if (event.detail.id === 'documents') open(); });
+  // 새로고침으로 이 화면이 복원될 때는 화면 HTML과 복원 이벤트가 이 스크립트보다 먼저 끝날 수 있다. 이미 열려 있으면 바로 시작한다.
+  if (root()?.classList.contains('active')) open();
 })();
