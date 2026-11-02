@@ -25,7 +25,12 @@
             </div>
             <div class="field"><label for="product-title">제품 이름 <b>*</b></label><input id="product-title" name="title" required maxlength="200" placeholder="예: 업무용 맥북 프로"></div>
             <div class="field-row">
-              <div class="field"><label for="product-manufacturer">제조사 <b>*</b></label><input id="product-manufacturer" name="manufacturer" required maxlength="100" list="product-manufacturers" placeholder="예: Apple"><datalist id="product-manufacturers"></datalist></div>
+              <div class="field">
+                <label for="product-manufacturer-choice">제조사 <b>*</b></label>
+                <select id="product-manufacturer-choice" data-product-manufacturer-choice required><option value="">제조사를 선택해 주세요</option></select>
+                <input id="product-manufacturer" name="manufacturer" type="hidden">
+                <input id="product-manufacturer-custom" class="product-manufacturer-custom" maxlength="100" placeholder="제조사를 직접 입력해 주세요" data-product-manufacturer-custom hidden>
+              </div>
               <div class="field"><label for="product-model">모델명 <b>*</b></label><input id="product-model" name="modelName" required maxlength="100" placeholder="예: MacBook Pro 14"></div>
             </div>
             <div class="field"><label for="product-serial">시리얼 번호 <b>*</b></label><input id="product-serial" name="serialNumber" required minlength="4" maxlength="64" autocomplete="off" placeholder="제품 본체의 시리얼 번호"></div>
@@ -34,7 +39,23 @@
               <div class="field"><label for="product-purchase-date">구매일</label><input id="product-purchase-date" name="purchaseDate" type="date"></div>
               <div class="field"><label for="product-warranty-date">보증 만료일</label><input id="product-warranty-date" name="warrantyExpiresAt" type="date"></div>
             </div>
-            <div class="field"><label for="product-warranty-terms">보증 조건</label><input id="product-warranty-terms" name="warrantyTerms" maxlength="500" placeholder="예: 구매 후 2년"></div>
+            <div class="field">
+              <label for="product-warranty-basis">보증 조건</label>
+              <div class="product-warranty-builder">
+                <select id="product-warranty-basis" data-product-warranty-basis>
+                  <option value="">보증 기준 선택</option><option>구매일 기준</option><option>제조일 기준</option><option>등록일 기준</option><option>설치일 기준</option><option>최초 사용일 기준</option><option>사용량 기준</option><option>사용 횟수 기준</option><option>특정 날짜까지</option><option value="평생 보증">평생 보증</option>
+                </select>
+                <div class="product-warranty-duration" data-product-warranty-duration>
+                  <input type="number" min="1" max="9999" inputmode="numeric" placeholder="숫자" aria-label="보증 기간" data-product-warranty-value>
+                  <select aria-label="보증 기간 단위" data-product-warranty-unit><option value="년">년</option><option value="개월">개월</option></select>
+                </div>
+              </div>
+              <input id="product-warranty-terms" name="warrantyTerms" type="hidden">
+              <details class="product-warranty-extra">
+                <summary>＋ 추가 보증 조건 (선택)</summary>
+                <input maxlength="300" placeholder="예: 소비자 과실 제외, 소모품 제외" data-product-warranty-extra>
+              </details>
+            </div>
           </div>
           <aside class="product-register-guide">
             <span class="product-register-guide-icon" aria-hidden="true">⌁</span><h3>제품 여권의 시작</h3>

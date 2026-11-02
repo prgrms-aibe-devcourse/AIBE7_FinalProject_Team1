@@ -33,6 +33,7 @@
   let previewData = null;
   let publishing = false;
   let pendingPublish = null;
+  let publicationValidation = false;
   let dragImage = null;
   let aiLoading = false;
   let aiResult = null;
@@ -46,6 +47,7 @@
   const busy = () => saving || loading || deleting !== null || confirming || previewing || previewOpen || publishing;
   const productPath = id => '/api/v1/products/' + id + '/listing-draft';
   const formatTime = value => new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(value));
+  const validPrice = /^(?:[1-9]\d{0,11}|[1-9]\d{0,2}(?:,\d{3}){1,3})$/;
 
   async function api(url, options = {}, allowMissing = false) {
     const headers = new Headers(options.headers || {});
@@ -69,9 +71,49 @@
     return response;
   }
 
-  function error(message = '') {
-    find('[data-sale-error]').hidden = !message;
-    find('[data-sale-error] span').textContent = message;
+  function error(message = '', atActions = false) {
+    const target = find(atActions ? '[data-sale-action-error]' : '[data-sale-error]');
+    for (const notice of [find('[data-sale-error]'), find('[data-sale-action-error]')]) {
+      notice.hidden = !message || notice !== target;
+      notice.querySelector('span').textContent = notice === target ? message : '';
+    }
+    // 하단 버튼에서 실패하면 같은 위치에서 이유를 읽도록 초점을 옮기고 필요한 만큼만 스크롤한다.
+    if (message && atActions) {
+      target.focus({ preventScroll: true });
+      target.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  // 게시 시 누락 항목을 모두 표시하고 첫 오류로 이동한다. 이후 입력·사진 선택에서는 표시만 갱신한다.
+  function validatePublication(focus = false) {
+    const price = find('[data-sale-price]').value.trim();
+    const checks = [
+      ['title', '[data-sale-title]', !find('[data-sale-title]').value.trim() ? '판매글 제목을 입력해 주세요.' : ''],
+      ['price', '[data-sale-price]', !price ? '판매 가격을 입력해 주세요.' : !validPrice.test(price) ? '가격은 1원 이상, 최대 12자리의 정수로 입력해 주세요.' : ''],
+      ['grade', '[data-sale-grade-group]', grade === null ? '제품 상태 등급을 선택해 주세요.' : ''],
+      ['description', '[data-sale-description]', !find('[data-sale-description]').value.trim() ? '상세 설명을 입력해 주세요.' : ''],
+      ['photos', '[data-sale-photos-field]', !selected.length ? product?.images.length
+        ? '대표 사진을 선택해 주세요. 첫 번째로 선택한 사진이 대표 사진이 돼요.'
+        : '대표 사진이 필요해요. 내 제품에서 제품 사진을 등록한 뒤 다시 불러와 선택해 주세요.' : '']
+    ];
+    let first = null;
+    for (const [name, selector, issue] of checks) {
+      const message = publicationValidation ? issue : '';
+      const field = find('[data-sale-' + name + '-field]');
+      const notice = find('[data-sale-' + name + '-error]');
+      const control = find(selector);
+      field.classList.toggle('is-invalid', Boolean(message));
+      notice.textContent = message; notice.hidden = !message;
+      if (message) {
+        control.setAttribute('aria-invalid', 'true');
+        if (!first) first = { control, notice };
+      } else control.removeAttribute('aria-invalid');
+    }
+    if (focus && first) {
+      first.control.focus({ preventScroll: true });
+      first.notice.scrollIntoView({ block: 'center' });
+    }
+    return first === null;
   }
 
   function counters() {
@@ -116,7 +158,10 @@
     });
   }
 
-  function change() { revision++; counters(); status(); }
+  function change() {
+    revision++; counters(); status();
+    if (publicationValidation) validatePublication();
+  }
 
   function clearAi(message = '제품을 선택하면 AI 제안을 요청할 수 있어요.') {
     aiSequence++; aiRequest?.abort(); aiRequest = null; aiLoading = false; aiResult = null;
@@ -219,6 +264,7 @@
     root.querySelectorAll('[data-sale-grade]').forEach(button => { button.classList.remove('on'); button.setAttribute('aria-checked', 'false'); });
     find('[data-sale-product-step]').className = 'now';
     find('[data-sale-content-step]').className = '';
+    publicationValidation = false; validatePublication();
     counters(); status();
   }
 
@@ -448,7 +494,6 @@
   // 첫 저장은 POST, 기존 초안 수정은 ID·버전을 포함한 PUT으로 보내고 서버의 새 버전을 보관한다.
   async function persistDraft() {
     const rawPrice = find('[data-sale-price]').value.trim();
-    const validPrice = /^(?:[1-9]\d{0,11}|[1-9]\d{0,2}(?:,\d{3}){1,3})$/;
     if (rawPrice && !validPrice.test(rawPrice)) { find('[data-sale-price]').focus(); throw new Error('가격은 1원 이상, 최대 12자리의 정수로 입력해 주세요.'); }
     const price = rawPrice ? Number(rawPrice.replaceAll(',', '')) : null;
     const content = { title: find('[data-sale-title]').value || null, description: find('[data-sale-description]').value || null, price, conditionGrade: grade, selectedImageIds: [...selected], version };
@@ -469,7 +514,7 @@
     event.preventDefault();
     if (!product || busy()) return;
     error();
-    try { await persistDraft(); } catch (failure) { error(failure.message); }
+    try { await persistDraft(); } catch (failure) { error(failure.message, true); }
   }
 
   async function fetchPreview(page) {
@@ -500,7 +545,7 @@
       find('[data-sale-content-step]').className = '';
       find('[data-sale-preview-step]').className = 'now';
     } catch (failure) {
-      if (failure.name !== 'AbortError') error((stored ? '임시저장은 완료했지만 미리보기를 열지 못했어요. ' : '') + failure.message);
+      if (failure.name !== 'AbortError') error((stored ? '임시저장은 완료했지만 미리보기를 열지 못했어요. ' : '') + failure.message, true);
     } finally { previewing = false; status(); }
   }
 
@@ -544,9 +589,8 @@
     if (!product || busy()) return;
     error();
     if (!pendingPublish) {
-      if (!find('[data-sale-title]').value.trim() || !find('[data-sale-description]').value.trim() || !find('[data-sale-price]').value.trim() || grade === null || !selected.length) {
-        error('게시하려면 제목·가격·상태 등급·설명과 대표 사진을 입력해 주세요.'); return;
-      }
+      publicationValidation = true;
+      if (!validatePublication(true)) return;
       if (!await confirmAction('판매글을 게시할까요? 선택한 제품 사진과 개인정보를 제외한 누적 핵심 이력이 함께 공개돼요. 게시 후 공개 제품 정보·이력으로 AI 상태 요약을 생성해요. 사진·증빙·채팅은 AI에 보내지 않아요.', '게시하기', '판매글 게시 확인')) return;
     }
     publishing = true; status();
@@ -563,7 +607,7 @@
     } catch (failure) {
       // 응답 유실이면 같은 초안 ID·버전으로 재시도한다. 서버는 같은 게시 결과를 반환한다.
       if (failure.status) pendingPublish = null;
-      error(pendingPublish ? '게시 결과를 확인하지 못했어요. 게시 결과 다시 확인을 눌러 같은 요청의 결과를 확인해 주세요.' : failure.message);
+      error(pendingPublish ? '게시 결과를 확인하지 못했어요. 게시 결과 다시 확인을 눌러 같은 요청의 결과를 확인해 주세요.' : failure.message, true);
     } finally { publishing = false; status(); }
   }
 

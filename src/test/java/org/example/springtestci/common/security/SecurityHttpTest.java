@@ -4,6 +4,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -21,6 +22,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -55,7 +57,9 @@ class SecurityHttpTest {
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
       return new SecurityConfig()
           .securityFilterChain(
-              http, mock(org.example.springtestci.admin.service.AdminAccessService.class));
+              http,
+              mock(org.example.springtestci.admin.service.AdminAccessService.class),
+              jwtDecoder());
     }
 
     @Bean
@@ -72,6 +76,11 @@ class SecurityHttpTest {
   /** 보안 규칙만 확인하려는 가짜 API. */
   @RestController
   static class Probe {
+
+    @GetMapping("/api/v1/listings")
+    String listings(Authentication authentication) {
+      return authentication == null ? "anonymous" : authentication.getName();
+    }
 
     @GetMapping("/api/v1/probe")
     String read() {
@@ -218,6 +227,41 @@ class SecurityHttpTest {
   @Test
   void acceptsAValidAccessCookieForReads() throws Exception {
     mvc.perform(get("/api/v1/probe").cookie(accessCookie("jti-ok"))).andExpect(status().isOk());
+  }
+
+  @Test
+  void publicListRecognizesAValidCookieButDoesNotKeepItForTheNextAnonymousRequest()
+      throws Exception {
+    mvc.perform(get("/api/v1/listings").cookie(accessCookie("jti-public-list")))
+        .andExpect(status().isOk())
+        .andExpect(content().string("7"));
+    mvc.perform(get("/api/v1/listings"))
+        .andExpect(status().isOk())
+        .andExpect(content().string("anonymous"));
+  }
+
+  @Test
+  void publicListTreatsExpiredMalformedAndLoggedOutCookiesAsAnonymous() throws Exception {
+    when(BLOCKLIST.isBlocked("jti-public-blocked")).thenReturn(true);
+    for (String value :
+        new String[] {
+          "not-a-valid-jwt",
+          token("jti-public-expired", Instant.now().minusSeconds(120)),
+          token("jti-public-blocked")
+        }) {
+      mvc.perform(get("/api/v1/listings").cookie(accessCookie(value)))
+          .andExpect(status().isOk())
+          .andExpect(content().string("anonymous"));
+    }
+  }
+
+  @Test
+  void publicListStillRejectsAnInvalidExplicitBearerEvenWithAValidCookie() throws Exception {
+    mvc.perform(
+            get("/api/v1/listings")
+                .cookie(accessCookie("jti-public-cookie"))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer invalid"))
+        .andExpect(status().isUnauthorized());
   }
 
   /** 배포용 HTTPS 응답에만 HSTS 헤더가 붙는다. */

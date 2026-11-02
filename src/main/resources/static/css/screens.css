@@ -370,3 +370,29 @@
 @media(prefers-reduced-motion:reduce){.au.split .sc-field input,.lg-join button{transition:none}}
 
 #documents [data-docs-status].is-error{color:#b42318}
+
+/* 문서 보관함 반응형: 버튼 줄바꿈·세로 글자 깨짐을 막고, 좁은 화면에서도 제품 목록을 유지한다. */
+#documents .docs{grid-template-columns:minmax(150px,200px) minmax(0,1fr)}
+#documents .docs-left{min-width:0}
+#documents .docs-right{min-width:0}
+#documents .page-title{flex-wrap:wrap;gap:12px}
+#documents .page-title>div{flex:1 1 240px;min-width:0;word-break:keep-all}
+#documents .page-title .button,#documents .doc-row .button{white-space:nowrap;word-break:keep-all}
+#documents .doc-row{grid-template-columns:auto minmax(0,1fr);grid-auto-flow:column;grid-auto-columns:max-content;gap:10px 12px}
+#documents .doc-row>*{min-width:0}
+#documents .doc-row>span:nth-child(3){white-space:nowrap}
+@media(max-width:780px){
+  #documents .docs{grid-template-columns:minmax(0,1fr)}
+  #documents .docs-left{display:block;padding:14px 16px;border-right:0;border-bottom:1px solid var(--line)}
+  #documents .side-menu{display:flex;flex-wrap:wrap;gap:6px}
+  #documents .side-menu button{padding:7px 12px;border:1px solid var(--line);border-radius:999px}
+  #documents .side-menu button.active{border-color:var(--blue)}
+}
+@media(max-width:640px){
+  #documents .docs-right{padding:14px}
+  #documents .page-title .button{width:100%}
+  #documents .doc-row{display:flex;flex-wrap:wrap;align-items:center}
+  #documents .doc-row>div{flex:1 1 0}
+  #documents .doc-row>span:nth-child(3){order:3;flex:1 1 100%}
+  #documents .doc-row>.button{order:4;flex:1 1 0}
+}

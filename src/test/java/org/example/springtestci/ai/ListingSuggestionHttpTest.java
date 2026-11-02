@@ -40,6 +40,8 @@ class ListingSuggestionHttpTest {
   private static final AtomicReference<String> SOURCE = new AtomicReference<>();
   private static final AtomicReference<Runnable> DURING = new AtomicReference<>();
   private static final AtomicReference<ErrorCode> PROVIDER_ERROR = new AtomicReference<>();
+  private static final AtomicReference<ListingSuggestionGateway.Suggestion> OUTPUT =
+      new AtomicReference<>();
   private static final AtomicBoolean CONFIGURED = new AtomicBoolean(true);
   private static final AtomicBoolean PROVIDER_IN_TRANSACTION = new AtomicBoolean();
   private static final AtomicInteger CALLS = new AtomicInteger();
@@ -79,6 +81,7 @@ class ListingSuggestionHttpTest {
               TransactionSynchronizationManager.isActualTransactionActive());
           if (DURING.get() != null) DURING.get().run();
           if (PROVIDER_ERROR.get() != null) throw new CommonException(PROVIDER_ERROR.get());
+          if (OUTPUT.get() != null) return OUTPUT.get();
           return new Suggestion("Apple MacBook Pro 14 판매", "등록된 제품 정보와 누적 핵심 이력을 확인해 주세요.");
         }
       };
@@ -145,6 +148,7 @@ class ListingSuggestionHttpTest {
     SOURCE.set(null);
     DURING.set(null);
     PROVIDER_ERROR.set(null);
+    OUTPUT.set(null);
     CONFIGURED.set(true);
     PROVIDER_IN_TRANSACTION.set(false);
     HISTORY.set(new Snapshot(State.READY, false, List.of()));
@@ -170,6 +174,30 @@ class ListingSuggestionHttpTest {
     assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM listings", Integer.class));
     assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM audit_logs", Integer.class));
     verify(LIMITS).release(any());
+  }
+
+  @Test
+  void firstKoreanDateResponseDoesNotNeedAnotherClickToSucceed() throws Exception {
+    HISTORY.set(
+        new Snapshot(
+            State.READY, false, List.of(event(5001, EventStatus.VALID, true, "정기 점검 완료", 1L))));
+    OUTPUT.set(
+        new ListingSuggestionGateway.Suggestion(
+            "Apple MacBook Pro 14 판매", "2025년 5월 20일 정기 점검 기록이 있습니다."));
+    var first = post(PATH, "1", "");
+    int firstCalls = CALLS.get();
+    OUTPUT.set(
+        new ListingSuggestionGateway.Suggestion(
+            "Apple MacBook Pro 14 판매", "2025-05-20 정기 점검 기록이 있습니다."));
+    var second = post(PATH, "1", "");
+    assertEquals(200, second.statusCode(), second.body());
+    assertEquals(200, first.statusCode(), first.body());
+    assertEquals(1, firstCalls);
+    assertTrue(
+        JSON.readTree(first.body()).at("/data/description").asString().contains("2025-05-20"));
+    assertEquals(2, CALLS.get());
+    assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM listing_drafts", Integer.class));
+    assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM listings", Integer.class));
   }
 
   @Test

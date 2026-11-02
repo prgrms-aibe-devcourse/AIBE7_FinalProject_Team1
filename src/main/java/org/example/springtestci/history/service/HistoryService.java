@@ -28,9 +28,15 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+/**
+ * 제품 이력의 등록·조회·정정·무효화 업무를 처리한다.
+ *
+ * <p>Controller와 {@link HistoryRepository} 사이에서 소유권, 변경 가능 상태, 사양 값 검증 및 트랜잭션을 관리한다.
+ */
 @Service
 public class HistoryService {
 
+  // 사용자가 임의의 필드명을 저장하지 못하도록 변경 가능한 제품 사양 키를 제한한다.
   private static final Set<String> SPEC_KEYS =
       Set.of(
           "cpu",
@@ -66,11 +72,15 @@ public class HistoryService {
   public HistoryEventResponse create(
       long ownerId, long productId, CreateHistoryEventRequest request) {
     requireOwnedLock(productId, ownerId);
+    if (historyRepository.hasPendingDirectTransfer(productId)) {
+      throw new CommonException(ErrorCode.HISTORY_REGISTRATION_BLOCKED);
+    }
     validateCommon(request.eventType(), request.occurredOn(), request.specsAfter());
     if (request.eventType() == HistoryEventType.TRANSFER) {
       throw new CommonException(ErrorCode.INVALID_HISTORY_EVENT);
     }
 
+    // List는 응답 순서를 유지하고, 내부의 Set 검사는 중복 문서 ID를 찾는 데 사용한다.
     List<Long> documentIds = normalizedDocumentIds(request.documentIds());
     if (!historyRepository.documentsCanBeLinked(productId, documentIds)) {
       throw new CommonException(ErrorCode.INVALID_HISTORY_DOCUMENT);
@@ -106,11 +116,13 @@ public class HistoryService {
     return response;
   }
 
+  /** 소유권을 확인한 뒤 이력, 연결 문서, 최근 변경 정보를 합쳐 타임라인을 만든다. */
   @Transactional(readOnly = true)
   public List<HistoryEventResponse> timeline(long ownerId, long productId) {
     if (!historyRepository.existsOwnedProduct(productId, ownerId)) {
       throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
     }
+    // eventId를 Map의 키로 사용하면 반복 조회 없이 각 이벤트에 문서와 변경 정보를 연결할 수 있다.
     Map<Long, List<Long>> documents = historyRepository.findDocumentIds(productId);
     Map<Long, HistoryChangeRecord> changes = historyRepository.findLatestChanges(productId);
     return historyRepository.findTimeline(productId).stream()
@@ -197,6 +209,7 @@ public class HistoryService {
 
   private void rebuildSpecifications(
       long productId, long changedEventId, ProductSpecifications base) {
+    // LinkedHashMap은 정해진 사양 키 순서를 유지해 JSON과 디버깅 결과를 읽기 쉽게 만든다.
     Map<String, Object> current = new LinkedHashMap<>(toMap(base));
     for (HistoryEventRecord event :
         historyRepository.findValidSpecificationEventsFrom(productId, changedEventId)) {

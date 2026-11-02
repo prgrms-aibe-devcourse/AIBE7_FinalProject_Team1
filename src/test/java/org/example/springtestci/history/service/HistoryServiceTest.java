@@ -90,6 +90,30 @@ class HistoryServiceTest {
   }
 
   @Test
+  void createIsBlockedWhileAnExternalDirectTransferIsPending() {
+    CreateHistoryEventRequest request =
+        new CreateHistoryEventRequest(
+            HistoryEventType.INSPECTION,
+            LocalDate.of(2026, 10, 19),
+            "승계 전 점검",
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of());
+    when(historyRepository.lockOwnedProduct(PRODUCT, OWNER)).thenReturn(true);
+    when(historyRepository.hasPendingDirectTransfer(PRODUCT)).thenReturn(true);
+
+    CommonException exception =
+        assertThrows(CommonException.class, () -> historyService.create(OWNER, PRODUCT, request));
+
+    assertEquals(ErrorCode.HISTORY_REGISTRATION_BLOCKED, exception.errorCode());
+    verify(historyRepository, never()).insertEvent(anyLong(), anyLong(), any(), any(), any());
+    verifyNoInteractions(events);
+  }
+
+  @Test
   void createIncrementsFactsRecordsOnlyPublicSafeFieldsAndPublishesRefresh() {
     CreateHistoryEventRequest request =
         new CreateHistoryEventRequest(

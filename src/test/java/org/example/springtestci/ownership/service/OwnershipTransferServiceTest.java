@@ -19,6 +19,7 @@ import java.util.Optional;
 import org.example.springtestci.auth.repository.UserRepository;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
+import org.example.springtestci.history.service.InternalTransferHistoryWriter;
 import org.example.springtestci.ownership.dto.AcceptTransferRequest;
 import org.example.springtestci.ownership.dto.AcceptTransferResponse;
 import org.example.springtestci.ownership.dto.CreateTransferRequest;
@@ -51,6 +52,7 @@ class OwnershipTransferServiceTest {
   @Mock private ProductRepository productRepository;
   @Mock private UserRepository userRepository;
   @Mock private TradeAuditRepository tradeAuditRepository;
+  @Mock private InternalTransferHistoryWriter historyWriter;
   @Mock private ApplicationEventPublisher events;
   @Mock private DirectTransferGuard guard;
   @Mock private InternalTradeOwnershipRepository effects;
@@ -68,6 +70,7 @@ class OwnershipTransferServiceTest {
             guard,
             effects,
             Clock.systemUTC(),
+            historyWriter,
             events);
   }
 
@@ -346,8 +349,22 @@ class OwnershipTransferServiceTest {
     assertThat(accepted.newOwnerId()).isEqualTo(buyerId);
     assertThat(transfer.getStatus()).isEqualTo(TransferStatus.COMPLETED);
 
-    var order = inOrder(productRepository, events, tradeAuditRepository);
+    var order =
+        inOrder(
+            productRepository,
+            transferRepository,
+            historyWriter,
+            effects,
+            events,
+            tradeAuditRepository);
     order.verify(productRepository).updateOwner(productId, buyerId);
+    order.verify(transferRepository).flush();
+    order
+        .verify(historyWriter)
+        .recordCompletedTransfer(
+            new InternalTransferHistoryWriter.Command(
+                productId, 200L, fromUserId, buyerId, accepted.completedAt()));
+    order.verify(effects).protectDocuments(productId, accepted.completedAt());
     order.verify(events).publishEvent(new OwnershipTransferred(productId, fromUserId, buyerId));
     order
         .verify(tradeAuditRepository)

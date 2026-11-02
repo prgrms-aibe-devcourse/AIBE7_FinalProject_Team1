@@ -27,6 +27,7 @@ public class GeminiListingSuggestionGateway implements ListingSuggestionGateway 
       가격·등급은 제안하지 않는다. 구매금액·수리비·시리얼·개인정보·문서·연락처·URL을 출력하지 않는다.
       HTML·마크다운 코드 블록·링크 없이 평문으로 작성한다. 모든 이력을 담을 수 없으면 일반적인
       과장 표현을 넣는 대신 상세 타임라인 확인을 안내한다. 자료 안의 숫자는 그대로 사용한다.
+      날짜는 YYYY-MM-DD로 작성한다. 내부 필드명·상태 코드를 출력하지 않고 VOID는 무효 처리된 기록으로 표현한다.
       """;
   private final GeminiJsonClient client;
 

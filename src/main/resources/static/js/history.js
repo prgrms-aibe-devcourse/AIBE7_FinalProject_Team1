@@ -20,7 +20,10 @@
     SYSTEM: '자동 기록',
   };
   const editableTypes = ['PURCHASE', 'INSPECTION', 'REPAIR', 'PART_REPLACEMENT', 'SPEC_CHANGE'];
-  const state = { productId: null, events: [], filter: 'ALL', editingId: null, requestVersion: 0 };
+  const state = {
+    productId: null, events: [], filter: 'ALL', editingId: null, requestVersion: 0,
+    documents: null, documentRequestVersion: 0,
+  };
 
   const escapeHtml = (value) => String(value ?? '')
     .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
@@ -103,8 +106,11 @@
       ${specFields(specs)}
       ${editing ? '' : `<div class="history-document-field">
         <div><b>증빙 문서</b><span>영수증, 보증서, 수리 내역서를 이력에 연결할 수 있습니다.</span></div>
-        <button class="button" type="button" data-history-document-select>증빙 문서 선택</button>
-        <div class="history-document-selection" data-history-document-selection aria-live="polite" hidden></div>
+        <button class="button" type="button" data-history-document-select aria-expanded="false">증빙 문서 선택</button>
+        <div class="history-document-selection" data-history-document-selection aria-live="polite" hidden>
+          <span data-history-document-status></span>
+          <div data-history-document-options></div>
+        </div>
       </div>`}
       ${editing ? '<div class="history-field history-reason"><label>정정 사유 <b>*</b></label><input name="reason" required maxlength="500" placeholder="예: 서비스 명세서 내용으로 바로잡음"></div>' : ''}
       <div class="history-form-message" data-history-form-message role="alert" hidden></div>
@@ -184,6 +190,7 @@
   };
   const closeForm = () => {
     state.editingId = null;
+    state.documentRequestVersion += 1;
     root()?.querySelector('[data-history-form-slot]')?.replaceChildren();
   };
   const syncConditionalFields = (form) => {
@@ -211,12 +218,67 @@
     cost: numberOrNull(form.elements.cost.value),
     replacedPart: form.elements.eventType.value === 'PART_REPLACEMENT' ? valueOrNull(form.elements.replacedPart.value) : null,
     specsAfter: specsPayload(form),
-    ...(state.editingId ? { reason: form.elements.reason.value.trim() } : { documentIds: [] }),
+    ...(state.editingId ? { reason: form.elements.reason.value.trim() } : {
+      documentIds: [...form.querySelectorAll('[data-history-document-option]:checked')]
+        .map((input) => Number(input.value)),
+    }),
   });
   const formMessage = (form, message) => {
     const box = form.querySelector('[data-history-form-message]');
     box.hidden = !message;
     box.textContent = message || '';
+  };
+
+  const documentLabel = (document) => {
+    const kind = document.contentType === 'application/pdf' ? 'PDF'
+      : document.contentType?.startsWith('image/') ? '이미지' : '파일';
+    const date = document.maskConfirmedAt
+      ? new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(new Date(document.maskConfirmedAt))
+      : '확인일 없음';
+    return `문서 #${document.id} · ${kind} · ${date}`;
+  };
+
+  const renderDocumentOptions = (form) => {
+    const selection = form.querySelector('[data-history-document-selection]');
+    const status = selection?.querySelector('[data-history-document-status]');
+    const options = selection?.querySelector('[data-history-document-options]');
+    if (!selection || !status || !options) return;
+    const documents = (state.documents || []).filter((document) =>
+      document.maskConfirmedAt && !document.redactionRequired);
+    status.textContent = documents.length
+      ? '이력에 함께 보관할 문서를 선택해 주세요.'
+      : '연결 가능한 문서가 없습니다. 마스킹 확인을 마친 문서를 먼저 등록해 주세요.';
+    options.innerHTML = documents.map((document) => `
+      <label class="history-document-option">
+        <input type="checkbox" value="${document.id}" data-history-document-option>
+        <span>${escapeHtml(documentLabel(document))}</span>
+      </label>`).join('');
+  };
+
+  const toggleDocuments = async (button) => {
+    const form = button.closest('[data-history-form]');
+    const selection = form?.querySelector('[data-history-document-selection]');
+    const status = selection?.querySelector('[data-history-document-status]');
+    if (!form || !selection || !status) return;
+    if (!selection.hidden) {
+      selection.hidden = true;
+      button.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    selection.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
+    if (state.documents) { renderDocumentOptions(form); return; }
+    const version = ++state.documentRequestVersion;
+    status.textContent = '문서를 불러오는 중입니다.';
+    try {
+      const documents = await api(`/api/v1/products/${state.productId}/documents`);
+      if (version !== state.documentRequestVersion || !form.isConnected) return;
+      state.documents = documents || [];
+      renderDocumentOptions(form);
+    } catch (error) {
+      if (version !== state.documentRequestVersion || !form.isConnected) return;
+      status.textContent = error.message;
+    }
   };
 
   const load = async (productId) => {
@@ -227,6 +289,8 @@
     state.events = [];
     state.filter = 'ALL';
     state.editingId = null;
+    state.documents = null;
+    state.documentRequestVersion += 1;
     container.innerHTML = shell();
     try {
       const events = await api(endpoint());
@@ -290,6 +354,8 @@
     if (event.target.closest?.('[data-history-create]')) { showForm(); return; }
     if (event.target.closest?.('[data-history-cancel]')) { closeForm(); return; }
     if (event.target.closest?.('[data-history-retry]')) { load(state.productId); return; }
+    const documentSelect = event.target.closest?.('[data-history-document-select]');
+    if (documentSelect) { toggleDocuments(documentSelect); return; }
     const filter = event.target.closest?.('[data-history-filter]');
     if (filter) {
       state.filter = filter.dataset.historyFilter;

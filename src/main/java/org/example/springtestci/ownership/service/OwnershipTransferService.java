@@ -6,13 +6,13 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
 import java.util.Objects;
 import org.example.springtestci.auth.repository.UserRepository;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
+import org.example.springtestci.history.service.InternalTransferHistoryWriter;
 import org.example.springtestci.ownership.dto.AcceptTransferRequest;
 import org.example.springtestci.ownership.dto.AcceptTransferResponse;
 import org.example.springtestci.ownership.dto.CreateTransferRequest;
@@ -49,6 +49,7 @@ public class OwnershipTransferService {
   private final DirectTransferGuard guard;
   private final InternalTradeOwnershipRepository effects;
   private final Clock clock;
+  private final InternalTransferHistoryWriter historyWriter;
   private final ApplicationEventPublisher events;
 
   public OwnershipTransferService(
@@ -59,6 +60,7 @@ public class OwnershipTransferService {
       DirectTransferGuard guard,
       InternalTradeOwnershipRepository effects,
       Clock clock,
+      InternalTransferHistoryWriter historyWriter,
       ApplicationEventPublisher events) {
     this.transferRepository = transferRepository;
     this.productRepository = productRepository;
@@ -67,6 +69,7 @@ public class OwnershipTransferService {
     this.guard = guard;
     this.effects = effects;
     this.clock = clock;
+    this.historyWriter = historyWriter;
     this.events = events;
   }
 
@@ -243,11 +246,16 @@ public class OwnershipTransferService {
     productRepository.updateOwner(productId, actorId);
     transfer.complete(actorId, now);
     transferRepository.flush();
-    effects.insertTransferEvent(
-        productId, transfer.getId(), LocalDate.ofInstant(now, clock.getZone()), now);
-    effects.makeHistoryPrivate(productId);
+
+    // 소유자 변경과 같은 트랜잭션에서 개인정보 없는 시스템 이력을 남기고 누적 공개를 종료한다.
+    historyWriter.recordCompletedTransfer(
+        new InternalTransferHistoryWriter.Command(
+            transfer.getProductId(), transfer.getId(), transfer.getFromUserId(), actorId, now));
     effects.protectDocuments(productId, now);
-    events.publishEvent(new OwnershipTransferred(productId, transfer.getFromUserId(), actorId));
+
+    // 초안 삭제처럼 필수인 후처리는 커밋 전에 실행한다. 실패하면 소유자·이전 상태도 함께 되돌린다.
+    events.publishEvent(
+        new OwnershipTransferred(transfer.getProductId(), transfer.getFromUserId(), actorId));
 
     tradeAuditRepository.log(
         transfer.getProductId(),

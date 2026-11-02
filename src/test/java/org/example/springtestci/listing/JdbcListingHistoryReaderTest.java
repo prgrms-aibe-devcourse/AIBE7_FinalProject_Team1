@@ -11,6 +11,7 @@ import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
 import org.example.springtestci.listing.repository.JdbcListingHistoryReader;
 import org.example.springtestci.listing.service.ListingHistoryReader;
+import org.example.springtestci.listing.service.ListingHistoryReader.ChangeAction;
 import org.example.springtestci.listing.service.ListingHistoryReader.State;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -122,6 +123,12 @@ class JdbcListingHistoryReaderTest {
     var changes = reader.read(101).events().get(0).corrections();
     assertEquals(
         List.of(13L, 12L, 11L), changes.stream().map(value -> value.correctionId()).toList());
+    assertEquals(
+        List.of(
+            ChangeAction.HISTORY_VOIDED,
+            ChangeAction.HISTORY_CORRECTED,
+            ChangeAction.HISTORY_CORRECTED),
+        changes.stream().map(value -> value.action()).toList());
     assertEquals(CREATED.plusSeconds(13).toInstant(), changes.get(0).correctedAt());
     assertTrue(changes.stream().allMatch(value -> value.reason() == null && !value.reviewed()));
   }

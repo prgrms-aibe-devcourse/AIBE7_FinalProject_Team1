@@ -12,6 +12,10 @@ import java.util.Enumeration;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import org.springframework.http.HttpHeaders;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.WebUtils;
 
@@ -20,6 +24,12 @@ import org.springframework.web.util.WebUtils;
  * Spring은 Bearer 토큰이 있는 요청을 CSRF 검사에서 빼므로, 쿠키를 리졸버로 직접 읽게 하면 쿠키 요청도 검사를 건너뛰게 된다.
  */
 class CookieBearerTokenFilter extends OncePerRequestFilter {
+  private final JwtDecoder decoder;
+  private final JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+
+  CookieBearerTokenFilter(JwtDecoder decoder) {
+    this.decoder = decoder;
+  }
 
   /** 쿠키에 토큰이 있으면 Authorization 헤더가 있는 요청으로 바꿔 다음 필터에 넘긴다. */
   @Override
@@ -27,6 +37,22 @@ class CookieBearerTokenFilter extends OncePerRequestFilter {
       HttpServletRequest request, HttpServletResponse response, FilterChain chain)
       throws ServletException, IOException {
     String token = cookieToken(request);
+    // 공개 목록도 정상 쿠키는 회원으로 인식한다. 만료·변조·로그아웃된 쿠키는 비회원 공개 범위로 처리한다.
+    // 명시적 Authorization 요청은 여기서 처리하지 않고 기존 resource server의 엄격한 검증을 따른다.
+    if (token != null
+        && "GET".equals(request.getMethod())
+        && request.getRequestURI().equals("/api/v1/listings")) {
+      try {
+        var authentication = converter.convert(decoder.decode(token));
+        var context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(authentication);
+        SecurityContextHolder.setContext(context);
+      } catch (JwtException ignored) {
+        // 같은 디코더의 서명·만료·로그아웃 차단 검증을 통과하지 못하면 회원 요약을 공개하지 않는다.
+      }
+      chain.doFilter(request, response);
+      return;
+    }
     chain.doFilter(token == null ? request : new BearerRequest(request, token), response);
   }
 
@@ -44,10 +70,9 @@ class CookieBearerTokenFilter extends OncePerRequestFilter {
     if (!uri.startsWith("/api/") && !adminPage) {
       return null;
     }
-    // 공개 목록은 만료된 로그인 쿠키가 있어도 비회원으로 이용할 수 있다. 명시적 Bearer 헤더는 유지한다.
+    // 대표 사진은 회원별 응답이 없으므로 로그인 쿠키 없이 공개 범위만 조회한다.
     if ("GET".equals(request.getMethod())
-        && (request.getRequestURI().equals("/api/v1/listings")
-            || request.getRequestURI().matches("/api/v1/listings/[^/]+/thumbnail"))) {
+        && request.getRequestURI().matches("/api/v1/listings/[^/]+/thumbnail")) {
       return null;
     }
     // 로그인·갱신·로그아웃은 만료되거나 잘못된 쿠키가 남아 있어도 막히지 않아야 한다.
