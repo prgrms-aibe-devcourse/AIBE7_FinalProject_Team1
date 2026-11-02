@@ -333,6 +333,17 @@ class DefaultChatServiceTest {
     verify(messageRepository, never()).append(anyLong(), anyLong(), any());
   }
 
+  @Test
+  void participantsGetOnlyTheirCounterpartyIdAndOutsidersAreDenied() {
+    when(roomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room()));
+
+    assertEquals(BUYER_ID, service.findCounterpartyId(ROOM_ID, SELLER_ID));
+    assertEquals(SELLER_ID, service.findCounterpartyId(ROOM_ID, BUYER_ID));
+    CommonException exception =
+        assertThrows(CommonException.class, () -> service.findCounterpartyId(ROOM_ID, OUTSIDER_ID));
+    assertEquals(ErrorCode.ACCESS_DENIED, exception.errorCode());
+  }
+
   private ChatListingSnapshot activeListing() {
     return new ChatListingSnapshot(
         LISTING_ID, SELLER_ID, 1L, SELLER_ID, ChatListingStatus.ACTIVE, "노트북");

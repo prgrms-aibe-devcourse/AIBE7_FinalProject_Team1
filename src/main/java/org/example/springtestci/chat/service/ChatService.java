@@ -29,6 +29,9 @@ public interface ChatService {
   /** 참여자 메시지를 저장하고 커밋 이후 실시간 전달을 예약한다. */
   ChatMessageResponse sendMessage(long roomId, long actorId, String content);
 
+  /** 방 참여자에게만 상대방의 회원 id를 돌려준다. 방이 없으면 404, 참여자가 아니거나 이미 나간 방이면 접근 거부다. */
+  long findCounterpartyId(long roomId, long actorId);
+
   /** 참여자가 채팅방을 나간다. 본인 목록에서 방이 사라지고, 상대방에게는 "나갔어요" 시스템 메시지가 남는다. 이미 나갔다면 아무 일도 하지 않는다. */
   void leaveRoom(long roomId, long actorId);
 

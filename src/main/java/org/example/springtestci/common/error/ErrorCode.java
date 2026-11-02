@@ -14,6 +14,11 @@ public enum ErrorCode {
   EMAIL_NOT_VERIFIED(HttpStatus.BAD_REQUEST, "AUTH_008", "이메일 인증을 완료해 주세요."),
   TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "AUTH_010", "잠시 후 다시 시도해 주세요."),
   LOGIN_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "AUTH_012", "로그인 시도가 너무 많아요. 잠시 후 다시 시도해 주세요."),
+  ALREADY_LOGGED_IN(
+      HttpStatus.CONFLICT,
+      "AUTH_014",
+      "이미 다른 곳에서 로그인되어 있어요. 사용 중인 기기에서 로그아웃한 뒤 다시 시도해 주세요."),
+  PROFILE_IMAGE_INVALID(HttpStatus.BAD_REQUEST, "AUTH_013", "올바른 이미지 파일(JPG·PNG, 2MB 이하)을 올려 주세요."),
   REQUEST_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "COMMON_003", "요청이 너무 많아요. 잠시 후 다시 시도해 주세요."),
   EMAIL_SEND_FAILED(
       HttpStatus.SERVICE_UNAVAILABLE, "AUTH_011", "인증 메일을 보내지 못했어요. 잠시 후 다시 시도해 주세요."),

@@ -17,6 +17,17 @@
     })
   );
 
+  // 마이페이지는 상단 메뉴에는 두지 않고(계정 영역에서 이동) 전체메뉴에만 한 묶음으로 추가한다.
+  const mypageColumn = document.createElement('div');
+  mypageColumn.className = 'mega-col';
+  const mypageTitle = document.createElement('button');
+  mypageTitle.type = 'button'; mypageTitle.className = 'mega-title'; mypageTitle.dataset.page = 'mypage'; mypageTitle.textContent = '마이페이지';
+  const mypageItem = document.createElement('button');
+  mypageItem.type = 'button'; mypageItem.dataset.page = 'mypage';
+  mypageItem.innerHTML = '<b>내 정보 · 활동 요약</b><small>문서·판매글·제품을 한눈에 확인</small>';
+  mypageColumn.append(mypageTitle, mypageItem);
+  grid.append(mypageColumn);
+
   const side = document.querySelector('#side');
   const sectionNav = document.querySelector('[data-section-nav]');
   const sectionTitle = document.querySelector('#side-section');

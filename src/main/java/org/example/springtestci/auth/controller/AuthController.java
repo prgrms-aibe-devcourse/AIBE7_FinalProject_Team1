@@ -73,8 +73,11 @@ public class AuthController {
   /** 로그인하고 Access·Refresh Token을 HttpOnly 쿠키로 내려준다. */
   @PostMapping("/login")
   public ResponseEntity<ApiResponse<LoginResponse>> login(
-      @Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
-    return withTokenCookies(authService.login(request, httpRequest.getRemoteAddr()));
+      @Valid @RequestBody LoginRequest request,
+      HttpServletRequest httpRequest,
+      @CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken) {
+    // 같은 브라우저의 Refresh Token을 함께 넘겨, 이미 로그인한 본인의 재로그인과 다른 곳의 중복 로그인을 구분한다.
+    return withTokenCookies(authService.login(request, httpRequest.getRemoteAddr(), refreshToken));
   }
 
   /** Refresh Token 쿠키로 새 토큰 쌍을 발급한다. */

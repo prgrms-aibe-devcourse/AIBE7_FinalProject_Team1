@@ -58,6 +58,17 @@ class DeployMigrationPostgresTest {
     return new DriverManagerDataSource(url + separator + "currentSchema=" + schema, user, password);
   }
 
+  /** 배포용 복구 마이그레이션(2026110301~)이 생기기 전까지의 정식 마이그레이션만 적용한다. 공유 DB가 복구 이전에 이 상태였다. */
+  private static void migrateBeforeDeploy(DataSource dataSource) {
+    Flyway.configure()
+        .dataSource(dataSource)
+        .locations("classpath:db/migration")
+        .target("2026110201")
+        .ignoreMigrationPatterns("*:*")
+        .load()
+        .migrate();
+  }
+
   /** 실제 배포 설정처럼 이력 불일치로 멈추지 않도록 같은 무시 패턴을 쓴다. */
   private static void migrate(DataSource dataSource, boolean outOfOrder, String... locations) {
     Flyway.configure()
@@ -119,7 +130,7 @@ class DeployMigrationPostgresTest {
   @Test
   void pending_경로로_이미_만든_DB에서도_복구_마이그레이션이_실패하지_않는다() {
     DataSource dataSource = newSchema();
-    migrate(dataSource, false, "classpath:db/migration");
+    migrateBeforeDeploy(dataSource);
     // 팀이 기존에 쓰던 방식: 정식 경로 뒤에 pending P2·P3를 out-of-order로 적용한다.
     migrate(
         dataSource,
@@ -137,7 +148,7 @@ class DeployMigrationPostgresTest {
   @Test
   void 이력은_적용됐지만_컬럼이_없는_DB는_복구_마이그레이션이_컬럼을_채운다() {
     DataSource dataSource = newSchema();
-    migrate(dataSource, false, "classpath:db/migration");
+    migrateBeforeDeploy(dataSource);
     JdbcTemplate jdbc = new JdbcTemplate(dataSource);
     // 공유 DB 상황 재현: 그 버전은 적용된 것으로 기록돼 있으나 실제 구조에는 컬럼이 없다.
     jdbc.execute("drop index ix_product_events_publication");
