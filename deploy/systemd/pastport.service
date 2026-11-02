@@ -1,0 +1,26 @@
+[Unit]
+Description=Pastport Spring Boot Application
+Wants=network-online.target
+After=network-online.target valkey.service
+
+[Service]
+Type=simple
+User=pastport
+Group=pastport
+WorkingDirectory=/var/lib/pastport
+EnvironmentFile=/etc/pastport/pastport.env
+ExecStart=/usr/bin/java -Xms128m -Xmx768m -jar /opt/pastport/current.jar --server.address=127.0.0.1 --server.port=8080
+Restart=on-failure
+RestartSec=5
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+StateDirectory=pastport
+ReadWritePaths=/var/lib/pastport
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

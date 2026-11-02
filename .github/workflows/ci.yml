@@ -17,6 +17,19 @@ permissions:
   contents: read
 
 jobs:
+  deploy-assets:
+    name: Deployment assets (offline mocks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check shell syntax
+        run: for script in deploy/scripts/*.sh deploy/tests/*.sh; do bash -n "$script"; done
+      - name: Test release operations without AWS or systemd
+        run: sudo bash deploy/tests/release-test.sh
+
   build:
     name: Format, build and test
     runs-on: ubuntu-latest
