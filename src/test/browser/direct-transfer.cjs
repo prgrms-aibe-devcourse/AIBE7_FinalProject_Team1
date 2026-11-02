@@ -85,6 +85,7 @@ async function receiveFixture(page, token, expected) {
   await page.locator('[data-receive-message]').filter({ hasText: expected }).waitFor();
   ensure(new URL(page.url()).search === '', 'Receiver address cleared');
   ensure(await page.locator('[data-receive-accept]').isDisabled(), 'Terminal acceptance disabled');
+  ensure(!await page.locator('[data-receive-home]').isVisible(), 'Completion action hidden for terminal unaccepted link');
   await noStoredSecret(page, token);
 }
 async function decodeSharedQr(page, sharedLink) {
@@ -195,6 +196,7 @@ async function decodeSharedQr(page, sharedLink) {
     await receiver.page.locator('#register [data-register-step="2"]:not([hidden])').waitFor();
     record('Current three-step laptop registration navigates forward and back with preserved session');
     step = 'current-chat-list-and-leave';
+    await receiver.page.setViewportSize({ width: 390, height: 844 });
     await receiver.page.evaluate(() => show('deals'));
     await receiver.page.locator('#deals.active [data-room-id="501"]').waitFor();
     await receiver.page.locator('#deals [data-room-id="501"]').click();

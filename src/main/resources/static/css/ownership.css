@@ -2,6 +2,7 @@
 [data-ownership-root] h2 { margin: 0 0 10px; }
 [data-ownership-root] p { line-height: 1.6; }
 .ownership-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.ownership-actions [hidden] { display: none !important; }
 .ownership-link { width: 100%; box-sizing: border-box; padding: 10px; font-size: 12px; }
 .ownership-qr { display: block; max-width: 100%; width: 280px; height: auto; image-rendering: pixelated; background: white; margin: 12px 0; }
 [data-receive-message] { white-space: pre-line; line-height: 1.7; }
