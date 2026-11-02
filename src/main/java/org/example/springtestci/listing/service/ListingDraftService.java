@@ -40,7 +40,9 @@ public class ListingDraftService {
   }
 
   public List<DraftProductResponse> products(long userId) {
-    return products.listMine(userId).stream().map(DraftProductResponse::from).toList();
+    return products.listMine(userId, 0, 100).items().stream()
+        .map(DraftProductResponse::from)
+        .toList();
   }
 
   public DraftProductResponse composition(long productId, long userId) {

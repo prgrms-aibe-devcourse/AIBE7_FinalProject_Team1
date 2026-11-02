@@ -72,7 +72,7 @@
     if (!root() || !find('[data-docs-products]')) return;
     status('문서를 불러오는 중이에요…');
     try {
-      state.products = await api('/api/v1/products') || [];
+      state.products = (await api('/api/v1/products?size=100'))?.items || [];
       if (!state.products.some(item => item.productId === state.selected)) state.selected = state.products[0]?.productId ?? null;
       products(); await loadDocuments();
     } catch (error) { status(error.message, true); }

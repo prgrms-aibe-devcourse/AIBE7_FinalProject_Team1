@@ -1,13 +1,15 @@
 package org.example.springtestci.product.controller;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import java.io.IOException;
-import java.util.List;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
 import org.example.springtestci.common.response.ApiResponse;
 import org.example.springtestci.product.dto.CreateProductRequest;
+import org.example.springtestci.product.dto.ProductPageResponse;
 import org.example.springtestci.product.dto.ProductResponse;
 import org.example.springtestci.product.dto.UpdateProductImagesRequest;
 import org.example.springtestci.product.dto.UpdateProductRequest;
@@ -28,6 +30,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -60,8 +63,11 @@ public class ProductController {
 
   /** 로그인 사용자가 소유한 제품 목록을 조회한다. */
   @GetMapping
-  public ApiResponse<List<ProductResponse>> listMine(@AuthenticationPrincipal Jwt jwt) {
-    return ApiResponse.success(productService.listMine(userId(jwt)));
+  public ApiResponse<ProductPageResponse> listMine(
+      @AuthenticationPrincipal Jwt jwt,
+      @RequestParam(defaultValue = "0") @Min(0) int page,
+      @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+    return ApiResponse.success(productService.listMine(userId(jwt), page, size));
   }
 
   /** productId에 해당하는 내 제품 한 건을 조회한다. */

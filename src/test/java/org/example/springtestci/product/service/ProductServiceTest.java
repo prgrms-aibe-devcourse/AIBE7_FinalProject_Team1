@@ -3,6 +3,7 @@ package org.example.springtestci.product.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -16,6 +17,7 @@ import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
@@ -118,6 +120,31 @@ class ProductServiceTest {
     ProductResponse response = service.get(OWNER, PRODUCT);
 
     assertEquals(CIPHERTEXT_SECRET, response.serialNumber());
+  }
+
+  @Test
+  void listUsesBoundedPagingAndBatchImageLookup() {
+    when(productRepository.findOwnedPage(OWNER, 0, 20)).thenReturn(List.of(product()));
+    when(productRepository.findImages(List.of(PRODUCT)))
+        .thenReturn(Map.of(PRODUCT, List.of(image(1L, true))));
+    when(productRepository.summarizeOwned(OWNER))
+        .thenReturn(new ProductRepository.OwnedProductSummary(21L, 8L));
+
+    var response = service.listMine(OWNER, 0, 20);
+
+    assertEquals(1, response.items().size());
+    assertEquals(1, response.items().get(0).images().size());
+    assertEquals(21L, response.page().totalElements());
+    assertEquals(true, response.page().hasNext());
+    assertEquals(8L, response.summary().purchased());
+    verify(productRepository).findImages(List.of(PRODUCT));
+    verify(productRepository, never()).findImages(PRODUCT);
+  }
+
+  @Test
+  void listRejectsAnUnboundedPageSize() {
+    assertCode(ErrorCode.INVALID_INPUT, () -> service.listMine(OWNER, 0, 101));
+    verify(productRepository, never()).findOwnedPage(anyLong(), anyInt(), anyInt());
   }
 
   @Test

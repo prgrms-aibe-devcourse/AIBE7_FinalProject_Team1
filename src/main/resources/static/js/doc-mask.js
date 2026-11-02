@@ -18,6 +18,10 @@
   let sourceType = 'image/png';
   let saving = false;
   let autoRunning = false;
+  // 제품 등록 화면에서 넘긴 원본은 서버에 보내지 않고, 이 화면이 열릴 때 한 번만 소비한다.
+  let pendingProductId = null;
+  let pendingFile = null;
+  let entryVersion = 0;
   // cleanup()마다 올라가서, 그 전에 시작한 이미지 열기·미리보기가 늦게 끝나도 결과를 버릴 수 있게 한다.
   let generation = 0;
 
@@ -472,7 +476,6 @@
     if (!section || !section.querySelector('[data-dm]')) return;
     root = section;
     bind();
-    loadProducts(new URLSearchParams(window.location.search).get('productId'));
   }
 
   // 내 제품 목록을 드롭다운에 채운다. wanted(제품 번호)가 목록에 있으면 선택해 둔다.
@@ -488,13 +491,13 @@
     };
     setOptions('제품을 불러오는 중이에요');
     try {
-      const response = await api('/api/v1/products');
+      const response = await api('/api/v1/products?size=100');
       if (response.status === 401) {
         setOptions('로그인 후 제품을 선택할 수 있어요');
         return;
       }
       if (!response.ok) throw new Error('products');
-      const products = (await response.json()).data || [];
+      const products = (await response.json()).data?.items || [];
       if (products.length === 0) {
         setOptions('등록된 제품이 없어요. 제품을 먼저 등록해 주세요');
         return;
@@ -508,31 +511,53 @@
 
   // 다른 화면의 버튼이 data-docmask-product-id="제품번호"를 달고 data-page="docmask"로 이동하면 그 제품을 미리 선택한다.
   // 화면 전환(app.js의 click 처리)보다 먼저 값을 받아 두려고 캡처 단계에서 듣는다.
-  let pendingProductId = null;
   document.addEventListener('click', (event) => {
     const button = event.target.closest?.('[data-docmask-product-id]');
     if (button) pendingProductId = button.dataset.docmaskProductId;
   }, true);
 
+  async function enterPendingDocument() {
+    if (!root) return;
+    const version = ++entryVersion;
+    const productId = pendingProductId || new URLSearchParams(window.location.search).get('productId');
+    const file = pendingFile;
+    find('[data-dm-to-passport]').hidden = !productId;
+    await loadProducts(productId);
+    if (version !== entryVersion || !root.classList.contains('active')) return;
+    pendingProductId = null;
+    pendingFile = null;
+    if (file) await open(file);
+  }
+
   document.addEventListener('pastport:page-loaded', (event) => {
-    if (event.detail.id === 'docmask') init();
+    if (event.detail.id !== 'docmask') return;
+    init();
+    if (document.querySelector('#docmask')?.classList.contains('active')) enterPendingDocument();
   });
   init();
 
   // 다른 화면으로 이동하면 선택한 원본과 만든 사본의 메모리 참조를 정리한다.
   document.addEventListener('pastport:page-shown', (event) => {
-    if (root && event.detail.id !== 'docmask') reset();
+    if (root && event.detail.id !== 'docmask') {
+      entryVersion += 1;
+      pendingProductId = null;
+      pendingFile = null;
+      reset();
+    }
     // 다른 화면에서 제품을 등록하거나 로그인했을 수 있으니 돌아올 때마다 목록을 새로 받는다.
     if (root && event.detail.id === 'docmask') {
-      // 제품 여권의 버튼으로 들어왔을 때만 저장 후 그 제품 여권으로 돌아가는 버튼을 보여 준다.
-      find('[data-dm-to-passport]').hidden = !pendingProductId;
-      loadProducts(pendingProductId);
-      pendingProductId = null;
+      // 제품 여권이나 등록 화면에서 넘어온 제품을 선택하고, 등록 화면의 원본이 있으면 바로 연다.
+      enterPendingDocument();
     }
   });
   window.addEventListener('pagehide', reset);
 
   window.PastportDocMask = {
+    /** 등록 성공 전에는 업로드하지 않은 원본과 새 제품 ID를 다음 마스킹 화면에 인계한다. */
+    prepare(productId, file) {
+      pendingProductId = String(productId);
+      pendingFile = file;
+    },
     setProduct(id) {
       if (root) find('[data-dm-product]').value = id;
     },

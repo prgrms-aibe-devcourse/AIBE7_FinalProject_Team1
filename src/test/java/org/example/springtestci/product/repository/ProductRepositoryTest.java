@@ -72,6 +72,28 @@ class ProductRepositoryTest {
   }
 
   @Test
+  void ownedProductsArePagedInStableOrderAndImagesAreLoadedInOneBatch() {
+    long oldest = insert(24L, "APPLE", "fp-page-oldest");
+    long middle = insert(24L, "APPLE", "fp-page-middle");
+    long newest = insert(24L, "APPLE", "fp-page-newest");
+    repository.insertImage(oldest, "product-images/page-oldest.png", "image/png", 10L);
+    repository.insertImage(newest, "product-images/page-newest.png", "image/png", 20L);
+
+    var firstPage = repository.findOwnedPage(24L, 0, 2);
+    var secondPage = repository.findOwnedPage(24L, 1, 2);
+    var images = repository.findImages(firstPage.stream().map(ProductResponse::productId).toList());
+    var summary = repository.summarizeOwned(24L);
+
+    assertEquals(
+        List.of(newest, middle), firstPage.stream().map(ProductResponse::productId).toList());
+    assertEquals(List.of(oldest), secondPage.stream().map(ProductResponse::productId).toList());
+    assertEquals(1, images.get(newest).size());
+    assertFalse(images.containsKey(middle));
+    assertEquals(3L, summary.total());
+    assertEquals(0L, summary.purchased());
+  }
+
+  @Test
   void replacingFieldAuthorTransfersEditResponsibilityToCurrentOwner() {
     long productId = insert(22L, "APPLE", "fp-field-author");
 

@@ -4,6 +4,7 @@
   const registration = window.PastportProductRegistration;
   const state = {
     products: [], current: null, selectedId: null, loading: null, imageUrls: [], registerImageUrls: [], documentToken: 0,
+    productPage: { number: 0, totalElements: 0, hasNext: false }, productSummary: { registered: 0, purchased: 0 },
     productListRequests: registration.createLatestRequestGate(),
   };
 
@@ -43,13 +44,16 @@
     target.innerHTML = '<strong class="product-empty-title">로그인이 필요합니다.</strong>내 제품을 확인하려면 먼저 로그인해 주세요.<br><button class="button primary" type="button" data-page="auth">로그인하기</button>';
   };
 
-  const loadProducts = async (force = false) => {
+  const loadProducts = async (force = false, page = 0, append = false) => {
     if (state.loading && !force) return state.loading;
     const requestVersion = state.productListRequests.begin();
-    const request = api(API)
-      .then((products) => {
+    const request = api(`${API}?page=${page}&size=20`)
+      .then((result) => {
         if (!state.productListRequests.isCurrent(requestVersion)) return false;
-        state.products = products || [];
+        const items = result?.items || [];
+        state.products = append ? [...state.products, ...items] : items;
+        state.productPage = result?.page || { number: page, totalElements: items.length, hasNext: false };
+        state.productSummary = result?.summary || { registered: items.length, purchased: items.filter((item) => item.purchaseDate).length };
         return true;
       })
       .catch((error) => {
@@ -65,6 +69,8 @@
     state.productListRequests.invalidate();
     state.loading = null;
     state.products = [];
+    state.productPage = { number: 0, totalElements: 0, hasNext: false };
+    state.productSummary = { registered: 0, purchased: 0 };
   };
 
   const productChip = (product) => {
@@ -87,9 +93,11 @@
     const query = root.querySelector('[data-product-search]')?.value.trim().toLocaleLowerCase('ko-KR') || '';
     const filtered = state.products.filter((product) => [product.title, product.manufacturer, product.modelName]
       .some((value) => String(value || '').toLocaleLowerCase('ko-KR').includes(query)));
-    root.querySelector('[data-product-count]').textContent = state.products.length;
-    root.querySelector('[data-purchased-count]').textContent = state.products.filter((product) => product.purchaseDate).length;
+    root.querySelector('[data-product-count]').textContent = state.productSummary.registered;
+    root.querySelector('[data-purchased-count]').textContent = state.productSummary.purchased;
     root.querySelector('[data-product-latest]').textContent = state.products[0] ? dateTime(state.products[0].createdAt) : '–';
+    const more = root.querySelector('[data-product-more]');
+    if (more) more.hidden = !state.productPage.hasNext;
     list.replaceChildren();
     if (!filtered.length) {
       status.hidden = false;
@@ -124,6 +132,19 @@
     status.hidden = false;
     status.textContent = '제품을 불러오는 중입니다.';
     try { if (await loadProducts(force)) renderProducts(); } catch (error) { showListError(error); }
+  };
+
+  const loadMoreProducts = async (button) => {
+    button.disabled = true;
+    button.textContent = '불러오는 중…';
+    try {
+      if (await loadProducts(false, state.productPage.number + 1, true)) renderProducts();
+    } catch (error) {
+      toast(error.message, 'error');
+    } finally {
+      button.disabled = false;
+      button.textContent = '제품 더 보기';
+    }
   };
 
   const revokeImages = () => {
@@ -353,6 +374,8 @@
       showFormMessage(form, '보증 만료일은 구매일보다 빠를 수 없습니다.'); return;
     }
     const files = [...form.elements.images.files];
+    // 등록 전 원본은 서버로 보내지 않고 보관했다가, 제품 ID가 생긴 뒤 마스킹 화면에만 넘긴다.
+    const documentFile = form.querySelector('[data-product-document]')?.files?.[0] || null;
     const imageError = validateImages(files);
     if (imageError) { showFormMessage(form, imageError); return; }
     const submit = form.querySelector('[data-product-submit]');
@@ -370,7 +393,12 @@
       }
       form.reset();
       resetRegisterWizard(form);
-      navigate('home');
+      if (documentFile && window.PastportDocMask?.prepare) {
+        window.PastportDocMask.prepare(product.productId, documentFile);
+        navigate('docmask');
+      } else {
+        navigate('home');
+      }
     } catch (error) {
       if (error.status === 401) return showFormMessage(form, '로그인이 필요합니다. 로그인 후 다시 시도해 주세요.');
       showFormMessage(form, error.fieldErrors?.[0]?.message || error.message);
@@ -423,6 +451,8 @@
     const product = event.target.closest?.('[data-product-id]');
     if (product) state.selectedId = Number(product.dataset.productId);
     if (event.target.closest?.('[data-product-retry]')) openHome(true);
+    const productMore = event.target.closest?.('[data-product-more]');
+    if (productMore) { await loadMoreProducts(productMore); return; }
     if (event.target.closest?.('[data-product-detail-retry]')) openDetail();
     if (event.target.closest?.('[data-product-documents-show]')) {
       document.querySelector('[data-product-documents]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });

@@ -2,7 +2,11 @@ package org.example.springtestci.product.repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.example.springtestci.product.dto.CreateProductRequest;
 import org.example.springtestci.product.dto.ProductResponse;
@@ -166,12 +170,26 @@ public class ProductRepository {
         .findFirst();
   }
 
-  public List<ProductResponse> findAllOwned(long ownerId) {
+  public List<ProductResponse> findOwnedPage(long ownerId, int page, int size) {
     return jdbc.query(
         PRODUCT_SELECT
             + " WHERE p.owner_id = ? AND p.archived_at IS NULL"
-            + " ORDER BY p.created_at DESC, p.id DESC",
+            + " ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?",
         this::product,
+        ownerId,
+        size,
+        (long) page * size);
+  }
+
+  public OwnedProductSummary summarizeOwned(long ownerId) {
+    return jdbc.queryForObject(
+        """
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN purchase_date IS NOT NULL THEN 1 ELSE 0 END), 0) AS purchased
+          FROM products
+         WHERE owner_id = ? AND archived_at IS NULL
+        """,
+        (row, index) -> new OwnedProductSummary(row.getLong("total"), row.getLong("purchased")),
         ownerId);
   }
 
@@ -346,6 +364,36 @@ public class ProductRepository {
         productId);
   }
 
+  /** 목록 페이지에 포함된 제품들의 이미지를 한 번에 읽어 제품별로 묶는다. */
+  public Map<Long, List<ProductImageRecord>> findImages(List<Long> productIds) {
+    if (productIds.isEmpty()) return Map.of();
+    String placeholders = String.join(",", Collections.nCopies(productIds.size(), "?"));
+    Map<Long, List<ProductImageRecord>> result = new LinkedHashMap<>();
+    jdbc.query(
+        """
+        SELECT product_id, id, storage_key, content_type, byte_size, sort_order, is_primary
+          FROM product_images
+         WHERE product_id IN (%s) AND deleted_at IS NULL
+         ORDER BY product_id, sort_order, id
+        """
+            .formatted(placeholders),
+        row -> {
+          long productId = row.getLong("product_id");
+          result
+              .computeIfAbsent(productId, ignored -> new ArrayList<>())
+              .add(
+                  new ProductImageRecord(
+                      row.getLong("id"),
+                      row.getString("storage_key"),
+                      row.getString("content_type"),
+                      row.getLong("byte_size"),
+                      row.getInt("sort_order"),
+                      row.getBoolean("is_primary")));
+        },
+        productIds.toArray());
+    return result;
+  }
+
   public Optional<ProductImageRecord> findImage(long productId, long imageId) {
     return findImages(productId).stream().filter(image -> image.imageId() == imageId).findFirst();
   }
@@ -460,4 +508,6 @@ public class ProductRepository {
       long byteSize,
       int sortOrder,
       boolean primary) {}
+
+  public record OwnedProductSummary(long total, long purchased) {}
 }
