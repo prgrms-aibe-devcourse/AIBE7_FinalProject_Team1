@@ -191,6 +191,18 @@ async function decodeSharedQr(page, sharedLink) {
     await receiver.page.locator('#register [data-register-step="3"] [data-register-prev]').click();
     await receiver.page.locator('#register [data-register-step="2"]:not([hidden])').waitFor();
     record('Current three-step laptop registration navigates forward and back with preserved session');
+    step = 'current-chat-list-and-leave';
+    await receiver.page.evaluate(() => show('deals'));
+    await receiver.page.locator('#deals.active [data-room-id="501"]').waitFor();
+    await receiver.page.locator('#deals [data-room-id="501"]').click();
+    await receiver.page.locator('#deals [data-deals-chat-section]').waitFor({ state: 'visible' });
+    await receiver.page.locator('#deals [data-deals-back]').click();
+    await receiver.page.locator('#deals [data-deals-chat-section]').waitFor({ state: 'hidden' });
+    await receiver.page.locator('#deals [data-room-id="501"]').click();
+    await receiver.page.locator('#deals [data-deals-leave]').click();
+    await receiver.page.locator('[data-confirm-ok]').click();
+    await receiver.page.locator('#deals [data-room-id="501"]').waitFor({ state: 'detached' });
+    record('Current chat list opens room, returns to list, and explicitly leaves the room');
     ensure(counts.uncaughtPageErrors === 0, 'No uncaught browser errors');
     step = 'complete';
     fs.writeFileSync(path.join(evidence, 'browser-result.json'), JSON.stringify({ status: 'PASS', started, ended: new Date().toISOString(), browser: browser.version(), playwrightCore: require('playwright-core/package.json').version, jsQR: require('jsqr/package.json').version, qrGenerator: '2.0.4', passed, counts, tokenMaterialRecorded: false, credentialsRecorded: false, externalRequestsBlocked: true }, null, 2));

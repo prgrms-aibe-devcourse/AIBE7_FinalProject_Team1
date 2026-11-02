@@ -736,8 +736,7 @@ class DirectTransferPostgresTest {
   }
 
   @Test
-  void p5A08PendingDirectBlocksActualPublicationAndAcceptanceCompletesWithoutCreatingSale()
-      throws Exception {
+  void p5A08ActualPublicationFirstBlocksDirectIssuanceWithoutCancellingSale() throws Exception {
     var draft =
         context
             .getBean(ListingDraftService.class)
@@ -751,29 +750,21 @@ class DirectTransferPostgresTest {
                     4,
                     List.of(1001L),
                     null));
-    var transfer = issue(null);
     var request =
         new org.example.springtestci.listing.dto.PublishListingRequest(
             draft.draftId(), draft.version());
     runBlockedRace(
         () ->
-            error(
-                () ->
-                    context
-                        .getBean(
-                            org.example.springtestci.listing.service.ListingPublishService.class)
-                        .publish(101, 1, request),
-                ErrorCode.LISTING_PUBLISH_BLOCKED),
-        () -> direct.acceptTransfer(2, new AcceptTransferRequest(transfer.rawToken())));
-    assertCompleted(transfer.transferId(), 2);
+            context
+                .getBean(org.example.springtestci.listing.service.ListingPublishService.class)
+                .publish(101, 1, request),
+        () -> error(() -> issue(null), ErrorCode.OWNERSHIP_TRANSFER_BLOCKED));
     assertThat(number("SELECT COUNT(*) FROM listings WHERE product_id=101 AND status='ACTIVE'"))
-        .isZero();
-    assertThat(text("SELECT status FROM ownership_transfers WHERE id=" + transfer.transferId()))
-        .isEqualTo("COMPLETED");
-    assertThat(number("SELECT owner_id FROM products WHERE id=101")).isEqualTo(2);
-    assertThat(number("SELECT COUNT(*) FROM product_events WHERE event_type='TRANSFER'"))
         .isEqualTo(1);
-    assertThat(committedEvents.get()).isEqualTo(1);
+    assertThat(number("SELECT COUNT(*) FROM ownership_transfers")).isZero();
+    assertThat(number("SELECT owner_id FROM products WHERE id=101")).isEqualTo(1);
+    assertThat(number("SELECT COUNT(*) FROM product_events WHERE event_type='TRANSFER'")).isZero();
+    assertThat(committedEvents.get()).isZero();
   }
 
   private void runBlockedRace(Runnable first, Runnable second) throws Exception {

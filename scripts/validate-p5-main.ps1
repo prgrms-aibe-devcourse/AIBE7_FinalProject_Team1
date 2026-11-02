@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Evidence,
     [string]$BrowserScript,
     [string]$BrowserModules,
+    [string[]]$TestFilter,
     [string]$JavaHome = 'C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot'
 )
 $ErrorActionPreference = 'Stop'
@@ -50,6 +51,10 @@ $arguments = @('--no-daemon', '--console=plain')
 if ($Mode -eq 'basic') { $arguments += @('spotlessCheck', 'test', 'build') }
 elseif ($Mode -eq 'selected') { $arguments += @('test', '--tests', '*DirectTransferPostgresTest', '--tests', '*InternalTradeOwnershipHttpPostgresTest', '--tests', '*ListingDraftOwnershipHttpTest', '--tests', '*ListingCancelIntegrationPostgresTest') }
 else { $arguments += @('test', '--tests', '*DirectTransferPostgresTest.p5A09BrowserFlow') }
+if ($Mode -eq 'selected' -and $TestFilter) {
+    $arguments = @('--no-daemon', '--console=plain', 'test')
+    foreach ($filter in $TestFilter) { $arguments += @('--tests', $filter) }
+}
 @{ mode=$Mode; head=(& git rev-parse HEAD); arguments=$arguments; started=(Get-Date).ToUniversalTime().ToString('o') } | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $evidencePath 'command.json')
 $ErrorActionPreference = 'Continue'
 & .\gradlew.bat @arguments *> (Join-Path $evidencePath 'gradle.log')
