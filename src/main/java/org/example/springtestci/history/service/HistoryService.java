@@ -10,6 +10,7 @@ import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
 import org.example.springtestci.history.dto.CorrectHistoryEventRequest;
 import org.example.springtestci.history.dto.CreateHistoryEventRequest;
+import org.example.springtestci.history.dto.HistoryChangeResponse;
 import org.example.springtestci.history.dto.HistoryEventResponse;
 import org.example.springtestci.history.dto.HistoryEventSource;
 import org.example.springtestci.history.dto.VoidHistoryEventRequest;
@@ -124,7 +125,7 @@ public class HistoryService {
     }
     // eventId를 Map의 키로 사용하면 반복 조회 없이 각 이벤트에 문서와 변경 정보를 연결할 수 있다.
     Map<Long, List<Long>> documents = historyRepository.findDocumentIds(productId);
-    Map<Long, HistoryChangeRecord> changes = historyRepository.findLatestChanges(productId);
+    Map<Long, List<HistoryChangeRecord>> changes = historyRepository.findChanges(productId);
     return historyRepository.findTimeline(productId).stream()
         .map(
             event ->
@@ -132,7 +133,7 @@ public class HistoryService {
                     ownerId,
                     event,
                     documents.getOrDefault(event.eventId(), List.of()),
-                    changes.get(event.eventId())))
+                    changes.getOrDefault(event.eventId(), List.of())))
         .toList();
   }
 
@@ -177,7 +178,7 @@ public class HistoryService {
             ownerId,
             after,
             historyRepository.findDocumentIds(productId).getOrDefault(eventId, List.of()),
-            historyRepository.findLatestChanges(productId).get(eventId));
+            historyRepository.findChanges(productId).getOrDefault(eventId, List.of()));
     events.publishEvent(new ProductFactsChanged(productId));
     return response;
   }
@@ -202,7 +203,7 @@ public class HistoryService {
             ownerId,
             after,
             historyRepository.findDocumentIds(productId).getOrDefault(eventId, List.of()),
-            historyRepository.findLatestChanges(productId).get(eventId));
+            historyRepository.findChanges(productId).getOrDefault(eventId, List.of()));
     events.publishEvent(new ProductFactsChanged(productId));
     return response;
   }
@@ -329,11 +330,17 @@ public class HistoryService {
   private HistoryEventResponse getOwnedEvent(
       long ownerId, long productId, long eventId, List<Long> documentIds) {
     return toResponse(
-        ownerId, historyRepository.findEvent(productId, eventId).orElseThrow(), documentIds, null);
+        ownerId,
+        historyRepository.findEvent(productId, eventId).orElseThrow(),
+        documentIds,
+        List.of());
   }
 
   private HistoryEventResponse toResponse(
-      long ownerId, HistoryEventRecord event, List<Long> documentIds, HistoryChangeRecord change) {
+      long ownerId,
+      HistoryEventRecord event,
+      List<Long> documentIds,
+      List<HistoryChangeRecord> changes) {
     HistoryEventSource source =
         event.eventType() == HistoryEventType.TRANSFER
             ? HistoryEventSource.SYSTEM
@@ -344,6 +351,13 @@ public class HistoryService {
         event.status() == HistoryEventStatus.VALID
             && event.eventType() != HistoryEventType.TRANSFER
             && java.util.Objects.equals(event.authorId(), ownerId);
+    List<HistoryChangeResponse> changeResponses =
+        changes.stream()
+            .map(
+                change ->
+                    new HistoryChangeResponse(change.action(), change.reason(), change.changedAt()))
+            .toList();
+    HistoryChangeRecord latestChange = changes.isEmpty() ? null : changes.get(changes.size() - 1);
     return new HistoryEventResponse(
         event.eventId(),
         event.productId(),
@@ -360,9 +374,10 @@ public class HistoryService {
         source,
         editable,
         documentIds,
-        change == null ? null : change.action(),
-        change == null ? null : change.reason(),
-        change == null ? null : change.changedAt(),
+        changeResponses,
+        latestChange == null ? null : latestChange.action(),
+        latestChange == null ? null : latestChange.reason(),
+        latestChange == null ? null : latestChange.changedAt(),
         event.createdAt(),
         event.updatedAt());
   }

@@ -75,18 +75,22 @@
     <div class="history-status" data-history-status role="status">이력을 불러오는 중입니다.</div>
     <div class="history-timeline" data-history-list aria-live="polite"></div>`;
 
-  const specFields = (values = {}) => `
+  const specFields = (values = {}, eventType = 'INSPECTION') => {
+    const selected = Object.keys(specLabels).find((key) => values[key] != null) || '';
+    return `
     <div class="history-spec-fields" data-history-spec-fields>
-      <div class="history-field"><label>CPU</label><input name="cpu" maxlength="200" value="${escapeHtml(values.cpu || '')}" placeholder="예: Apple M3"></div>
-      <div class="history-field"><label>GPU</label><input name="gpu" maxlength="200" value="${escapeHtml(values.gpu || '')}" placeholder="예: RTX 4060"></div>
-      <div class="history-field"><label>RAM (GB)</label><input name="ramGb" type="number" min="1" value="${escapeHtml(values.ramGb ?? '')}"></div>
-      <div class="history-field"><label>저장 용량 (GB)</label><input name="storageGb" type="number" min="1" value="${escapeHtml(values.storageGb ?? '')}"></div>
-      <div class="history-field"><label>저장 방식</label><select name="storageType"><option value="">선택 안 함</option>${['SSD', 'HDD', 'MIXED'].map((item) => `<option value="${item}" ${values.storageType === item ? 'selected' : ''}>${item}</option>`).join('')}</select></div>
-      <div class="history-field"><label>배터리 상태 (%)</label><input name="batteryHealthPercent" type="number" min="0" max="100" value="${escapeHtml(values.batteryHealthPercent ?? '')}"></div>
-      <div class="history-field history-wide"><label>디스플레이</label><input name="display" maxlength="200" value="${escapeHtml(values.display || '')}" placeholder="예: 14인치 Liquid Retina"></div>
-      <div class="history-field"><label>운영체제</label><input name="os" maxlength="200" value="${escapeHtml(values.os || '')}" placeholder="예: macOS"></div>
-      <p class="history-spec-help">바뀐 사양만 입력해 주세요. 사양 변경 유형은 하나 이상 필수입니다.</p>
+      <div class="history-field history-wide"><label data-history-spec-picker-label>${eventType === 'PART_REPLACEMENT' ? '교체 후 달라진 사양' : '변경할 사양'} <b>*</b></label><select name="specKey" data-history-spec-picker><option value="">항목을 선택해 주세요</option>${Object.entries(specLabels).map(([key, label]) => `<option value="${key}" ${selected === key ? 'selected' : ''}>${label}</option>`).join('')}</select></div>
+      <div class="history-field history-wide" data-history-spec-field="cpu" hidden><label>변경 후 CPU</label><input name="cpu" maxlength="200" value="${escapeHtml(values.cpu || '')}" placeholder="예: Apple M3"></div>
+      <div class="history-field history-wide" data-history-spec-field="gpu" hidden><label>변경 후 GPU</label><input name="gpu" maxlength="200" value="${escapeHtml(values.gpu || '')}" placeholder="예: RTX 4060"></div>
+      <div class="history-field history-wide" data-history-spec-field="ramGb" hidden><label>변경 후 RAM (GB)</label><input name="ramGb" type="number" min="1" value="${escapeHtml(values.ramGb ?? '')}" placeholder="예: 32"></div>
+      <div class="history-field history-wide" data-history-spec-field="storageGb" hidden><label>변경 후 저장 용량 (GB)</label><input name="storageGb" type="number" min="1" value="${escapeHtml(values.storageGb ?? '')}" placeholder="예: 1024"></div>
+      <div class="history-field history-wide" data-history-spec-field="storageType" hidden><label>변경 후 저장 방식</label><select name="storageType"><option value="">선택해 주세요</option>${['SSD', 'HDD', 'MIXED'].map((item) => `<option value="${item}" ${values.storageType === item ? 'selected' : ''}>${item}</option>`).join('')}</select></div>
+      <div class="history-field history-wide" data-history-spec-field="batteryHealthPercent" hidden><label>변경 후 배터리 상태 (%)</label><input name="batteryHealthPercent" type="number" min="0" max="100" value="${escapeHtml(values.batteryHealthPercent ?? '')}" placeholder="예: 95"></div>
+      <div class="history-field history-wide" data-history-spec-field="display" hidden><label>변경 후 디스플레이</label><input name="display" maxlength="200" value="${escapeHtml(values.display || '')}" placeholder="예: 14인치 Liquid Retina"></div>
+      <div class="history-field history-wide" data-history-spec-field="os" hidden><label>변경 후 운영체제</label><input name="os" maxlength="200" value="${escapeHtml(values.os || '')}" placeholder="예: macOS"></div>
+      <p class="history-spec-help" data-history-spec-help></p>
     </div>`;
+  };
 
   const formTemplate = (event = null) => {
     const editing = !!event;
@@ -103,7 +107,7 @@
         <div class="history-field"><label>비용 (원)</label><input name="cost" type="number" min="0" step="1" value="${escapeHtml(event?.cost ?? '')}" placeholder="0"></div>
         <div class="history-field history-wide" data-history-part-field><label>교체 부품</label><input name="replacedPart" maxlength="200" value="${escapeHtml(event?.replacedPart || '')}" placeholder="예: 배터리, SSD"></div>
       </div>
-      ${specFields(specs)}
+      ${specFields(specs, selectedType)}
       ${editing ? '' : `<div class="history-document-field">
         <div><b>증빙 문서</b><span>영수증, 보증서, 수리 내역서를 이력에 연결할 수 있습니다.</span></div>
         <button class="button" type="button" data-history-document-select aria-expanded="false">증빙 문서 선택</button>
@@ -137,6 +141,15 @@
     const changedSpecs = meaningfulSpecs(event.specsBefore, event.specsAfter);
     return `${facts.length ? `<div class="history-facts">${facts.join('')}</div>` : ''}${changedSpecs.length ? `<div class="history-spec-changes">${changedSpecs.map((key) => `<div><span>${specLabels[key]}</span><del>${escapeHtml(specValue(key, event.specsBefore?.[key]))}</del><i>→</i><b>${escapeHtml(specValue(key, event.specsAfter?.[key]))}</b></div>`).join('')}</div>` : ''}`;
   };
+  const changeHistory = (event) => {
+    const changes = event.changes?.length ? event.changes
+      : event.changeAction ? [{ action: event.changeAction, reason: event.changeReason, changedAt: event.changedAt }] : [];
+    if (!changes.length) return '';
+    return `<ol class="history-change-list" aria-label="정정 및 무효 처리 기록">${changes.map((change) => {
+      const voided = change.action === 'HISTORY_VOIDED';
+      return `<li data-change-action="${escapeHtml(change.action)}"><b>${voided ? '무효화' : '정정'}</b><span>${escapeHtml(change.reason || '사유 미입력')}</span>${change.changedAt ? `<time datetime="${escapeHtml(change.changedAt)}">${escapeHtml(new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(new Date(change.changedAt)))}</time>` : ''}</li>`;
+    }).join('')}</ol>`;
+  };
   const card = (event) => {
     const voided = event.status === 'VOID';
     const canChange = event.editable === true;
@@ -147,7 +160,7 @@
         <h3>${escapeHtml(event.title)}</h3>
         ${event.content ? `<p>${escapeHtml(event.content)}</p>` : ''}
         ${details(event)}
-        ${event.changeAction ? `<div class="history-change-note">${event.changeAction === 'HISTORY_VOIDED' ? '무효화됨' : '정정됨'} · ${escapeHtml(event.changeReason || '')}</div>` : ''}
+        ${changeHistory(event)}
       </div>
     </article>`;
   };
@@ -197,7 +210,29 @@
     if (!form) return;
     const type = form.elements.eventType.value;
     form.querySelector('[data-history-part-field]').hidden = type !== 'PART_REPLACEMENT';
-    form.querySelector('[data-history-spec-fields]').hidden = !['PART_REPLACEMENT', 'SPEC_CHANGE'].includes(type);
+    const specificationFields = form.querySelector('[data-history-spec-fields]');
+    specificationFields.hidden = !['PART_REPLACEMENT', 'SPEC_CHANGE'].includes(type);
+    const picker = form.elements.specKey;
+    picker.required = type === 'SPEC_CHANGE';
+    form.querySelector('[data-history-spec-picker-label]').firstChild.textContent = type === 'PART_REPLACEMENT' ? '교체 후 달라진 사양 ' : '변경할 사양 ';
+    form.querySelector('[data-history-spec-help]').textContent = type === 'PART_REPLACEMENT'
+      ? '실제 부품을 교체했고 제품 사양도 달라진 경우에만 선택해 주세요. 교체 부품명만 기록해도 됩니다.'
+      : '부품 교체 사실을 기록하지 않고 현재 사양값만 바로잡거나 변경할 때 사용합니다.';
+    syncSelectedSpec(form);
+  };
+  const syncSelectedSpec = (form, clearPrevious = false) => {
+    const selected = form.elements.specKey.value;
+    const previous = form.dataset.selectedSpec || '';
+    if (clearPrevious && previous && previous !== selected && !state.editingId) {
+      const previousInput = form.elements[previous];
+      if (previousInput) previousInput.value = '';
+    }
+    form.dataset.selectedSpec = selected;
+    form.querySelectorAll('[data-history-spec-field]').forEach((field) => {
+      field.hidden = field.dataset.historySpecField !== selected;
+      const input = field.querySelector('input, select');
+      if (input) input.required = Boolean(selected) && field.dataset.historySpecField === selected;
+    });
   };
   const specsPayload = (form) => {
     if (!['PART_REPLACEMENT', 'SPEC_CHANGE'].includes(form.elements.eventType.value)) return null;
@@ -343,6 +378,7 @@
   document.addEventListener('change', (event) => {
     const form = event.target.closest?.('[data-history-form]');
     if (form && event.target.name === 'eventType') syncConditionalFields(form);
+    if (form && event.target.name === 'specKey') syncSelectedSpec(form, true);
   });
   document.addEventListener('submit', (event) => {
     const form = event.target.closest?.('[data-history-form]');
