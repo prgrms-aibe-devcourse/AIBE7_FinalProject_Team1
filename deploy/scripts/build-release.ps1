@@ -10,7 +10,7 @@ try {
     if ($LASTEXITCODE -ne 0 -or $version -notmatch '^(openjdk|java) 17\.') { throw 'JDK 17 required' }
     $env:JAVA_HOME = $JavaHome
     if (git status --porcelain) { throw 'Clean worktree required' }
-    Get-ChildItem Env: | Where-Object Name -Match '^(DB_|REDIS_|AI_|GEMINI_|SUPABASE_|JWT_|STORAGE_|PRODUCT_SERIAL_|TEST_|SALE_DRAFT_|OWN_INT_|DEPLOY_DDL_|P[2345]_|SPRING_|DOTENV_|JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|GRADLE_OPTS)' | ForEach-Object { Remove-Item -LiteralPath ('Env:' + $_.Name) }
+    Get-ChildItem Env: | Where-Object Name -Match '^(DB_|REDIS_|AI_|GEMINI_|SUPABASE_|JWT_|STORAGE_|AWS_|PRODUCT_SERIAL_|TEST_|SALE_DRAFT_|OWN_INT_|DEPLOY_DDL_|P[2345]_|SPRING_|DOTENV_|JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|GRADLE_OPTS)' | ForEach-Object { Remove-Item -LiteralPath ('Env:' + $_.Name) }
     $env:DOTENV_PATH = 'build/disabled-env/.env'
     $env:JWT_SECRET = 'release-build-synthetic-test-secret-at-least-32-bytes'
     $env:AI_SUMMARY_ENABLED = 'false'

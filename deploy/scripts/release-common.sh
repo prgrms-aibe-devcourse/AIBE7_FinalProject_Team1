@@ -5,6 +5,7 @@ die() { printf 'ERROR: %s\n' "$1" >&2; exit 1; }
 initialize() {
     [[ $EUID == 0 ]] || die 'root required'
     [[ $root == /* && $root != / && ! -L $root ]] || die 'invalid release root'
+    [[ $(realpath -m -- "$root") == "$root" ]] || die 'release root must be canonical'
     mkdir -p -- "$root/releases"
     root=$(realpath -e -- "$root")
     [[ ! -L $root/releases && $(stat -c %u -- "$root") == 0 && $(stat -c %u -- "$root/releases") == 0 ]] || die 'unsafe release directory'

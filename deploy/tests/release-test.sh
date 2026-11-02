@@ -93,6 +93,8 @@ fixture() {
     printf 'commit=%s00000000000000000000000000000000\nsha256=%s\n' "$sha" "$digest" > "$FIXTURE/$sha.manifest.txt"
 }
 root="$temporary/application"
+reject bash "$scripts/stage-release.sh" s3://release-fixture/artifacts aaaaaaaa "$temporary/unexpected/.."
+[[ ! -e $temporary/unexpected ]]; pass 'non-canonical root rejected before filesystem changes'
 fixture aaaaaaaa; fixture bbbbbbbb
 bash "$scripts/stage-release.sh" s3://release-fixture/artifacts aaaaaaaa "$root"
 [[ ! -e $root/current.jar ]]; pass 'staging verifies checksum and never activates'
