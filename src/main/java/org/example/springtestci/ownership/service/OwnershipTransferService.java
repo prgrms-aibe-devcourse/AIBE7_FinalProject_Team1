@@ -213,7 +213,9 @@ public class OwnershipTransferService {
             .findByTokenHashForUpdate(tokenHash)
             .orElseThrow(() -> new CommonException(ErrorCode.OWNERSHIP_NOT_FOUND));
 
-    requireDirect(transfer);
+    if (transfer.getTransferType() != TransferType.DIRECT) {
+      throw new CommonException(ErrorCode.OWNERSHIP_TRANSFER_BLOCKED);
+    }
 
     Instant now = clock.instant();
     if (transfer.getStatus() != TransferStatus.PENDING || transfer.isExpired(now)) {
@@ -274,10 +276,12 @@ public class OwnershipTransferService {
             .findByIdForUpdate(transferId)
             .orElseThrow(() -> new CommonException(ErrorCode.OWNERSHIP_NOT_FOUND));
 
-    requireDirect(transfer);
-
     if (!Objects.equals(transfer.getFromUserId(), actorId)) {
       throw new CommonException(ErrorCode.ACCESS_DENIED);
+    }
+
+    if (transfer.getTransferType() != TransferType.DIRECT) {
+      throw new CommonException(ErrorCode.OWNERSHIP_TRANSFER_BLOCKED);
     }
 
     if (transfer.getStatus() != TransferStatus.PENDING) {

@@ -371,10 +371,10 @@ class DirectTransferPostgresTest {
     error(() -> direct.verifyTransfer(token), ErrorCode.OWNERSHIP_NOT_FOUND);
     error(
         () -> direct.acceptTransfer(2, new AcceptTransferRequest(token)),
-        ErrorCode.OWNERSHIP_NOT_FOUND);
+        ErrorCode.OWNERSHIP_TRANSFER_BLOCKED);
     error(
         () -> direct.cancelTransfer(1, number("SELECT id FROM ownership_transfers")),
-        ErrorCode.OWNERSHIP_NOT_FOUND);
+        ErrorCode.OWNERSHIP_TRANSFER_BLOCKED);
     error(() -> issue(null), ErrorCode.OWNERSHIP_ALREADY_PENDING);
     assertThat(snapshot()).isEqualTo(before);
   }
@@ -640,7 +640,7 @@ class DirectTransferPostgresTest {
                         failure ->
                             assertThat(failure.errorCode())
                                 .isIn(ErrorCode.INVALID_INPUT, ErrorCode.OWNERSHIP_EXPIRED));
-            case "create" -> error(() -> issue(null), ErrorCode.ACCESS_DENIED);
+            case "create" -> error(() -> issue(null), ErrorCode.RESOURCE_NOT_FOUND);
             case "draft" ->
                 error(
                     () ->
@@ -736,7 +736,7 @@ class DirectTransferPostgresTest {
   }
 
   @Test
-  void p5A08ActualListingPublicationFirstBlocksDirectAcceptanceWithoutCancellingSale()
+  void p5A08PendingDirectBlocksActualPublicationAndAcceptanceCompletesWithoutCreatingSale()
       throws Exception {
     var draft =
         context
@@ -757,20 +757,23 @@ class DirectTransferPostgresTest {
             draft.draftId(), draft.version());
     runBlockedRace(
         () ->
-            context
-                .getBean(org.example.springtestci.listing.service.ListingPublishService.class)
-                .publish(101, 1, request),
-        () ->
             error(
-                () -> direct.acceptTransfer(2, new AcceptTransferRequest(transfer.rawToken())),
-                ErrorCode.OWNERSHIP_TRANSFER_BLOCKED));
+                () ->
+                    context
+                        .getBean(
+                            org.example.springtestci.listing.service.ListingPublishService.class)
+                        .publish(101, 1, request),
+                ErrorCode.LISTING_PUBLISH_BLOCKED),
+        () -> direct.acceptTransfer(2, new AcceptTransferRequest(transfer.rawToken())));
+    assertCompleted(transfer.transferId(), 2);
     assertThat(number("SELECT COUNT(*) FROM listings WHERE product_id=101 AND status='ACTIVE'"))
-        .isEqualTo(1);
+        .isZero();
     assertThat(text("SELECT status FROM ownership_transfers WHERE id=" + transfer.transferId()))
-        .isEqualTo("PENDING");
-    assertThat(number("SELECT owner_id FROM products WHERE id=101")).isEqualTo(1);
-    assertThat(number("SELECT COUNT(*) FROM product_events WHERE event_type='TRANSFER'")).isZero();
-    assertThat(committedEvents.get()).isZero();
+        .isEqualTo("COMPLETED");
+    assertThat(number("SELECT owner_id FROM products WHERE id=101")).isEqualTo(2);
+    assertThat(number("SELECT COUNT(*) FROM product_events WHERE event_type='TRANSFER'"))
+        .isEqualTo(1);
+    assertThat(committedEvents.get()).isEqualTo(1);
   }
 
   private void runBlockedRace(Runnable first, Runnable second) throws Exception {
