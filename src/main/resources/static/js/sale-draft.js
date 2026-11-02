@@ -34,17 +34,21 @@
   let publishing = false;
   let pendingPublish = null;
   let publicationValidation = false;
-  let dragImage = null;
+  let step = 'product';
+  let uploading = false;
+  let reviewedDraft = null;
   let aiLoading = false;
   let aiResult = null;
   let aiRequest = null;
   let aiSequence = 0;
   let aiRetryAt = 0;
   let aiRetryTimer = null;
+  let aiAttempted = false;
   const imageUrls = new Map();
   const find = selector => root.querySelector(selector);
   const dirty = () => revision !== savedRevision;
-  const busy = () => saving || loading || deleting !== null || confirming || previewing || previewOpen || publishing;
+  const busy = () => saving || loading || uploading || deleting !== null || confirming || previewing || previewOpen || publishing;
+  const maxPhotos = 10;
   const productPath = id => '/api/v1/products/' + id + '/listing-draft';
   const formatTime = value => new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(value));
   const validPrice = /^(?:[1-9]\d{0,11}|[1-9]\d{0,2}(?:,\d{3}){1,3})$/;
@@ -54,7 +58,7 @@
     const csrf = document.querySelector('meta[name="_csrf"]')?.content;
     const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content || 'X-CSRF-Token';
     if (csrf && options.method && options.method !== 'GET') headers.set(csrfHeader, csrf);
-    if (options.body) headers.set('Content-Type', 'application/json');
+    if (options.body && !(typeof FormData !== 'undefined' && options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
     const request = window.PastportApi?.fetch || window.fetch.bind(window);
     const response = await request(url, { ...options, headers, credentials: 'same-origin', cache: 'no-store' });
     if (!response.ok && !(allowMissing && response.status === 404)) {
@@ -77,8 +81,8 @@
       notice.hidden = !message || notice !== target;
       notice.querySelector('span').textContent = notice === target ? message : '';
     }
-    // 하단 버튼에서 실패하면 같은 위치에서 이유를 읽도록 초점을 옮기고 필요한 만큼만 스크롤한다.
-    if (message && atActions) {
+    // 제품 선택·하단 버튼 어디에서 실패해도 오류로 초점을 옮겨 현재 스크롤 위치에 가리지 않게 한다.
+    if (message) {
       target.focus({ preventScroll: true });
       target.scrollIntoView({ block: 'nearest' });
     }
@@ -92,9 +96,9 @@
       ['price', '[data-sale-price]', !price ? '판매 가격을 입력해 주세요.' : !validPrice.test(price) ? '가격은 1원 이상, 최대 12자리의 정수로 입력해 주세요.' : ''],
       ['grade', '[data-sale-grade-group]', grade === null ? '제품 상태 등급을 선택해 주세요.' : ''],
       ['description', '[data-sale-description]', !find('[data-sale-description]').value.trim() ? '상세 설명을 입력해 주세요.' : ''],
-      ['photos', '[data-sale-photos-field]', !selected.length ? product?.images.length
+      ['photos', '[data-sale-photos-field]', selected.length > maxPhotos ? '판매글 사진은 최대 10장까지 선택해 주세요.' : !selected.length ? product?.images.length
         ? '대표 사진을 선택해 주세요. 첫 번째로 선택한 사진이 대표 사진이 돼요.'
-        : '대표 사진이 필요해요. 내 제품에서 제품 사진을 등록한 뒤 다시 불러와 선택해 주세요.' : '']
+        : '대표 사진이 필요해요. 카메라 버튼을 눌러 제품 사진을 추가해 주세요.' : '']
     ];
     let first = null;
     for (const [name, selector, issue] of checks) {
@@ -123,13 +127,25 @@
 
   function status() {
     const blocked = busy() || pendingPublish !== null;
+    find('[data-sale-select-panel]').hidden = step !== 'product';
+    find('[data-sale-compose-panel]').hidden = step !== 'compose';
+    find('[data-sale-product-step]').className = step === 'product' ? 'now' : 'done';
+    find('[data-sale-content-step]').className = previewOpen ? 'done' : step === 'compose' ? 'now' : '';
+    find('[data-sale-preview-step]').className = previewOpen ? 'now' : '';
+    find('[data-sale-step-caption]').textContent = step === 'product' ? '판매할 내 제품을 먼저 선택해 주세요.' : '제품 사진과 판매 내용을 적고 미리보기에서 확인하세요.';
+    find('[data-sale-next]').disabled = !product || blocked;
+    find('[data-sale-back]').disabled = blocked;
+    find('[data-sale-photo-open]').disabled = !product || blocked;
+    find('[data-sale-photo-upload]').disabled = !product || blocked || product.images.length >= maxPhotos;
+    find('[data-sale-photo-done]').disabled = uploading;
+    find('[data-sale-photo-close]').disabled = uploading;
     const saved = find('[data-sale-saved]');
     if (deleting !== null) saved.textContent = '임시저장본을 삭제하는 중이에요…';
     else if (loading) saved.textContent = '제품과 저장본을 불러오는 중이에요…';
     else if (saving) saved.textContent = '비공개로 저장하는 중이에요…';
     else if (savedAt) saved.textContent = '마지막 임시저장 ' + formatTime(savedAt) + (dirty() ? ' · 저장하지 않은 변경이 있어요.' : ' · 비공개 저장 완료');
     else saved.textContent = dirty() ? '작성한 내용을 임시저장해 주세요.' : '아직 임시저장하지 않았어요.';
-    find('[data-sale-save]').disabled = !product || blocked;
+    find('[data-sale-save]').disabled = !product || blocked || aiLoading;
     find('[data-sale-save]').textContent = saving ? '저장 중…' : '임시저장';
     find('[data-sale-product]').disabled = blocked;
     find('[data-sale-reload]').hidden = !product;
@@ -140,40 +156,59 @@
     find('[data-sale-drafts-more]').disabled = listing || blocked;
     find('[data-sale-publication-refresh]').disabled = !product || publicationLoading || busy();
     find('[data-sale-publication-more]').disabled = publicationLoading || busy();
-    find('[data-sale-preview]').disabled = !product || blocked;
-    find('[data-sale-publish]').disabled = !product || busy();
+    find('[data-sale-publish]').disabled = !product || busy() || aiLoading;
     find('[data-sale-publish]').textContent = publishing ? '게시 중…' : pendingPublish ? '게시 결과 다시 확인' : '게시하기';
-    find('[data-sale-preview]').textContent = previewing ? '미리보기 준비 중…' : '미리보기';
+    if (previewing) find('[data-sale-publish]').textContent = '미리보기 준비 중…';
+    find('[data-sale-preview-publish]').disabled = !previewOpen || !reviewedDraft || previewing || publishing || saving;
+    find('[data-sale-preview-publish]').textContent = publishing ? '게시 중…' : pendingPublish ? '게시 결과 다시 확인' : '게시하기';
+    find('[data-sale-preview-close]').disabled = publishing || pendingPublish !== null;
     find('[data-sale-ai-generate]').disabled = !product || blocked || aiLoading || Date.now() < aiRetryAt;
-    find('[data-sale-ai-generate]').textContent = aiLoading ? 'AI 제안 생성 중…' : aiResult ? '다시 생성' : 'AI 제안 생성';
-    find('[data-sale-ai-apply]').disabled = !aiResult || !product || blocked || aiLoading;
+    find('[data-sale-ai-generate]').textContent = aiLoading ? 'AI 초안 작성 중…' : aiResult ? 'AI로 다시 작성' : 'AI로 초안 작성';
+    find('[data-sale-write-manual]').disabled = !product || blocked;
     find('[data-sale-ai-manual]').disabled = !product || blocked;
-    find('[data-sale-ai-result]').setAttribute('aria-busy', String(aiLoading));
+    find('[data-sale-ai-retry]').disabled = !product || blocked || aiLoading || Date.now() < aiRetryAt;
+    find('[data-sale-ai-retry]').textContent = aiLoading ? '생성 중…' : Date.now() < aiRetryAt ? '잠시 후 다시 생성' : '다시 생성';
+    find('[data-sale-ai-panel]').setAttribute('aria-busy', String(aiLoading));
+    find('[data-sale-title]').placeholder = aiLoading ? 'AI가 제목을 작성하고 있어요…' : '판매글 제목을 입력해 주세요';
+    find('[data-sale-description]').placeholder = aiLoading ? 'AI가 제품 정보와 이력으로 설명을 작성하고 있어요…' : '제품의 상태와 판매 내용을 적어 주세요.';
     root.querySelectorAll('[data-sale-open-draft], [data-sale-delete-draft]').forEach(button => { button.disabled = blocked; });
-    root.querySelectorAll('[data-sale-title], [data-sale-price], [data-sale-description], [data-sale-grade]').forEach(input => { input.disabled = !product || loading || deleting !== null || previewing || previewOpen || publishing || pendingPublish !== null; });
-    root.querySelectorAll('[data-sale-image]').forEach(button => { button.disabled = loading || deleting !== null || previewing || previewOpen || publishing || pendingPublish !== null; });
+    root.querySelectorAll('[data-sale-title], [data-sale-price], [data-sale-description], [data-sale-grade]').forEach(input => { input.disabled = !product || loading || uploading || deleting !== null || previewing || previewOpen || publishing || pendingPublish !== null; });
+    root.querySelectorAll('[data-sale-image], [data-sale-remove-image]').forEach(button => { button.disabled = blocked; });
     root.querySelectorAll('[data-sale-move]').forEach(button => {
       const index = selected.indexOf(Number(button.dataset.imageId));
-      button.disabled = loading || deleting !== null || previewing || previewOpen || publishing || pendingPublish !== null || index < 0 || (button.dataset.saleMove === 'right' ? index === selected.length - 1 : index === 0);
+      button.disabled = blocked || index < 0 || (button.dataset.saleMove === 'right' ? index === selected.length - 1 : index === 0);
     });
   }
 
   function change() {
+    reviewedDraft = null;
     revision++; counters(); status();
     if (publicationValidation) validatePublication();
   }
 
-  function clearAi(message = '제품을 선택하면 AI 제안을 요청할 수 있어요.') {
-    aiSequence++; aiRequest?.abort(); aiRequest = null; aiLoading = false; aiResult = null;
-    find('[data-sale-ai-result]').hidden = true;
-    find('[data-sale-ai-title]').textContent = ''; find('[data-sale-ai-description]').textContent = '';
+  function aiNotice(message, alert = false) {
     find('[data-sale-ai-status]').textContent = message;
+    find('[data-sale-ai-status]').setAttribute('role', alert ? 'alert' : 'status');
   }
 
-  // AI 제안을 별도로 받아 보여준다. 사용자가 적용하기 전에는 작성 폼과 저장본을 바꾸지 않는다.
-  async function generateAi() {
+  function clearAi(message = '다음 단계에서 AI가 제목과 설명을 먼저 작성해 드려요.') {
+    aiSequence++; aiRequest?.abort(); aiRequest = null; aiLoading = false; aiResult = null;
+    find('[data-sale-ai-sample]').hidden = true;
+    aiNotice(message);
+  }
+
+  // 새 글의 다음 단계에서 초안을 자동 적용한다. 직접 입력·제품 변경 이후의 응답은 적용하지 않는다.
+  async function generateAi({ automatic = false } = {}) {
     if (!product || busy() || pendingPublish || aiLoading || Date.now() < aiRetryAt) return;
-    clearAi('등록된 제품 정보와 전체 핵심 이력으로 AI 제안을 만들고 있어요. 직접 작성은 계속할 수 있어요.');
+    const title = find('[data-sale-title]'); const description = find('[data-sale-description]');
+    if (!automatic && (title.value.trim() || description.value.trim())
+        && (title.value !== aiResult?.title || description.value !== aiResult?.description)
+        && !await confirmAction('AI로 다시 작성하면 현재 제목과 설명이 바뀌어요. 계속할까요?', 'AI로 작성', '작성 내용 확인')) return;
+    if (!product || busy() || pendingPublish || aiLoading) return;
+    const originalTitle = title.value; const originalDescription = description.value;
+    aiAttempted = true;
+    clearAi('제품 정보와 등록된 이력으로 제목·설명을 작성하고 있어요. 기다리지 않고 직접 작성해도 돼요.');
+    if (find('[data-sale-ai-dialog]').open) find('[data-sale-ai-dialog]').close();
     const requestedProduct = productId;
     const sequence = aiSequence;
     const controller = new AbortController(); aiRequest = controller; aiLoading = true; status();
@@ -186,12 +221,15 @@
           || !data.title.trim() || data.title.length > 60 || !data.description.trim() || data.description.length > 2000) {
         throw new Error('AI 결과를 확인하지 못했어요. 재시도하거나 직접 작성해 주세요.');
       }
+      if (title.value !== originalTitle || description.value !== originalDescription) {
+        aiNotice('직접 작성한 내용을 유지했어요. 필요한 부분을 이어서 작성해 주세요.');
+        return;
+      }
       aiResult = data;
-      find('[data-sale-ai-title]').textContent = data.title;
-      find('[data-sale-ai-description]').textContent = data.description;
+      title.value = data.title; description.value = data.description;
+      change();
       find('[data-sale-ai-sample]').hidden = !data.sample;
-      find('[data-sale-ai-result]').hidden = false;
-      find('[data-sale-ai-status]').textContent = '제안이 준비됐어요. 내용을 확인하고 적용해 주세요. 작성 중인 내용은 그대로 유지했어요.';
+      aiNotice('AI 초안을 채웠어요. 내용을 확인하고 자유롭게 수정해 주세요. 아직 저장되거나 게시되지 않았어요.');
     } catch (failure) {
       if (sequence !== aiSequence || productId !== requestedProduct) return;
       if (failure.status === 429) {
@@ -199,25 +237,28 @@
         clearTimeout(aiRetryTimer);
         aiRetryTimer = setTimeout(() => status(), failure.retryAfter * 1000 + 50);
       }
-      find('[data-sale-ai-status]').textContent = failure.name === 'AbortError'
+      const message = failure.name === 'AbortError'
         ? 'AI 응답을 기다리는 시간이 초과됐어요. 재시도하거나 직접 작성해 주세요.'
         : failure.status || failure.message?.startsWith('AI 결과') ? failure.message : 'AI에 연결하지 못했어요. 재시도하거나 직접 작성해 주세요.';
+      aiNotice(message, true);
+      find('[data-sale-ai-error]').textContent = message;
+      if (step === 'compose' && !find('[data-sale-ai-dialog]').open) find('[data-sale-ai-dialog]').showModal();
     } finally {
       clearTimeout(deadline);
       if (sequence === aiSequence) { aiLoading = false; aiRequest = null; status(); }
     }
   }
 
-  async function applyAi() {
-    if (!aiResult || busy() || pendingPublish || aiLoading || aiResult.productId !== productId) return;
-    const candidate = aiResult;
+  function writeManually() {
+    if (!product || busy() || pendingPublish) return;
     const title = find('[data-sale-title]'); const description = find('[data-sale-description]');
-    if ((title.value.trim() || description.value.trim())
-        && !await confirmAction('현재 화면의 제목과 설명을 AI 제안으로 바꿀까요? 저장된 임시저장본은 바뀌지 않아요.', '제안 적용', 'AI 제안 적용')) return;
-    if (candidate !== aiResult || candidate.productId !== productId) return;
-    title.value = candidate.title; description.value = candidate.description;
-    change();
-    find('[data-sale-ai-status]').textContent = '화면의 제목·설명에 적용했어요. 확인·수정한 뒤 임시저장해 주세요. 아직 저장되거나 게시되지 않았어요.';
+    // 손대지 않은 자동 초안만 비운다. 저장본이나 사용자가 수정한 문장은 그대로 둔다.
+    const untouched = aiResult && title.value === aiResult.title && description.value === aiResult.description;
+    if (untouched) { title.value = ''; description.value = ''; }
+    aiAttempted = true;
+    clearAi(title.value || description.value ? '작성 중인 내용은 유지했어요. 제목과 설명을 직접 수정해 주세요.' : '제목과 설명을 직접 작성해 주세요.');
+    if (find('[data-sale-ai-dialog]').open) find('[data-sale-ai-dialog]').close();
+    if (untouched) change(); else status();
     title.focus();
   }
 
@@ -237,6 +278,10 @@
   }
 
   function reset() {
+    step = 'product'; reviewedDraft = null;
+    aiAttempted = false;
+    for (const selector of ['[data-sale-ai-dialog]', '[data-sale-preview-dialog]', '[data-sale-photo-dialog]']) if (find(selector).open) find(selector).close();
+    previewOpen = false;
     clearAi();
     pendingPublish = null;
     previewLoad?.abort(); previewData = null;
@@ -261,6 +306,9 @@
     find('[data-sale-photos-empty]').hidden = false;
     find('[data-sale-photos-empty]').textContent = '제품을 선택하면 등록된 사진이 보여요.';
     find('[data-sale-photo-count]').textContent = '선택한 사진 0장';
+    find('[data-sale-camera-count]').textContent = '0/10';
+    find('[data-sale-photo-choices]').replaceChildren();
+    find('[data-sale-photo-error]').hidden = true;
     root.querySelectorAll('[data-sale-grade]').forEach(button => { button.classList.remove('on'); button.setAttribute('aria-checked', 'false'); });
     find('[data-sale-product-step]').className = 'now';
     find('[data-sale-content-step]').className = '';
@@ -295,9 +343,10 @@
   }
 
   function renderProduct() {
-    find('[data-sale-ai-status]').textContent = 'AI 제안 생성을 누르거나 제목과 설명을 직접 작성해 주세요.';
+    aiNotice(draftId !== null ? '저장한 제목과 설명을 불러왔어요. 이어서 수정해 주세요.' : '다음 단계에서 AI가 제목과 설명을 먼저 작성해 드려요.');
     find('[data-sale-product-card]').hidden = false;
     find('[data-sale-product-name]').textContent = product.title;
+    find('[data-sale-compose-product]').textContent = product.title;
     find('[data-sale-product-meta]').textContent = [product.manufacturer, product.modelName, product.purchaseDate ? product.purchaseDate + ' 구매' : '구매일 미등록'].join(' · ');
     const specs = product.specifications || {};
     const entries = [['CPU', specs.cpu], ['GPU', specs.gpu], ['메모리', specs.ramGb == null ? null : specs.ramGb + 'GB'], ['저장장치', specs.storageGb == null ? null : specs.storageGb + 'GB ' + (specs.storageType || '')], ['화면', specs.display], ['운영체제', specs.os], ['배터리 상태', specs.batteryHealthPercent == null ? null : specs.batteryHealthPercent + '%'], ['보증 만료일', product.warrantyExpiresAt]];
@@ -309,44 +358,135 @@
       item.append(key, text); list.append(item);
     });
     list.hidden = false;
-    find('[data-sale-product-step]').className = 'done';
-    find('[data-sale-content-step]').className = 'now';
   }
 
-  function renderPhotos() {
-    const grid = find('[data-sale-photos]'); grid.replaceChildren();
-    const ordered = [...selected.map(id => product.images.find(image => image.imageId === id)).filter(Boolean), ...product.images.filter(image => !selected.includes(image.imageId))];
-    ordered.forEach(image => {
-      const position = selected.indexOf(image.imageId);
-      const card = document.createElement('div'); card.className = 'sl-photo-choice';
-      const choice = document.createElement('button'); choice.type = 'button';
-      choice.className = 'sl-photo' + (position >= 0 ? ' selected' : '') + (position === 0 ? ' main' : '');
-      choice.dataset.saleImage = String(image.imageId);
-      choice.setAttribute('aria-pressed', String(position >= 0));
-      choice.setAttribute('aria-label', '제품 사진 ' + image.imageId + (position >= 0 ? ' 선택 해제' : ' 선택'));
-      choice.draggable = position >= 0;
-      const url = imageUrls.get(image.imageId);
-      if (url) { const img = document.createElement('img'); img.src = url; img.alt = ''; choice.append(img); }
-      else { const placeholder = document.createElement('div'); placeholder.className = 'laptop'; placeholder.setAttribute('aria-hidden', 'true'); choice.append(placeholder); }
-      if (position >= 0) { const order = document.createElement('i'); order.textContent = String(position + 1); choice.append(order); }
-      if (position === 0) { const main = document.createElement('em'); main.textContent = '대표'; choice.append(main); }
-      card.append(choice);
-      if (position >= 0) {
-        const controls = document.createElement('div'); controls.className = 'sl-photo-controls';
-        [['대표로', 'main', position === 0], ['←', 'left', position === 0], ['→', 'right', position === selected.length - 1]].forEach(([label, action, disabled]) => {
-          const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
-          button.dataset.saleMove = action; button.dataset.imageId = String(image.imageId); button.disabled = disabled;
-          button.setAttribute('aria-label', '사진 ' + image.imageId + ' ' + ({ main: '대표로 설정', left: '앞으로 이동', right: '뒤로 이동' }[action]));
-          controls.append(button);
-        });
-        card.append(controls);
-      }
-      grid.append(card);
+  // 단계 이동은 작성 값을 유지한다. 다른 제품을 고를 때만 기존 저장·변경 확인 흐름을 사용한다.
+  function setStep(next, focus = false) {
+    if (busy() || pendingPublish || (next === 'compose' && !product)) return;
+    step = next; status();
+    if (focus) {
+      const panel = find(next === 'compose' ? '[data-sale-compose-panel]' : '[data-sale-select-panel]');
+      panel.tabIndex = -1;
+      panel.style.scrollMarginTop = ((document.querySelector('.site-header')?.getBoundingClientRect().height || 0) + 24) + 'px';
+      panel.focus({preventScroll:true}); panel.scrollIntoView({block:'start'});
+    }
+  }
+
+  function beginWriting(focus = false) {
+    setStep('compose', focus);
+    if (step !== 'compose' || busy() || pendingPublish || aiAttempted || draftId !== null) return;
+    if (find('[data-sale-title]').value.trim() || find('[data-sale-description]').value.trim()) return;
+    if (Date.now() < aiRetryAt) { aiNotice('AI 요청이 잠시 제한됐어요. 직접 작성하거나 잠시 후 AI로 초안 작성을 눌러 주세요.'); return; }
+    return generateAi({ automatic: true });
+  }
+
+  function photoControls(id) {
+    const controls = document.createElement('div'); controls.className = 'sl-photo-controls';
+    [['←', 'left'], ['→', 'right']].forEach(([label, action]) => {
+      const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
+      button.dataset.saleMove = action; button.dataset.imageId = String(id);
+      button.setAttribute('aria-label', '사진 ' + id + ' ' + ({ main:'대표로 설정', left:'앞으로 이동', right:'뒤로 이동' }[action]));
+      controls.append(button);
     });
+    return controls;
+  }
+
+  // 작성 화면에는 선택한 사진만, 사진 선택 팝업에는 제품의 모든 사진을 표시한다.
+  function renderPhotos() {
+    const strip = find('[data-sale-photos]'), choices = find('[data-sale-photo-choices]');
+    strip.replaceChildren(); choices.replaceChildren();
+    if (!product) return;
+    for (const image of product.images) {
+      const position = selected.indexOf(image.imageId);
+      const button = document.createElement('button'); button.type = 'button';
+      button.className = 'sl-photo' + (position >= 0 ? ' selected' : ''); button.dataset.saleImage = String(image.imageId);
+      button.setAttribute('aria-label', '제품 사진 ' + image.imageId + (position >= 0 ? ' 선택 해제' : ' 선택'));
+      button.setAttribute('aria-pressed', String(position >= 0));
+      const url = imageUrls.get(image.imageId);
+      if (url) { const img = document.createElement('img'); img.src = url; img.alt = ''; button.append(img); }
+      else button.textContent = '사진 불러오는 중';
+      if (position >= 0) { const order = document.createElement('i'); order.textContent = String(position + 1); button.append(order); }
+      if (position === 0) { const badge = document.createElement('em'); badge.textContent = '대표'; button.append(badge); }
+      choices.append(button);
+    }
+    for (const [position, id] of selected.entries()) {
+      const card = document.createElement('div'); card.className = 'sl-selected-photo';
+      const url = imageUrls.get(id);
+      const picture = document.createElement(url ? 'img' : 'span');
+      if (url) { picture.src = url; picture.alt = '선택한 제품 사진 ' + (position + 1); }
+      else picture.textContent = '사진 불러오는 중';
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'sl-photo-remove';
+      remove.textContent = '×'; remove.dataset.saleRemoveImage = String(id); remove.setAttribute('aria-label', '사진 ' + id + ' 판매글에서 빼기');
+      card.append(picture, remove);
+      if (position === 0) { const badge = document.createElement('em'); badge.textContent = '대표'; card.append(badge); }
+      if (selected.length > 1) card.append(photoControls(id));
+      strip.append(card);
+    }
+    const hero = find('[data-sale-product-picture]'); hero.replaceChildren();
+    const primary = product.images.find(image => imageUrls.has(image.imageId));
+    if (primary) { const img = document.createElement('img'); img.src = imageUrls.get(primary.imageId); img.alt = ''; hero.append(img); }
+    else hero.textContent = '제품 사진';
     find('[data-sale-photos-empty]').hidden = product.images.length > 0;
-    find('[data-sale-photos-empty]').textContent = '등록된 제품 사진이 없어요. 사진 없이도 임시저장할 수 있어요.';
-    find('[data-sale-photo-count]').textContent = '선택한 사진 ' + selected.length + '장' + (selected.length ? ' · 첫 번째 사진이 대표 사진이에요.' : '');
+    find('[data-sale-photos-empty]').textContent = '등록된 사진이 없어요. 새 사진을 추가해 주세요.';
+    find('[data-sale-camera-count]').textContent = selected.length + '/' + maxPhotos;
+    find('[data-sale-photo-count]').textContent = '선택한 사진 ' + selected.length + '장 · 최대 10장 · 첫 번째 사진이 대표 사진이에요.';
     status();
+  }
+
+  async function loadPhotoUrls(signal) {
+    const current = product;
+    await Promise.all(current.images.filter(image => !imageUrls.has(image.imageId)).map(async image => {
+      try {
+        const response = await api(image.url, {signal}); const blob = await response.blob();
+        if (signal?.aborted || product !== current) return;
+        imageUrls.set(image.imageId, URL.createObjectURL(blob)); renderPhotos();
+      } catch (failure) {
+        if (failure.name !== 'AbortError' && product === current) photoError('일부 사진을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
+      }
+    }));
+  }
+
+  function photoError(message = '') {
+    const node = find('[data-sale-photo-error]'); node.textContent = message; node.hidden = !message;
+  }
+
+  // 새 사진은 기존 제품 이미지 API로 저장한다. 일부 업로드가 실패해도 성공한 사진과 작성 값을 보존한다.
+  async function uploadPhotos(event) {
+    const input = event.target, files = [...(input.files || [])]; input.value = '';
+    if (!product || busy() || pendingPublish || !files.length) return;
+    photoError();
+    if (files.length + product.images.length > maxPhotos) { photoError('제품 사진은 최대 10장이에요. 등록된 사진 중에서 선택해 주세요.'); return; }
+    if (files.some(file => !['image/jpeg','image/png','image/webp'].includes(file.type) || file.size <= 0 || file.size > 5 * 1024 * 1024)) {
+      photoError('JPG, PNG, WEBP 이미지를 장당 5MB 이하로 추가해 주세요.'); return;
+    }
+    const current = product, currentId = productId;
+    uploading = true; clearAi(); status();
+    find('[data-sale-photo-upload-status]').textContent = '제품 사진을 추가하는 중이에요…';
+    let count = 0;
+    try {
+      for (const file of files) {
+        const previous = new Set(current.images.map(image => image.imageId));
+        const body = new FormData(); body.append('file', file);
+        const response = await api('/api/v1/products/' + currentId + '/images', {method:'POST', body});
+        const {data} = await response.json();
+        if (product !== current || productId !== currentId) return;
+        if (!Array.isArray(data?.images)) throw new Error('추가한 사진 정보를 확인하지 못했어요. 사진 선택을 다시 열어 확인해 주세요.');
+        current.images = data.images;
+        for (const image of current.images) if (!previous.has(image.imageId) && !selected.includes(image.imageId) && selected.length < maxPhotos) selected.push(image.imageId);
+        count++; change(); renderPhotos();
+      }
+    } catch (failure) {
+      photoError((count ? count + '장은 추가했어요. 나머지 사진을 추가하지 못했어요. ' : '') + failure.message);
+    } finally {
+      if (product === current) {
+        // 응답을 잃은 업로드도 제품에 남아 있을 수 있으므로 목록을 재확인한다. 확인만 하며 다시 업로드하지 않는다.
+        try { const response = await api(productPath(currentId) + '/composition'); const {data} = await response.json(); if (product === current) current.images = data.images; }
+        catch { photoError('사진 목록을 다시 확인하지 못했어요. 저장된 작성 내용은 유지했어요. 잠시 후 다시 열어 주세요.'); }
+        uploading = false; renderPhotos(); loadPhotoUrls(); refreshPublication();
+        find('[data-sale-photo-upload-status]').textContent = count ? count + '장 추가 완료 · 제품에도 저장됐어요.' : 'JPG, PNG, WEBP · 장당 최대 5MB · 제품당 최대 10장';
+      } else uploading = false;
+      status();
+    }
   }
 
   function renderDrafts() {
@@ -452,7 +592,7 @@
   }
 
   // 선택한 제품의 원본 사양·사진과 기존 초안을 함께 불러와 이어서 작성할 수 있게 한다.
-  async function chooseProduct(next, discard = false) {
+  async function chooseProduct(next, discard = false, startWriting = false) {
     if (busy() || pendingPublish !== null) return;
     if (!discard && dirty() && !await confirmAction('임시저장하지 않은 내용이 있어요. 저장본을 불러오면 작성 중인 내용이 바뀌어요. 계속할까요?', '불러오기')) {
       find('[data-sale-product]').value = productId || ''; return;
@@ -465,11 +605,11 @@
     setLocation(productId);
     if (!productId) { status(); renderDrafts(); return; }
     try {
-      const draftResponse = await api(productPath(productId), { signal: controller.signal }, true);
-      const draft = draftResponse.status === 404 ? null : (await draftResponse.json()).data;
-      // Product ownership is checked again even when no accessible draft exists.
+      // 이미 열린 판매글이 있는 제품은 저장본·AI 초안을 불러오기 전에 안내한다.
       const response = await api(productPath(productId) + '/composition', { signal: controller.signal });
       const { data } = await response.json();
+      const draftResponse = await api(productPath(productId), { signal: controller.signal }, true);
+      const draft = draftResponse.status === 404 ? null : (await draftResponse.json()).data;
       if (controller.signal.aborted) return;
       product = data;
       const select = find('[data-sale-product]');
@@ -477,18 +617,9 @@
       select.value = String(productId);
       applyDraft(draft); renderProduct(); renderPhotos(); renderDrafts();
       refreshPublication();
-      product.images.forEach(async image => {
-        try {
-          const photo = await api(image.url, { signal: controller.signal });
-          const blob = await photo.blob();
-          if (controller.signal.aborted) return;
-          imageUrls.set(image.imageId, URL.createObjectURL(blob)); renderPhotos();
-        } catch (failure) {
-          if (failure.name !== 'AbortError' && !controller.signal.aborted) error('일부 사진을 불러오지 못했어요. 저장본을 다시 불러오거나 잠시 후 다시 시도해 주세요.');
-        }
-      });
+      loadPhotoUrls(controller.signal);
     } catch (failure) { if (failure.name !== 'AbortError') error(failure.message); }
-    finally { if (!controller.signal.aborted) { loading = false; status(); } }
+    finally { if (!controller.signal.aborted) { loading = false; status(); if (startWriting && product) beginWriting(); } }
   }
 
   // 첫 저장은 POST, 기존 초안 수정은 ID·버전을 포함한 PUT으로 보내고 서버의 새 버전을 보관한다.
@@ -512,7 +643,7 @@
 
   async function save(event) {
     event.preventDefault();
-    if (!product || busy()) return;
+    if (!product || busy() || aiLoading || step !== 'compose') return;
     error();
     try { await persistDraft(); } catch (failure) { error(failure.message, true); }
   }
@@ -533,13 +664,20 @@
   }
 
   async function openPreview() {
-    if (!product || busy()) return;
+    if (!product || busy() || aiLoading || step !== 'compose') return;
+    publicationValidation = true;
+    if (!validatePublication(true)) return;
+    reviewedDraft = null;
     previewing = true; status(); error();
     let stored = false;
     try {
+      // 작성 중 판매 상태가 바뀌었으면 저장·미리보기보다 먼저 알려준다. 최종 게시도 별도로 재검사한다.
+      await api(productPath(productId) + '/composition');
       // 저장 응답의 ID·버전으로만 조회한다. 저장 실패 시 미리보기 요청을 보내지 않는다.
       await persistDraft(); stored = true;
       previewData = await fetchPreview(0); renderPreview();
+      reviewedDraft = { productId, draftId, version, revision };
+      find('[data-sale-preview-error]').hidden = true;
       find('[data-sale-preview-dialog]').showModal(); previewOpen = true;
       find('[data-sale-preview-dialog]').scrollTop = 0;
       find('[data-sale-content-step]').className = '';
@@ -559,6 +697,7 @@
       previewData = data; renderPreview();
     } catch (failure) {
       if (failure.name !== 'AbortError') {
+        reviewedDraft = null;
         find('[data-sale-preview-content]').replaceChildren();
         find('[data-sale-preview-more]').hidden = true;
         find('[data-sale-preview-status]').textContent = failure.message + ' 작성 화면으로 돌아가 다시 미리보기해 주세요.';
@@ -584,19 +723,14 @@
     if (removed && current) await chooseProduct(String(productId), true);
   }
 
-  // 입력을 먼저 임시저장한 뒤 그 초안의 ID·버전으로 게시한다. 성공하면 반환된 listingId의 상세로 이동한다.
+  // 미리보기를 실제로 연 초안의 ID·버전만 게시한다. 응답 유실 재확인에서도 같은 요청을 재사용한다.
   async function publishListing() {
-    if (!product || busy()) return;
-    error();
-    if (!pendingPublish) {
-      publicationValidation = true;
-      if (!validatePublication(true)) return;
-      if (!await confirmAction('판매글을 게시할까요? 선택한 제품 사진과 개인정보를 제외한 누적 핵심 이력이 함께 공개돼요. 게시 후 공개 제품 정보·이력으로 AI 상태 요약을 생성해요. 사진·증빙·채팅은 AI에 보내지 않아요.', '게시하기', '판매글 게시 확인')) return;
-    }
+    if (!product || !previewOpen || !reviewedDraft || publishing || previewing || saving) return;
+    if (reviewedDraft.productId !== productId || reviewedDraft.draftId !== draftId || reviewedDraft.version !== version || reviewedDraft.revision !== revision) return;
+    find('[data-sale-preview-error]').hidden = true;
     publishing = true; status();
     try {
       if (!pendingPublish) {
-        await persistDraft();
         pendingPublish = { productId, draftId, version };
       }
       const response = await api('/api/v1/products/' + pendingPublish.productId + '/listings', { method:'POST', body:JSON.stringify({ draftId:pendingPublish.draftId, version:pendingPublish.version }) });
@@ -607,7 +741,10 @@
     } catch (failure) {
       // 응답 유실이면 같은 초안 ID·버전으로 재시도한다. 서버는 같은 게시 결과를 반환한다.
       if (failure.status) pendingPublish = null;
-      error(pendingPublish ? '게시 결과를 확인하지 못했어요. 게시 결과 다시 확인을 눌러 같은 요청의 결과를 확인해 주세요.' : failure.message, true);
+      if ([401,404,409].includes(failure.status)) reviewedDraft = null;
+      const notice = find('[data-sale-preview-error]');
+      notice.textContent = pendingPublish ? '게시 결과를 확인하지 못했어요. 게시 결과 다시 확인을 눌러 같은 요청의 결과를 확인해 주세요.' : failure.message + ([401,404,409].includes(failure.status) ? ' 돌아가서 확인한 뒤 미리보기를 다시 열어 주세요.' : '');
+      notice.hidden = false; notice.focus({preventScroll:true}); notice.scrollIntoView({block:'nearest'});
     } finally { publishing = false; status(); }
   }
 
@@ -626,37 +763,53 @@
   async function init() {
     if (initialized || !document.querySelector('#sell [data-sale-form]')) return;
     initialized = true; root = document.querySelector('#sell');
-    root.addEventListener('input', event => { if (event.target.matches('[data-sale-title], [data-sale-price], [data-sale-description]')) change(); });
+    root.addEventListener('input', event => {
+      if (event.target.matches('[data-sale-title], [data-sale-description]') && aiLoading) {
+        clearAi('직접 작성한 내용을 유지했어요. 필요한 부분을 이어서 작성해 주세요.');
+      }
+      if (event.target.matches('[data-sale-title], [data-sale-price], [data-sale-description]')) change();
+    });
     find('[data-sale-product]').addEventListener('change', event => chooseProduct(event.target.value));
+    find('[data-sale-next]').addEventListener('click', () => beginWriting(true));
+    find('[data-sale-back]').addEventListener('click', () => setStep('product', true));
     find('[data-sale-form]').addEventListener('submit', save);
-    find('[data-sale-reload]').addEventListener('click', () => chooseProduct(String(productId)));
+    find('[data-sale-reload]').addEventListener('click', () => chooseProduct(String(productId), false, true));
     find('[data-sale-delete]').addEventListener('click', () => deleteDraft({ draftId, productId, version }));
     find('[data-sale-drafts-refresh]').addEventListener('click', () => refreshDrafts());
     find('[data-sale-drafts-more]').addEventListener('click', () => refreshDrafts(true));
     find('[data-sale-publication-refresh]').addEventListener('click', () => refreshPublication());
     find('[data-sale-publication-more]').addEventListener('click', () => refreshPublication(true));
-    find('[data-sale-preview]').addEventListener('click', openPreview);
-    find('[data-sale-publish]').addEventListener('click', publishListing);
-    find('[data-sale-ai-generate]').addEventListener('click', generateAi);
-    find('[data-sale-ai-apply]').addEventListener('click', applyAi);
-    find('[data-sale-ai-manual]').addEventListener('click', () => {
-      clearAi('제목과 설명을 직접 작성해 주세요. AI 제안은 언제든 다시 요청할 수 있어요.');
-      status(); find('[data-sale-title]').focus();
-    });
+    find('[data-sale-publish]').addEventListener('click', openPreview);
+    find('[data-sale-preview-publish]').addEventListener('click', publishListing);
+    find('[data-sale-ai-generate]').addEventListener('click', () => generateAi());
+    find('[data-sale-ai-retry]').addEventListener('click', () => generateAi());
+    find('[data-sale-ai-close]').addEventListener('click', () => find('[data-sale-ai-dialog]').close());
+    find('[data-sale-ai-manual]').addEventListener('click', writeManually);
+    find('[data-sale-write-manual]').addEventListener('click', writeManually);
+    find('[data-sale-photo-open]').addEventListener('click', () => { if (product && !busy() && !pendingPublish) { photoError(); renderPhotos(); find('[data-sale-photo-dialog]').showModal(); loadPhotoUrls(); } });
+    for (const selector of ['[data-sale-photo-close]', '[data-sale-photo-done]']) find(selector).addEventListener('click', () => { if (!uploading) find('[data-sale-photo-dialog]').close(); });
+    find('[data-sale-photo-dialog]').addEventListener('cancel', event => { if (uploading) event.preventDefault(); });
+    find('[data-sale-photo-upload]').addEventListener('click', () => { if (product && !busy() && !pendingPublish) find('[data-sale-photo-files]').click(); });
+    find('[data-sale-photo-files]').addEventListener('change', uploadPhotos);
     find('[data-sale-preview-more]').addEventListener('click', morePreview);
-    find('[data-sale-preview-close]').addEventListener('click', () => find('[data-sale-preview-dialog]').close());
+    find('[data-sale-preview-close]').addEventListener('click', () => { if (!publishing && !pendingPublish) find('[data-sale-preview-dialog]').close(); });
+    find('[data-sale-preview-dialog]').addEventListener('cancel', event => { if (publishing || pendingPublish) event.preventDefault(); });
     find('[data-sale-preview-dialog]').addEventListener('close', () => {
-      previewLoad?.abort(); previewData = null; previewOpen = false;
+      previewLoad?.abort(); previewData = null; previewOpen = false; reviewedDraft = null;
       find('[data-sale-preview-content]').replaceChildren();
       find('[data-sale-preview-step]').className = ''; find('[data-sale-content-step]').className = 'now';
       renderPhotos(); status();
     });
     root.addEventListener('click', event => {
       const open = event.target.closest('[data-sale-open-draft]');
-      if (open) { const item = draftItems.find(draft => draft.draftId === Number(open.dataset.saleOpenDraft)); if (item) chooseProduct(String(item.productId)); return; }
+      if (open) { const item = draftItems.find(draft => draft.draftId === Number(open.dataset.saleOpenDraft)); if (item) chooseProduct(String(item.productId), false, true); return; }
       const remove = event.target.closest('[data-sale-delete-draft]');
       if (remove) { const item = draftItems.find(draft => draft.draftId === Number(remove.dataset.saleDeleteDraft)); if (item) deleteDraft(item); return; }
-      if (!product || loading || deleting !== null || previewing || previewOpen || publishing || pendingPublish !== null) return;
+      if (!product || loading || uploading || deleting !== null || previewing || previewOpen || publishing || pendingPublish !== null) return;
+      const removedPhoto = event.target.closest('[data-sale-remove-image]');
+      if (removedPhoto && !removedPhoto.disabled) {
+        selected = selected.filter(id => id !== Number(removedPhoto.dataset.saleRemoveImage)); renderPhotos(); change(); return;
+      }
       const gradeButton = event.target.closest('[data-sale-grade]');
       if (gradeButton && !gradeButton.disabled) {
         const next = Number(gradeButton.dataset.saleGrade); grade = grade === next ? null : next;
@@ -667,8 +820,9 @@
       if (image && !image.disabled) {
         const id = Number(image.dataset.saleImage);
         if (selected.includes(id)) selected = selected.filter(value => value !== id);
-        else if (selected.length < 20) selected.push(id);
-        else { error('사진은 최대 20장까지 선택할 수 있어요.'); return; }
+        else if (selected.length < maxPhotos) selected.push(id);
+        else { photoError('판매글 사진은 최대 10장까지 선택할 수 있어요.'); return; }
+        photoError();
         renderPhotos(); change();
       }
       const move = event.target.closest('[data-sale-move]');
@@ -678,18 +832,10 @@
         selected.splice(index, 1); selected.splice(next, 0, id); renderPhotos(); change();
       }
     });
-    root.addEventListener('dragstart', event => { const image = event.target.closest('[data-sale-image]'); if (image && image.draggable && !busy()) { dragImage = Number(image.dataset.saleImage); event.dataTransfer.setData('text/plain', String(dragImage)); } });
-    root.addEventListener('dragover', event => { const image = event.target.closest('[data-sale-image]'); if (!busy() && image && selected.includes(Number(image.dataset.saleImage))) event.preventDefault(); });
-    root.addEventListener('drop', event => {
-      const image = event.target.closest('[data-sale-image]'); const target = Number(image?.dataset.saleImage);
-      if (busy() || !selected.includes(dragImage) || !selected.includes(target)) return;
-      event.preventDefault(); const index = selected.indexOf(target); selected = selected.filter(id => id !== dragImage); selected.splice(index, 0, dragImage); dragImage = null; renderPhotos(); change();
-    });
-    root.addEventListener('dragend', () => { dragImage = null; });
     window.addEventListener('beforeunload', event => { if (dirty() || pendingPublish) { event.preventDefault(); event.returnValue = ''; } });
     await Promise.all([loadProducts(), refreshDrafts()]);
     const requested = new URL(window.location.href).searchParams.get('draftProduct');
-    if (requested && /^[1-9]\d*$/.test(requested)) await chooseProduct(requested);
+    if (requested && /^[1-9]\d*$/.test(requested)) await chooseProduct(requested, false, true);
     status();
   }
 
