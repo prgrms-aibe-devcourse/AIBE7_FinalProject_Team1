@@ -81,11 +81,10 @@
           </div>
 
           <aside class="product-document-assist">
-            <div class="product-card-heading"><span class="product-step document">▧</span><div><h2>문서로 자동 입력</h2><p>영수증이나 보증서에서 제품 정보를 불러올 수 있어요.</p></div></div>
-            <label class="product-document-drop" for="product-document"><input id="product-document" type="file" accept="image/jpeg,image/png" data-product-document><span aria-hidden="true">＋</span><b>문서 이미지 선택</b><small>JPG, PNG · 원본은 아직 서버로 전송되지 않습니다.</small></label>
-            <div class="product-document-selected" data-product-document-selected hidden><span>▧</span><div><b data-product-document-name></b><small>마스킹과 정보 추출을 연결할 준비가 됐어요.</small></div><button type="button" data-product-document-clear aria-label="선택한 문서 제거">×</button></div>
-            <button class="button product-document-extract" type="button" disabled>개인정보 마스킹 후 자동 입력</button>
-            <div class="product-document-notice"><b>기능 연동 안내</b><p>문서 마스킹은 제품 등록 후 사용할 수 있습니다. 제품 정보 자동 추출 API가 연결되면 이 단계에서 바로 내용을 채울 수 있도록 준비된 영역입니다.</p></div>
+            <div class="product-card-heading"><span class="product-step document">▧</span><div><h2>등록 후 증빙 연결</h2><p>제품 등록이 끝나면 선택한 문서의 개인정보를 가리고 저장할 수 있어요.</p></div></div>
+            <label class="product-document-drop" for="product-document"><input id="product-document" type="file" accept="image/jpeg,image/png" data-product-document><span aria-hidden="true">＋</span><b>등록 후 연결할 문서 선택</b><small>선택 사항 · JPG, PNG · 제품 등록 전에는 서버로 전송되지 않습니다.</small></label>
+            <div class="product-document-selected" data-product-document-selected hidden><span>▧</span><div><b data-product-document-name></b><small>제품 등록 후 이 문서의 마스킹 화면으로 이동합니다.</small></div><button type="button" data-product-document-clear aria-label="선택한 문서 제거">×</button></div>
+            <div class="product-document-notice"><b>자동 입력은 아직 제공하지 않아요</b><p>문서를 선택해도 위 사양 입력란이 자동으로 채워지지 않습니다. 제품 정보는 직접 입력해 주세요. 선택한 문서는 제품 등록 후 개인정보를 가린 사본으로 연결할 수 있습니다.</p></div>
           </aside>
         </div>
         <div class="product-step-actions"><button class="button" type="button" data-register-prev>← 기본 정보</button><button class="button primary" type="button" data-register-next>외관 이미지 등록 →</button></div>

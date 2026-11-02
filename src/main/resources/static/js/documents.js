@@ -1,6 +1,7 @@
 // 문서 보관함: 내 제품 목록과 제품별 업로드 문서를 실제 API로 보여 준다.
 (() => {
   const state = { products: [], selected: null, token: 0 };
+  let openSeq = 0;
   const root = () => document.querySelector('#documents');
   const find = selector => root()?.querySelector(selector);
   const create = (tag, text, className = '') => {
@@ -84,14 +85,36 @@
       list.replaceChildren(...documents.map(row));
     } catch (error) { if (token === state.token) status(error.message, true); }
   }
+  /** 제품 선택기에 누락이 없도록 페이지 메타데이터의 hasNext가 끝날 때까지 합친다. */
+  async function loadAllProducts() {
+    const result = [];
+    let page = 0;
+    let cursor = null;
+    do {
+      const params = new URLSearchParams({ page: String(page), size: '100' });
+      if (cursor) {
+        params.set('cursorCreatedAt', cursor.createdAt);
+        params.set('cursorProductId', String(cursor.productId));
+      }
+      const response = await api('/api/v1/products?' + params);
+      result.push(...(response?.items || []));
+      cursor = response?.page?.nextCursor || null;
+      page += 1;
+    } while (cursor);
+    return result;
+  }
+  /** 문서 화면 진입 때 모든 소유 제품을 읽고 기존 선택을 유지한 채 문서 목록을 연다. */
   async function open() {
     if (!root() || !find('[data-docs-products]')) return;
+    const seq = ++openSeq;
     status('문서를 불러오는 중이에요…');
     try {
-      state.products = await api('/api/v1/products') || [];
+      const loadedProducts = await loadAllProducts();
+      if (seq !== openSeq) return;
+      state.products = loadedProducts;
       if (!state.products.some(item => item.productId === state.selected)) state.selected = state.products[0]?.productId ?? null;
       products(); await loadDocuments();
-    } catch (error) { status(error.message, true); }
+    } catch (error) { if (seq === openSeq) status(error.message, true); }
   }
   document.addEventListener('pastport:page-loaded', event => { if (event.detail.id === 'documents' && root().classList.contains('active')) open(); });
   document.addEventListener('pastport:page-shown', event => { if (event.detail.id === 'documents') open(); });

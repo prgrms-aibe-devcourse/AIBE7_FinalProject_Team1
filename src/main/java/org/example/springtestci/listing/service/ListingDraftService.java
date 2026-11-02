@@ -1,6 +1,7 @@
 package org.example.springtestci.listing.service;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import org.example.springtestci.common.error.CommonException;
@@ -13,11 +14,13 @@ import org.example.springtestci.listing.entity.ListingDraft;
 import org.example.springtestci.listing.repository.ListingDraftQueryRepository;
 import org.example.springtestci.listing.repository.ListingDraftRepository;
 import org.example.springtestci.ownership.event.OwnershipTransferred;
+import org.example.springtestci.product.dto.ProductPageResponse;
 import org.example.springtestci.product.service.ProductService;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,8 +42,25 @@ public class ListingDraftService {
     this.draftQueries = draftQueries;
   }
 
+  /** 판매 초안 선택기에서 누락되는 제품이 없도록 소유 제품의 모든 페이지를 순서대로 읽는다. */
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
   public List<DraftProductResponse> products(long userId) {
-    return products.listMine(userId).stream().map(DraftProductResponse::from).toList();
+    List<DraftProductResponse> result = new ArrayList<>();
+    int page = 0;
+    ProductPageResponse.Cursor cursor = null;
+    do {
+      var response =
+          products.listMine(
+              userId,
+              page,
+              100,
+              cursor == null ? null : cursor.createdAt(),
+              cursor == null ? null : cursor.productId());
+      response.items().stream().map(DraftProductResponse::from).forEach(result::add);
+      cursor = response.page().nextCursor();
+      page += 1;
+    } while (cursor != null);
+    return List.copyOf(result);
   }
 
   public DraftProductResponse composition(long productId, long userId) {
