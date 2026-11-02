@@ -8,10 +8,31 @@
   const currentId = () => new URL(window.location.href).searchParams.get('listingId');
   const find = selector => document.querySelector('#detail ' + selector);
 
+  function hidePresentation() {
+    document.querySelector('#detail')?.classList.remove('has-listing');
+    const bar = find('[data-listing-actionbar]'); if (bar) { bar.hidden = true; bar.classList.remove('is-owner'); }
+    for (const selector of ['[data-listing-action-price]', '[data-listing-action-state]']) {
+      const node = find(selector); if (node) node.textContent = '';
+    }
+  }
+
+  // 실제 조회된 가격·상태만 하단 거래 영역에 표시한다. 버튼은 기존 채팅·판매글 관리 흐름을 사용한다.
+  function present(listing) {
+    document.querySelector('#detail')?.classList.add('has-listing');
+    const bar = find('[data-listing-actionbar]'); if (!bar) return;
+    bar.hidden = false;
+    bar.classList.toggle('is-owner', !!listing.canManage);
+    find('[data-listing-action-price]').textContent = listing.content?.price == null ? '가격 미등록' : new Intl.NumberFormat('ko-KR').format(listing.content.price) + '원';
+    find('[data-listing-action-state]').textContent = ({ ACTIVE:'판매 중', RESERVED:'예약 중' }[listing.status] || '판매 종료');
+    find('[data-listing-retry]').hidden = true;
+  }
+
   /** 조회 실패·계정 변경 시 이전 판매글의 채팅 클릭 연결을 제거한다. */
   function resetChat() {
     chatList?.dispose(); chatList = null;
     const section = find('[data-listing-chats]'); if (section) section.hidden = true;
+    const received = find('[data-listing-chats-open]');
+    if (received) { received.hidden = true; received.onclick = null; }
     const button = find('[data-listing-chat]');
     if (!button) return;
     button.hidden = true;
@@ -27,6 +48,17 @@
       const root = find('[data-listing-chat-rooms]');
       if (!section || !root || !window.PastportChatRoomList) return;
       section.hidden = false;
+      const received = find('[data-listing-chats-open]');
+      if (received) {
+        received.hidden = false;
+        received.onclick = () => {
+          if (data !== listing || currentId() !== String(listing.listingId) || !document.querySelector('#detail.active') || section.hidden) return;
+          // 고정 헤더에 목록 제목이 가리지 않도록 현재 헤더 높이만큼 여유를 둔다.
+          section.tabIndex = -1;
+          section.style.scrollMarginTop = ((document.querySelector('.site-header')?.getBoundingClientRect().height || 0) + 24) + 'px';
+          section.focus({ preventScroll:true }); section.scrollIntoView({ block:'start' });
+        };
+      }
       chatList = window.PastportChatRoomList.mount(root, {
         listingId: listing.listingId,
         onSelect: room => {
@@ -39,7 +71,7 @@
     const button = find('[data-listing-chat]');
     if (!button || listing.canManage || !['ACTIVE', 'RESERVED'].includes(listing.status)) return;
     button.hidden = false;
-    const label = listing.status === 'RESERVED' ? '기존 문의 대화 이어가기' : '판매자에게 채팅 문의하기';
+    const label = listing.status === 'RESERVED' ? '기존 문의 대화 이어가기' : '채팅하기';
     button.textContent = label;
     button.onclick = async () => {
       if (button.disabled || data?.listingId !== listing.listingId || currentId() !== String(listing.listingId)) return;
@@ -62,6 +94,8 @@
   async function load(append = false) {
     if (!find('[data-listing-content]')) return;
     resetChat();
+    hidePresentation();
+    find('[data-listing-retry]').hidden = false;
     window.PastportProductQuestions?.clear('listings');
     window.PastportListingSummary?.reset();
     window.PastportListingManagement?.reset();
@@ -92,10 +126,12 @@
       if (append && data) next.history.items = [...new Map([...data.history.items, ...next.history.items].map(item => [item.eventId,item])).values()];
       data = next; window.PastportListingDetail.render(find('[data-listing-content]'), data);
       bindChat(data);
-      window.PastportProductQuestions?.mount(find('[data-listing-content]'), {scope:'listings', id:data.listingId});
+      const questionSlot = find('[data-listing-questions]') || find('[data-listing-content]');
+      window.PastportProductQuestions?.mount(questionSlot, {scope:'listings', id:data.listingId});
       window.PastportListingManagement?.bind(data);
       window.PastportListingSummary?.bind(data);
-      find('[data-listing-status]').textContent = '게시된 판매글이에요. 판매 중·예약 중인 글은 로그인한 회원이 확인할 수 있어요.';
+      present(data);
+      find('[data-listing-status]').textContent = '';
       find('[data-listing-more]').hidden = !data.history.page.hasNext;
       if (!append && data.canManage && new URL(window.location.href).searchParams.get('listingManage') === '1') window.PastportListingManagement?.open();
     } catch (error) {
@@ -133,6 +169,7 @@
   });
   document.addEventListener('pastport:auth-changed', () => {
     request?.abort(); data = null;
+    hidePresentation();
     resetChat();
     window.PastportListingManagement?.reset(); window.PastportListingSummary?.reset();
     find('[data-listing-content]')?.replaceChildren();

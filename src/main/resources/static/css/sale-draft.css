@@ -34,6 +34,12 @@
 #sell .sl-draft-delete{color:#b42318;border-color:#efc4c0}
 #sell .sl-drafts-more{margin-top:12px;width:100%}
 #sell .sl-bar{flex-wrap:wrap;gap:8px}
+#sell .sl-action-error{flex:1 0 100%;box-sizing:border-box;margin:0;overflow-wrap:anywhere;scroll-margin-block:24px}
+#sell .sl-action-error:focus{outline:2px solid #b42318;outline-offset:3px}
+#sell .sl-field-error{display:block;margin:6px 0 0;color:#b42318;font-size:12px;line-height:1.6;font-weight:500;scroll-margin-block:24px}
+#sell .sc-field.is-invalid input,#sell .sc-field.is-invalid textarea{border-color:#b42318;box-shadow:0 0 0 1px #b42318}
+#sell .is-invalid .sl-grade{outline:2px solid #b42318;outline-offset:3px;border-radius:6px}
+#sell [data-sale-photos-field].is-invalid{border-color:#b42318;box-shadow:0 0 0 1px #b42318}
 #sell .sl-bar .saved{flex:1 0 100%}
 #sell .sl-confirm{border:1px solid var(--line);border-radius:12px;padding:24px;width:min(440px,calc(100% - 32px));box-sizing:border-box;color:var(--ink);background:#fff}
 #sell .sl-confirm::backdrop{background:rgba(20,25,35,.4)}

@@ -158,7 +158,8 @@ public class ListingPublicationService {
                           ? DetailsStatus.REVIEWED
                           : change.reviewed()
                               ? DetailsStatus.EXCLUDED
-                              : DetailsStatus.REVIEW_PENDING);
+                              : DetailsStatus.REVIEW_PENDING,
+                      change.action());
                 })
             .toList();
     return new ListingPublicationResponse.Event(

@@ -231,6 +231,22 @@ class ListingBrowseHttpTest {
   }
 
   @Test
+  void memberCardsAcceptBrowserAccessCookieWithoutAnAuthorizationHeader() throws Exception {
+    String text = "18GB 메모리 모델로, 정정된 점검 기록이 있습니다.";
+    readyCard(text);
+    HISTORY_STATE.set(State.UNAVAILABLE);
+    var response =
+        getWithHeader(
+            "/api/v1/listings?manufacturer=Apple", "Cookie", "access_token=" + token("2"));
+    var ai = data(response).at("/items/0/aiSummary");
+    assertEquals("READY", ai.get("status").asString());
+    assertEquals(text, ai.get("text").asString());
+    assertTrue(String.join(",", response.headers().allValues("Vary")).contains("Cookie"));
+    assertTrue(response.headers().firstValue("Cache-Control").orElseThrow().contains("no-store"));
+    assertEquals(0, HISTORY_READS.get());
+  }
+
+  @Test
   void cardsHideLegacyAndChangedFactsAndMarkRetainedTextDuringRefresh() throws Exception {
     readyCard("18GB 메모리 모델입니다.");
     jdbc.update(
