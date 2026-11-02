@@ -2,6 +2,7 @@ package org.example.springtestci.common.storage;
 
 import java.io.IOException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
@@ -14,6 +15,11 @@ import org.springframework.web.bind.annotation.RestController;
 /** 로컬·테스트의 제품 사진만 서명 URL로 제공한다. 문서 사본은 인증된 문서 다운로드 API에서 제공한다. */
 @RestController
 @Profile({"local", "test"})
+@ConditionalOnProperty(
+    prefix = "app.storage",
+    name = "type",
+    havingValue = "local",
+    matchIfMissing = true)
 @RequiredArgsConstructor
 public class LocalFileController {
 
