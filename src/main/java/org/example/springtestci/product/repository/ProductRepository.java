@@ -145,13 +145,17 @@ public class ProductRepository {
         .findFirst();
   }
 
+  /** 한 번에 돌려주는 내 제품 수의 상한. 목록이 무한히 커져 응답·이미지 조회가 느려지는 것을 막는다. 최신순으로 자른다. */
+  static final int MAX_OWNED_LIST = 200;
+
   public List<ProductResponse> findAllOwned(long ownerId) {
     return jdbc.query(
         PRODUCT_SELECT
             + " WHERE p.owner_id = ? AND p.archived_at IS NULL"
-            + " ORDER BY p.created_at DESC, p.id DESC",
+            + " ORDER BY p.created_at DESC, p.id DESC LIMIT ?",
         this::product,
-        ownerId);
+        ownerId,
+        MAX_OWNED_LIST);
   }
 
   public Optional<String> findSerialCiphertextOwned(long productId, long ownerId) {

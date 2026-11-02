@@ -145,6 +145,22 @@ public class DocumentService {
   }
 
   /**
+   * 임시 URL로 실제 다운로드하는 시점에 요청자가 그 파일이 속한 제품의 현재 소유자인지 다시 확인한다. URL 발급 뒤 소유권이 이전되거나 파일이 교체된 경우 거부된다.
+   * 존재 여부를 알려 주지 않도록 모두 RESOURCE_NOT_FOUND로 응답한다.
+   */
+  @Transactional(readOnly = true)
+  public void requireCurrentOwnerOfFile(String objectKey, Long userId) {
+    Document document =
+        documentRepository
+            .findByObjectKey(objectKey)
+            .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND));
+    Long ownerId = productOwnerReader.findOwnerId(document.getProductId()).orElse(null);
+    if (!userId.equals(ownerId)) {
+      throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
+    }
+  }
+
+  /**
    * 현재 소유자가 본인이 올렸고 이력에 연결된 적이 없는(보호되지 않은) 사본만 삭제한다. 이전받은 사본과 이력에 연결된 사본은 삭제할 수 없다. 문서에 딸린 AI 추출
    * 기록도 함께 지운다.
    */

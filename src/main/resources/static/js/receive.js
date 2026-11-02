@@ -2,6 +2,9 @@
   let currentToken = null;
   let timerInterval = null;
   let tokenFromUrl = new URLSearchParams(window.location.search).get('token');
+  // 비로그인으로 열었을 때 로그인 뒤 이어서 확인하기 위한 임시 보관 키(auth.js도 같은 키를 쓴다).
+  const PENDING_KEY = 'pastport.pendingTransferToken';
+  let originalCardHtml = null;
 
   const request = (path, options) => (window.PastportApi?.fetch || window.fetch.bind(window))(path, options);
   const goTo = (page) => document.querySelector(`[data-page="${page}"]`)?.click();
@@ -23,6 +26,12 @@
       const res = await request(`/api/v1/ownership/transfers/verify?token=${encodeURIComponent(token)}`);
       const data = await res.json().catch(() => ({}));
 
+      if (res.status === 401) {
+        // 로그인 뒤 같은 요청을 이어서 확인할 수 있게 이 탭(sessionStorage)에만 잠깐 보관한다. 확인되면 바로 지운다.
+        try { sessionStorage.setItem(PENDING_KEY, token); } catch {}
+        showError('소유권 이전 정보를 확인하려면 로그인이 필요해요. 로그인한 뒤 받은 이전 링크를 다시 열어 주세요.', true);
+        return;
+      }
       if (!res.ok || !data.success) {
         showError(data.message || '소유권 이전 정보를 찾을 수 없습니다.');
         return;
@@ -129,17 +138,19 @@
     }
   }
 
-  function showError(msg) {
+  function showError(msg, loginRequired = false) {
     const card = document.querySelector('.rc .sc-card');
     if (!card) return;
+    // 오류 카드로 바꾸기 전에 원래 화면을 보관해, 로그인 뒤 다시 복원한다.
+    if (originalCardHtml === null) originalCardHtml = card.innerHTML;
     const box = document.createElement('div');
     box.style.cssText = 'text-align:center;padding:40px 20px';
     const mark = document.createElement('span');
     mark.style.cssText = 'font-size:40px;color:var(--danger)';
-    mark.textContent = '×';
+    mark.textContent = loginRequired ? '!' : '×';
     const title = document.createElement('h2');
     title.style.margin = '16px 0 8px';
-    title.textContent = '이전 요청을 확인할 수 없습니다';
+    title.textContent = loginRequired ? '로그인이 필요해요' : '이전 요청을 확인할 수 없습니다';
     const text = document.createElement('p');
     text.style.cssText = 'color:var(--muted);margin-bottom:24px';
     text.textContent = msg;
@@ -148,9 +159,32 @@
     back.className = 'sc-btn primary';
     back.textContent = '마켓으로 돌아가기';
     back.addEventListener('click', () => goTo('market'));
-    box.append(mark, title, text, back);
+    if (loginRequired) {
+      // 일회용 토큰은 저장하지 않는다. 로그인 뒤에는 받은 링크를 다시 열어야 한다.
+      const login = document.createElement('button');
+      login.type = 'button';
+      login.className = 'sc-btn primary';
+      login.style.marginRight = '8px';
+      login.textContent = '로그인하기';
+      login.addEventListener('click', () => goTo('auth'));
+      back.className = 'sc-btn';
+      box.append(mark, title, text, login, back);
+    } else box.append(mark, title, text, back);
     card.replaceChildren(box);
   }
+
+  // 로그인 뒤 이전 화면으로 돌아오면 보관해 둔 토큰으로 다시 확인한다.
+  document.addEventListener('pastport:page-shown', (event) => {
+    if (event.detail.id !== 'receive') return;
+    let pending = null;
+    try { pending = sessionStorage.getItem(PENDING_KEY); sessionStorage.removeItem(PENDING_KEY); } catch {}
+    if (!pending) return;
+    const card = document.querySelector('.rc .sc-card');
+    if (card && originalCardHtml !== null) card.innerHTML = originalCardHtml;
+    originalCardHtml = null;
+    tokenFromUrl = pending;
+    initReceivePage();
+  });
 
   // 화면 HTML은 비동기로 채워지므로 로드가 끝난 뒤에 초기화한다.
   document.addEventListener('pastport:page-loaded', (event) => {

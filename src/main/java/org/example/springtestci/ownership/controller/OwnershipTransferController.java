@@ -46,8 +46,9 @@ public class OwnershipTransferController {
 
   @GetMapping("/verify")
   public ResponseEntity<ApiResponse<VerifyTransferResponse>> verifyTransfer(
-      @RequestParam("token") @NotBlank String token) {
-    VerifyTransferResponse response = service.verifyTransfer(token);
+      Authentication authentication, @RequestParam("token") @NotBlank String token) {
+    long actorId = currentUserIdResolver.resolveAuthentication(authentication);
+    VerifyTransferResponse response = service.verifyTransfer(actorId, token);
     return ResponseEntity.ok(ApiResponse.success(response));
   }
 

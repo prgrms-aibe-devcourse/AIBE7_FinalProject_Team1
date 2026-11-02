@@ -33,13 +33,8 @@ public class AiAssistantController {
   @PostMapping("/ask")
   public ResponseEntity<ApiResponse<AiAskResponse>> ask(
       Authentication authentication, @Valid @RequestBody AiAskRequest request) {
-    Long actorId = null;
-    if (authentication != null && authentication.isAuthenticated()) {
-      try {
-        actorId = currentUserIdResolver.resolveAuthentication(authentication);
-      } catch (Exception ignored) {
-      }
-    }
+    // 로그인한 사용자만 호출할 수 있다. 사용자 식별이 실패하면 익명으로 넘기지 않고 인증 오류로 끝낸다.
+    long actorId = currentUserIdResolver.resolveAuthentication(authentication);
     AiAskResponse response = aiService.ask(actorId, request);
     return ResponseEntity.ok(ApiResponse.success(response));
   }

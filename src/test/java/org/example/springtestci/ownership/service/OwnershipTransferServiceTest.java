@@ -291,12 +291,33 @@ class OwnershipTransferServiceTest {
     given(transferRepository.findByTokenHash(tokenHash)).willReturn(Optional.of(transfer));
     given(productRepository.findTitle(10L)).willReturn(Optional.of("맥북 프로 M1"));
 
-    VerifyTransferResponse verify = service.verifyTransfer(rawToken);
+    VerifyTransferResponse verify = service.verifyTransfer(2L, rawToken);
 
     assertThat(verify.transferId()).isEqualTo(100L);
     assertThat(verify.productTitle()).isEqualTo("맥북 프로 M1");
     assertThat(verify.canAccept()).isTrue();
     assertThat(verify.isExpired()).isFalse();
+  }
+
+  @Test
+  @DisplayName("수신자가 지정된 이전 요청은 조회 시점에도 지정 수신자와 발급자 외에는 거부한다")
+  void verifyTransfer_deniesNonRecipient() {
+    String rawToken = "designated-raw-token-1234567890";
+    String tokenHash = OwnershipTransferService.hashToken(rawToken);
+    OwnershipTransfer transfer =
+        OwnershipTransfer.create(
+            10L,
+            1L,
+            2L,
+            tokenHash,
+            TransferType.DIRECT,
+            null,
+            Instant.now().plus(1, ChronoUnit.DAYS));
+    given(transferRepository.findByTokenHash(tokenHash)).willReturn(Optional.of(transfer));
+
+    assertThatThrownBy(() -> service.verifyTransfer(3L, rawToken))
+        .isInstanceOf(CommonException.class)
+        .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ACCESS_DENIED);
   }
 
   @Test

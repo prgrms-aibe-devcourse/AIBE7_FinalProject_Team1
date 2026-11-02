@@ -126,7 +126,11 @@ public class OwnershipTransferService {
     return new CreateTransferResponse(transferId, req.productId(), rawToken, expiresAt, linkUrl);
   }
 
-  public VerifyTransferResponse verifyTransfer(String rawToken) {
+  /**
+   * 로그인한 사용자에게만 이전 요청 정보를 보여 준다. 수신자가 지정된 요청은 수락 시점이 아니라 조회 시점에도 지정 수신자(와 발급자)만 볼 수 있어, 토큰을 얻은 다른
+   * 사용자에게 제품명·판매자 정보가 노출되지 않는다.
+   */
+  public VerifyTransferResponse verifyTransfer(long actorId, String rawToken) {
     String tokenHash = hashToken(rawToken);
     OwnershipTransfer transfer =
         transferRepository
@@ -135,6 +139,12 @@ public class OwnershipTransferService {
 
     if (transfer.getTransferType() != TransferType.DIRECT)
       throw new CommonException(ErrorCode.OWNERSHIP_NOT_FOUND);
+
+    if (transfer.getToUserId() != null
+        && !Objects.equals(transfer.getToUserId(), actorId)
+        && !Objects.equals(transfer.getFromUserId(), actorId)) {
+      throw new CommonException(ErrorCode.ACCESS_DENIED);
+    }
 
     Instant now = Instant.now();
     boolean isExpired = transfer.isExpired(now);
