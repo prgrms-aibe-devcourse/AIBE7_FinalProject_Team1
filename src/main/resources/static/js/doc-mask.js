@@ -18,6 +18,8 @@
   let sourceType = 'image/png';
   let saving = false;
   let autoRunning = false;
+  // 값이 있으면 새 문서를 올리는 대신 이 문서 번호의 사본을 교체한다. (문서 보관함의 "다시 마스킹")
+  let replaceId = null;
   // cleanup()마다 올라가서, 그 전에 시작한 이미지 열기·미리보기가 늦게 끝나도 결과를 버릴 수 있게 한다.
   let generation = 0;
 
@@ -73,11 +75,32 @@
     }
   }
 
-  function reset() {
+  // 선택한 원본과 만든 사본을 정리하고 파일 선택 단계로 돌아간다. 교체 모드는 유지한다.
+  function restart() {
     cleanup();
     fail('');
     say('');
     if (root) setStep('pick');
+  }
+
+  // 화면을 벗어나거나 "다른 문서 가리기"를 누르면 교체 모드도 함께 끝낸다.
+  function reset() {
+    restart();
+    applyMode(null);
+  }
+
+  // 교체 모드에서는 제품을 고정하고, 화면 문구와 완료 후 이동 버튼을 교체용으로 바꾼다.
+  function applyMode(id) {
+    replaceId = id;
+    if (!root) return;
+    find('[data-dm-product]').disabled = Boolean(id);
+    const title = root.querySelector('.sc-head h1');
+    const eyebrow = root.querySelector('.sc-head .eyebrow');
+    const back = find('[data-dm-to-passport]');
+    if (title) title.textContent = id ? '개인정보 다시 가리기' : '개인정보 가리기 · 확인';
+    if (eyebrow) eyebrow.textContent = id ? '문서 #' + id + ' 사본 교체' : '문서 업로드';
+    back.textContent = id ? '문서 보관함으로 돌아가기' : '제품 여권으로 돌아가기';
+    back.dataset.page = id ? 'documents' : 'passport';
   }
 
   async function decode(file) {
@@ -103,7 +126,7 @@
     fail('');
     if (!file) return;
     // 제품을 고르기 전에는 마스킹 화면으로 넘어가지 않는다. 같은 파일을 다시 고를 수 있도록 선택값은 비운다.
-    if (!find('[data-dm-product]').value) {
+    if (!replaceId && !find('[data-dm-product]').value) {
       find('[data-dm-file]').value = '';
       fail('먼저 증빙을 연결할 제품을 선택해 주세요.');
       return;
@@ -391,7 +414,8 @@
   function messageFor(status, body) {
     if (status === 401) return '문서를 저장하려면 먼저 로그인해 주세요.';
     if (status === 403) return '이 제품의 소유자만 문서를 저장할 수 있어요.';
-    if (status === 404) return '제품을 찾을 수 없어요. 제품 번호를 확인해 주세요.';
+    // 교체 모드의 요청은 문서 번호로 보내므로 404는 문서가 없거나 내 문서가 아니라는 뜻이다.
+    if (status === 404) return replaceId ? '교체할 문서를 찾을 수 없어요. 문서 보관함에서 다시 선택해 주세요.' : '제품을 찾을 수 없어요. 제품 번호를 확인해 주세요.';
     if (status === 413) return '사본이 10MB를 넘어 저장할 수 없어요.';
     if (status === 503) return '파일 저장소를 아직 사용할 수 없어요. 잠시 후 다시 시도해 주세요.';
     return body?.message || '저장하지 못했어요. 잠시 후 다시 시도해 주세요.';
@@ -401,7 +425,7 @@
     if (saving || !blob) return;
     fail('');
     const productId = Number(find('[data-dm-product]').value);
-    if (!Number.isInteger(productId) || productId < 1) {
+    if (!replaceId && (!Number.isInteger(productId) || productId < 1)) {
       fail('증빙을 연결할 제품을 선택해 주세요.');
       return;
     }
@@ -415,7 +439,10 @@
       form.append('maskingConfirmed', 'true');
       // 원본 파일명은 보내지 않는다.
       form.append('file', blob, 'masked.' + extension);
-      const response = await api('/api/v1/products/' + productId + '/documents', { method: 'POST', body: form });
+      // 교체 모드면 같은 문서 번호의 파일만 바꾸고, 이력 연결은 그대로 둔다.
+      const response = replaceId
+        ? await api('/api/v1/documents/' + replaceId + '/file', { method: 'PUT', body: form })
+        : await api('/api/v1/products/' + productId + '/documents', { method: 'POST', body: form });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         fail(messageFor(response.status, body));
@@ -424,7 +451,8 @@
       const result = await response.json();
       cleanup();
       find('[data-dm-done-text]').textContent =
-        '개인정보를 가린 사본을 저장했어요. (문서 번호 ' + (result?.data?.id ?? '-') + ') 원본은 이 화면에서 지워졌어요.';
+        (replaceId ? '개인정보를 다시 가린 사본으로 교체했어요. (문서 번호 ' : '개인정보를 가린 사본을 저장했어요. (문서 번호 ') +
+        (result?.data?.id ?? '-') + ') 원본은 이 화면에서 지워졌어요.';
       setStep('done');
     } catch (ignored) {
       fail('네트워크 오류로 저장하지 못했어요. 같은 사본으로 다시 저장할 수 있어요.');
@@ -458,7 +486,7 @@
       updateCount();
     });
     find('[data-dm-auto]').addEventListener('click', autoMask);
-    find('[data-dm-cancel]').addEventListener('click', reset);
+    find('[data-dm-cancel]').addEventListener('click', restart);
     find('[data-dm-preview]').addEventListener('click', preview);
     find('[data-dm-back]').addEventListener('click', () => {
       fail('');
@@ -516,9 +544,14 @@
   // 다른 화면의 버튼이 data-docmask-product-id="제품번호"를 달고 data-page="docmask"로 이동하면 그 제품을 미리 선택한다.
   // 화면 전환(app.js의 click 처리)보다 먼저 값을 받아 두려고 캡처 단계에서 듣는다.
   let pendingProductId = null;
+  // data-docmask-replace-id가 함께 있으면 새 문서 대신 그 문서의 사본을 교체하는 모드로 연다.
+  let pendingReplaceId = null;
   document.addEventListener('click', (event) => {
     const button = event.target.closest?.('[data-docmask-product-id]');
-    if (button) pendingProductId = button.dataset.docmaskProductId;
+    if (button) {
+      pendingProductId = button.dataset.docmaskProductId;
+      pendingReplaceId = button.dataset.docmaskReplaceId || null;
+    }
   }, true);
 
   document.addEventListener('pastport:page-loaded', (event) => {
@@ -533,8 +566,10 @@
     if (root && event.detail.id === 'docmask') {
       // 제품 여권의 버튼으로 들어왔을 때만 저장 후 그 제품 여권으로 돌아가는 버튼을 보여 준다.
       find('[data-dm-to-passport]').hidden = !pendingProductId;
+      applyMode(pendingReplaceId);
       loadProducts(pendingProductId);
       pendingProductId = null;
+      pendingReplaceId = null;
     }
   });
   window.addEventListener('pagehide', reset);

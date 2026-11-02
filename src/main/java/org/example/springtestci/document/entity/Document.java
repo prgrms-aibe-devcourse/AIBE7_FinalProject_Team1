@@ -55,6 +55,12 @@ public class Document {
   /** 처음 이력에 연결되거나 소유권 이전으로 삭제 제한이 생긴 시각. 한 번 설정하면 유지한다. */
   private Instant protectedAt;
 
+  /** 재마스킹본으로 교체한 횟수와 마지막 교체 시각. 상세 기록은 document_replacements에 남긴다. */
+  @Column(nullable = false)
+  private int replacementCount;
+
+  private Instant lastReplacedAt;
+
   private Document(
       Long productId,
       Long uploaderId,
@@ -112,6 +118,8 @@ public class Document {
     this.contentType = newContentType;
     this.byteSize = newByteSize;
     this.version += 1;
+    this.replacementCount += 1;
+    this.lastReplacedAt = now;
     this.maskConfirmedAt = now;
     this.redactionRequiredAt = null;
   }

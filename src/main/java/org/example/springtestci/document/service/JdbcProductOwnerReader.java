@@ -19,4 +19,15 @@ public class JdbcProductOwnerReader implements ProductOwnerReader {
         .stream()
         .findFirst();
   }
+
+  @Override
+  public Optional<Long> lockOwnerId(Long productId) {
+    return jdbcTemplate
+        .query(
+            "select owner_id from products where id = ? for update",
+            (rs, i) -> rs.getLong(1),
+            productId)
+        .stream()
+        .findFirst();
+  }
 }

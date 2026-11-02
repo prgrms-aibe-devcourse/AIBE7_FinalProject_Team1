@@ -38,7 +38,9 @@ public class DocumentExtractionReviewService {
     if (writer == null) {
       throw new CommonException(ErrorCode.DOCUMENT_HISTORY_UNAVAILABLE);
     }
-    Document document = findOwnedDocument(documentId, userId);
+    // 직접 이력 등록(HistoryService.create)은 제품 → 증빙 문서 순으로 잠근다. 같은 순서로 잠그지 않으면 같은 제품·문서를
+    // 동시에 처리할 때 서로 기다리다 한쪽이 교착으로 중단된다.
+    Document document = findOwnedDocumentLockingProductFirst(documentId, userId);
     DocumentExtraction extraction = findForUpdate(documentId, extractionId);
     if (extraction.getDocumentVersion() != document.getVersion()) {
       // 추출 이후 사본이 교체되었다면 이전 사본 기준의 결과는 확정할 수 없다.
@@ -71,6 +73,23 @@ public class DocumentExtractionReviewService {
   private DocumentExtraction findForUpdate(Long documentId, Long extractionId) {
     return extractionRepository
         .findByIdAndDocumentIdForUpdate(extractionId, documentId)
+        .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND));
+  }
+
+  /** 제품 행을 먼저 잠근 뒤 문서 행을 잠근다. 잠금 순서는 확정에서 이력 저장까지 이어지는 흐름과 같다. */
+  private Document findOwnedDocumentLockingProductFirst(Long documentId, Long userId) {
+    // 제품 ID를 알아야 제품을 잠글 수 있으므로 문서는 잠그지 않고 먼저 읽기만 한다.
+    Long productId =
+        documentRepository
+            .findById(documentId)
+            .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND))
+            .getProductId();
+    Long ownerId = productOwnerReader.lockOwnerId(productId).orElse(null);
+    if (!userId.equals(ownerId)) {
+      throw new CommonException(ErrorCode.RESOURCE_NOT_FOUND);
+    }
+    return documentRepository
+        .findByIdForUpdate(documentId)
         .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND));
   }
 

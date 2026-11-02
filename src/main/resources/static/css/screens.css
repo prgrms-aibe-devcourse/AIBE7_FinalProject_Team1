@@ -396,3 +396,32 @@
   #documents .doc-row>span:nth-child(3){order:3;flex:1 1 100%}
   #documents .doc-row>.button{order:4;flex:1 1 0}
 }
+
+/* 문서 보관함의 AI 정보 추출 패널: 문서 행 바로 아래에 펼쳐진다. */
+#documents .doc-item{margin:7px 0}
+#documents .doc-item .doc-row{margin:0}
+#documents .doc-extract{margin-top:6px;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--soft,#f6f8fa);font-size:13px}
+#documents .doc-extract[hidden]{display:none}
+#documents .doc-extract-note{margin:0 0 10px;font-size:12px;line-height:1.5;color:#62646b;word-break:keep-all}
+#documents .doc-extract-note.is-error{color:#b42318}
+#documents .doc-extract-form{display:grid;gap:10px}
+#documents .doc-extract-typerow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-weight:700}
+#documents .doc-extract-typerow select{height:36px;padding:0 10px;border:1px solid var(--line);border-radius:4px;background:#fff;font-size:13px}
+#documents .doc-extract-consent{display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.5;word-break:keep-all}
+#documents .doc-extract-consent input{margin-top:2px;width:16px;height:16px;flex:none;accent-color:var(--blue)}
+#documents .doc-extract-form>.button{justify-self:start}
+#documents .doc-extract-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+#documents .doc-extract-grid label{display:grid;gap:4px;min-width:0;font-size:12px;font-weight:700}
+#documents .doc-extract-grid label.wide{grid-column:1/-1}
+#documents .doc-extract-grid input,#documents .doc-extract-grid textarea{width:100%;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit;font-size:13px;font-weight:400}
+#documents .doc-extract-grid textarea{min-height:72px;resize:vertical}
+#documents .doc-extract-grid input:focus,#documents .doc-extract-grid textarea:focus,#documents .doc-extract-typerow select:focus{outline:2px solid var(--blue);outline-offset:1px}
+#documents .doc-extract-preview{margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#f8fafc;display:grid;gap:8px;font-size:13px}
+#documents .doc-extract-preview-item{display:grid;gap:3px;padding:8px 10px;border-radius:6px;background:#fff;border:1px solid var(--line);min-width:0}
+#documents .doc-extract-preview-item span,#documents .doc-extract-preview-item small{overflow-wrap:anywhere}
+#documents .doc-extract-preview-item .preview-content{white-space:pre-line}
+#documents .doc-extract-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:12px}
+@media(max-width:640px){
+  #documents .doc-extract-grid{grid-template-columns:minmax(0,1fr)}
+  #documents .doc-extract-actions .button{flex:1 1 0}
+}
