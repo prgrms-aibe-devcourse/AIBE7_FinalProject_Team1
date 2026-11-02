@@ -63,8 +63,13 @@ app:
   jwt:
     secret: ${JWT_SECRET}
   storage:
+    type: ${STORAGE_TYPE:local}
     local-root: ${LOCAL_STORAGE_ROOT:./storage}
     signing-secret: ${STORAGE_SIGNING_SECRET:${app.jwt.secret}}
+    s3:
+      bucket: ${STORAGE_S3_BUCKET:}
+      region: ${STORAGE_S3_REGION:ap-northeast-2}
+      prefix: ${STORAGE_S3_PREFIX:pastport}
 
 logging:
   pattern:
