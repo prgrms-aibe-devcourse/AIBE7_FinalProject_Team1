@@ -104,14 +104,14 @@ const auth = (() => {
     const el = member.querySelector('[data-mp-field="ownedCount"]');
     if (!el) return;
     const owner = user?.id;
-    el.textContent = '보유 제품 확인 중…';
+    el.textContent = '-';
     try {
       const response = await (window.PastportApi?.fetch || fetch)('/api/v1/products', { credentials: 'same-origin', cache: 'no-store' });
       const payload = await response.json().catch(() => null);
       if (user?.id !== owner) return;
-      el.textContent = response.ok && Array.isArray(payload?.data) ? `보유 제품 ${payload.data.length}개` : '보유 제품 수를 불러오지 못했어요.';
+      el.textContent = response.ok && Array.isArray(payload?.data) ? String(payload.data.length) : '-';
     } catch {
-      if (user?.id === owner) el.textContent = '보유 제품 수를 불러오지 못했어요.';
+      if (user?.id === owner) el.textContent = '-';
     }
   };
 
