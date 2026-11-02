@@ -1,8 +1,9 @@
 // 문서 보관함의 "AI 정보 추출" 패널: 동의 → 추출 요청 → 진행 확인 → 결과 검토·수정 → 확정/반려.
 // 서버 API는 /api/v1/documents/{id}/extractions 이며, 사용자가 검토한 값만 확정 요청으로 보낸다.
 (() => {
-  const NOTICE_VERSION = '2026-11';
-  const NOTICE = '선택한 문서의 개인정보가 가려진 사본이 외부 AI(Gemini)로 전송돼 제품 정보를 읽어요. 원본과 가려진 개인정보는 전송되지 않아요.';
+  const NOTICE_VERSION = '2026-11-02';
+  // 처리 목적, 전송 대상·범위, 비동의 시 이용 범위를 함께 고지한다. 정식 고지 문구는 팀 기준이 정해지면 교체한다.
+  const NOTICE = '제품 정보를 읽어 이력 후보를 만들 목적으로, 개인정보가 가려진 사본이 외부 AI(Gemini)로 전송돼요. 원본과 가려진 개인정보는 전송되지 않아요. 동의하지 않아도 마스킹·사본 저장·직접 입력은 그대로 이용할 수 있어요.';
   const TYPES = [['RECEIPT', '영수증'], ['WARRANTY', '보증서'], ['REPAIR_REPORT', '수리 명세서'], ['OTHER', '기타']];
   // key는 서버 ExtractedFields 필드명과 같다.
   const FIELDS = [
@@ -45,6 +46,15 @@
     };
     const stopPolling = () => { clearTimeout(timer); timer = null; };
 
+    // AI를 쓰지 않거나 추출이 실패했을 때의 길. 제품 여권의 이력 등록에서 이 문서를 증빙으로 연결해 직접 입력한다.
+    function manualEntry() {
+      const box = create('div', null, 'doc-extract-manual');
+      const button = create('button', '이력 등록에서 직접 입력', 'button small'); button.type = 'button';
+      button.dataset.page = 'passport'; button.dataset.productId = item.productId;
+      box.append(create('span', 'AI 없이 직접 입력하려면 제품 여권의 이력 등록에서 증빙 문서 #' + item.id + '를 선택해 연결하세요.'), button);
+      return box;
+    }
+
     function show(...nodes) { stopPolling(); element.replaceChildren(...nodes); }
 
     // 추출 기록이 없거나 반려·실패했을 때: 동의를 받고 요청한다.
@@ -77,7 +87,7 @@
       });
       const typeRow = create('div', null, 'doc-extract-typerow'); typeRow.append(create('span', '문서 종류'), type);
       form.append(typeRow, consent, submit, feedback);
-      show(...(notice ? [notice] : []), form);
+      show(...(notice ? [notice] : []), form, manualEntry());
     }
 
     // AI가 읽은 값을 수정할 수 있게 보여 주고, 사용자가 확인한 값만 확정한다.
@@ -85,6 +95,14 @@
       const facts = extraction.extractedFacts || {};
       const form = create('form', null, 'doc-extract-review'); form.noValidate = true;
       form.append(message('AI가 문서에서 읽은 값이에요. 원본과 비교해 틀린 곳은 고치고, 읽지 못한 칸은 비워 두세요.'));
+      // 값을 사본과 대조해 확인할 수 있도록 같은 화면에서 문서를 열 수 있게 한다.
+      const view = create('button', '문서 보기', 'button small'); view.type = 'button';
+      const viewFeedback = create('div');
+      view.addEventListener('click', async () => {
+        try { const file = await api('/api/v1/documents/' + item.id + '/file-url'); window.open(file.url, '_blank', 'noopener'); }
+        catch (error) { viewFeedback.replaceChildren(message(error.message, 'is-error')); }
+      });
+      form.append(view, viewFeedback);
       const grid = create('div', null, 'doc-extract-grid');
       FIELDS.forEach(field => {
         const label = create('label', null, field.type === 'textarea' ? 'wide' : '');
