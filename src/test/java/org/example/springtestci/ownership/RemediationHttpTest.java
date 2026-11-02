@@ -167,7 +167,17 @@ class RemediationHttpTest {
         key);
     var documents = context.getBean(DocumentService.class);
     String fileUrl = documents.createFileUrl(901L, 1L).url();
-    assertThat(get(fileUrl, 1L).body()).startsWith("%PDF");
+    var issuedUrl = get("/api/v1/documents/901/file-url", 1L);
+    assertThat(issuedUrl.statusCode()).isEqualTo(200);
+    assertThat(issuedUrl.headers().firstValue("Cache-Control").orElse("")).isEqualTo("no-store");
+    assertThat(issuedUrl.headers().firstValue("Referrer-Policy").orElse(""))
+        .isEqualTo("no-referrer");
+    var issuedData = JSON.readTree(issuedUrl.body()).path("data");
+    assertThat(issuedData.path("url").asText()).startsWith("/api/v1/documents/901/file?");
+    assertThat(Instant.parse(issuedData.path("expiresAt").asText())).isAfter(Instant.now());
+    var downloaded = get(fileUrl, 1L);
+    assertThat(downloaded.body()).startsWith("%PDF");
+    assertThat(downloaded.headers().firstValue("Cache-Control").orElse("")).isEqualTo("no-store");
     assertThat(get(fileUrl, 0L).statusCode()).isEqualTo(401);
     assertThat(get(fileUrl, 3L).body()).doesNotContain("%PDF");
     assertThat(

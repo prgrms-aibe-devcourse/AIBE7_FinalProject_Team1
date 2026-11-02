@@ -95,9 +95,12 @@ public class DocumentController {
   }
 
   @GetMapping("/documents/{documentId}/file-url")
-  ApiResponse<FileUrlResponse> fileUrl(
+  ResponseEntity<ApiResponse<FileUrlResponse>> fileUrl(
       @AuthenticationPrincipal Jwt jwt, @PathVariable Long documentId) {
-    return ApiResponse.success(documentService.createFileUrl(documentId, userId(jwt)));
+    return ResponseEntity.ok()
+        .cacheControl(org.springframework.http.CacheControl.noStore())
+        .header("Referrer-Policy", "no-referrer")
+        .body(ApiResponse.success(documentService.createFileUrl(documentId, userId(jwt))));
   }
 
   @DeleteMapping("/documents/{documentId}")
