@@ -43,6 +43,18 @@
     });
     line.append(create('span', kind(item.contentType), 'pdf'), info,
       create('span', item.redactionRequired ? '재마스킹 필요' : '마스킹 확인 완료', item.redactionRequired ? 'private' : 'open'), open);
+    // 개인정보가 뒤늦게 발견된 문서는 같은 문서 번호로 사본을 교체한다. 마스킹 화면이 교체 모드로 열린다.
+    const remask = create('button', '다시 마스킹', 'button small'); remask.type = 'button';
+    remask.dataset.page = 'docmask'; remask.dataset.docmaskProductId = item.productId; remask.dataset.docmaskReplaceId = item.id;
+    line.append(remask);
+    // 확정하면 이력에 연결돼 문서가 보호되므로 삭제 버튼만 거둔다. 목록을 다시 그리면 확정 안내가 사라진다.
+    let removeButton = null;
+    const panel = window.PastportDocExtraction?.panel(item, { onChanged: () => removeButton?.remove() });
+    if (panel) {
+      const extract = create('button', 'AI 추출', 'button small'); extract.type = 'button'; extract.setAttribute('aria-expanded', 'false');
+      extract.addEventListener('click', () => extract.setAttribute('aria-expanded', String(panel.toggle())));
+      line.append(extract);
+    }
     if (item.deletable) {
       const remove = create('button', '삭제', 'button small'); remove.type = 'button';
       remove.addEventListener('click', async () => {
@@ -50,9 +62,11 @@
         try { await api('/api/v1/documents/' + item.id, { method: 'DELETE' }); await loadDocuments(); }
         catch (error) { status(error.message, true); }
       });
-      line.append(remove);
+      line.append(remove); removeButton = remove;
     }
-    return line;
+    const holder = create('div', null, 'doc-item'); holder.append(line);
+    if (panel) holder.append(panel.element);
+    return holder;
   }
   async function loadDocuments() {
     const list = find('[data-docs-list]'); const token = ++state.token;
