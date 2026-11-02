@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -125,18 +126,21 @@ class ProductServiceTest {
 
   @Test
   void listUsesBoundedPagingAndBatchImageLookup() {
-    when(productRepository.findOwnedPage(OWNER, 0, 20)).thenReturn(List.of(product()));
+    when(productRepository.findOwnedPage(OWNER, null, null, 2))
+        .thenReturn(
+            List.of(product(), product(PRODUCT + 1, OffsetDateTime.parse("2026-10-14T00:00:00Z"))));
     when(productRepository.findImages(List.of(PRODUCT)))
         .thenReturn(Map.of(PRODUCT, List.of(image(1L, true))));
     when(productRepository.summarizeOwned(OWNER))
         .thenReturn(new ProductRepository.OwnedProductSummary(21L, 8L));
 
-    var response = service.listMine(OWNER, 0, 20);
+    var response = service.listMine(OWNER, 0, 1, null, null);
 
     assertEquals(1, response.items().size());
     assertEquals(1, response.items().get(0).images().size());
     assertEquals(21L, response.page().totalElements());
     assertEquals(true, response.page().hasNext());
+    assertEquals(PRODUCT, response.page().nextCursor().productId());
     assertEquals(8L, response.summary().purchased());
     verify(productRepository).findImages(List.of(PRODUCT));
     verify(productRepository, never()).findImages(PRODUCT);
@@ -144,13 +148,36 @@ class ProductServiceTest {
 
   @Test
   void listRejectsAnUnboundedPageSize() {
-    assertCode(ErrorCode.INVALID_INPUT, () -> service.listMine(OWNER, 0, 101));
-    verify(productRepository, never()).findOwnedPage(anyLong(), anyInt(), anyInt());
+    assertCode(ErrorCode.INVALID_INPUT, () -> service.listMine(OWNER, 0, 101, null, null));
+    verify(productRepository, never()).findOwnedPage(anyLong(), isNull(), isNull(), anyInt());
+  }
+
+  @Test
+  void listRejectsANextPageWithoutACompleteCursor() {
+    assertCode(ErrorCode.INVALID_INPUT, () -> service.listMine(OWNER, 1, 20, null, null));
+    assertCode(
+        ErrorCode.INVALID_INPUT,
+        () -> service.listMine(OWNER, 1, 20, OffsetDateTime.parse("2026-10-15T00:00:00Z"), null));
+  }
+
+  @Test
+  void listUsesTheLastVisibleProductAsTheNextCursor() {
+    OffsetDateTime cursorTime = OffsetDateTime.parse("2026-10-15T00:00:00Z");
+    when(productRepository.findOwnedPage(OWNER, cursorTime, PRODUCT, 21)).thenReturn(List.of());
+    when(productRepository.findImages(List.of())).thenReturn(Map.of());
+    when(productRepository.summarizeOwned(OWNER))
+        .thenReturn(new ProductRepository.OwnedProductSummary(1L, 0L));
+
+    var response = service.listMine(OWNER, 1, 20, cursorTime, PRODUCT);
+
+    assertEquals(false, response.page().hasNext());
+    assertEquals(null, response.page().nextCursor());
+    verify(productRepository).findOwnedPage(OWNER, cursorTime, PRODUCT, 21);
   }
 
   @Test
   void pageMetadataKeepsLargePageCountsAsLongWithoutOverflow() {
-    var response = ProductPageResponse.of(List.of(), 0, 100, Long.MAX_VALUE, 0);
+    var response = ProductPageResponse.of(List.of(), 0, 100, Long.MAX_VALUE, 0, true);
 
     assertEquals(1L + (Long.MAX_VALUE - 1L) / 100, response.page().totalPages());
     assertEquals(true, response.page().hasNext());
@@ -320,6 +347,26 @@ class ProductServiceTest {
         new ProductResponse.Specifications(null, null, null, null, null, null, null, null),
         List.of(),
         OffsetDateTime.parse("2026-10-15T00:00:00Z"));
+  }
+
+  private static ProductResponse product(long id, OffsetDateTime createdAt) {
+    ProductResponse product = product();
+    return new ProductResponse(
+        id,
+        product.title(),
+        product.manufacturer(),
+        product.modelName(),
+        product.purchaseDate(),
+        product.warrantyExpiresAt(),
+        product.warrantyTerms(),
+        product.factsVersion(),
+        product.serialNumber(),
+        product.warrantyStatus(),
+        product.specifications(),
+        product.images(),
+        createdAt,
+        product.historyCount(),
+        product.recentHistory());
   }
 
   private static ProductImageRecord image(long id, boolean primary) {

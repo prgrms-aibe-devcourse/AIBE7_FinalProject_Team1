@@ -4,7 +4,7 @@
   const registration = window.PastportProductRegistration;
   const state = {
     products: [], current: null, selectedId: null, loading: null, loadingAll: null, imageUrls: [], registerImageUrls: [], documentToken: 0,
-    productPage: { number: 0, totalElements: 0, hasNext: false }, productSummary: { registered: 0, purchased: 0 },
+    productPage: { number: 0, totalElements: 0, hasNext: false, nextCursor: null }, productSummary: { registered: 0, purchased: 0 },
     productListRequests: registration.createLatestRequestGate(),
   };
 
@@ -48,12 +48,18 @@
   const loadProducts = async (force = false, page = 0, append = false) => {
     if (state.loading && !force) return state.loading;
     const requestVersion = state.productListRequests.begin();
-    const request = api(`${API}?page=${page}&size=20`)
+    const params = new URLSearchParams({ page: String(page), size: '20' });
+    const cursor = append ? state.productPage.nextCursor : null;
+    if (cursor) {
+      params.set('cursorCreatedAt', cursor.createdAt);
+      params.set('cursorProductId', String(cursor.productId));
+    }
+    const request = api(`${API}?${params}`)
       .then((result) => {
         if (!state.productListRequests.isCurrent(requestVersion)) return false;
         const items = result?.items || [];
         state.products = append ? [...state.products, ...items] : items;
-        state.productPage = result?.page || { number: page, totalElements: items.length, hasNext: false };
+        state.productPage = result?.page || { number: page, totalElements: items.length, hasNext: false, nextCursor: null };
         state.productSummary = result?.summary || { registered: items.length, purchased: items.filter((item) => item.purchaseDate).length };
         return true;
       })
@@ -85,7 +91,7 @@
     state.loading = null;
     state.loadingAll = null;
     state.products = [];
-    state.productPage = { number: 0, totalElements: 0, hasNext: false };
+    state.productPage = { number: 0, totalElements: 0, hasNext: false, nextCursor: null };
     state.productSummary = { registered: 0, purchased: 0 };
   };
 

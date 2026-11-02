@@ -48,6 +48,16 @@ class ProductRepositoryTest {
   }
 
   @Test
+  void ownedProductCursorIndexIsCreatedByFlyway() {
+    Integer count =
+        jdbc.queryForObject(
+            "SELECT COUNT(*) FROM information_schema.indexes WHERE LOWER(index_name) = 'ix_products_owner_archive_created'",
+            Integer.class);
+
+    assertEquals(1, count);
+  }
+
+  @Test
   void ownedProductIncludesHistoryCountAndMostRecentRecord() {
     long productId = insert(21L, "APPLE", "fp-history-summary");
     jdbc.update(
@@ -80,8 +90,11 @@ class ProductRepositoryTest {
     repository.insertImage(middle, "product-images/page-middle.png", "image/png", 30L);
     repository.insertImage(newest, "product-images/page-newest.png", "image/png", 20L);
 
-    var firstPage = repository.findOwnedPage(24L, 0, 2);
-    var secondPage = repository.findOwnedPage(24L, 1, 2);
+    var firstPage = repository.findOwnedPage(24L, null, null, 2);
+    repository.archive(newest);
+    var secondPage =
+        repository.findOwnedPage(
+            24L, firstPage.get(1).createdAt(), firstPage.get(1).productId(), 2);
     var images = repository.findImages(firstPage.stream().map(ProductResponse::productId).toList());
     var summary = repository.summarizeOwned(24L);
 
@@ -90,7 +103,7 @@ class ProductRepositoryTest {
     assertEquals(List.of(oldest), secondPage.stream().map(ProductResponse::productId).toList());
     assertEquals(1, images.get(newest).size());
     assertEquals(1, images.get(middle).size());
-    assertEquals(3L, summary.total());
+    assertEquals(2L, summary.total());
     assertEquals(1L, summary.purchased());
   }
 

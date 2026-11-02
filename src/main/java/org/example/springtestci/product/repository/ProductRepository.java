@@ -2,6 +2,7 @@ package org.example.springtestci.product.repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -170,15 +171,29 @@ public class ProductRepository {
         .findFirst();
   }
 
-  public List<ProductResponse> findOwnedPage(long ownerId, int page, int size) {
+  /** 마지막으로 본 생성 시각·ID보다 뒤에 정렬되는 제품만 읽어 목록 변경 중에도 경계를 유지한다. */
+  public List<ProductResponse> findOwnedPage(
+      long ownerId, OffsetDateTime cursorCreatedAt, Long cursorProductId, int limit) {
+    if (cursorCreatedAt != null && cursorProductId != null) {
+      return jdbc.query(
+          PRODUCT_SELECT
+              + " WHERE p.owner_id = ? AND p.archived_at IS NULL"
+              + " AND (p.created_at < ? OR (p.created_at = ? AND p.id < ?))"
+              + " ORDER BY p.created_at DESC, p.id DESC LIMIT ?",
+          this::product,
+          ownerId,
+          cursorCreatedAt,
+          cursorCreatedAt,
+          cursorProductId,
+          limit);
+    }
     return jdbc.query(
         PRODUCT_SELECT
             + " WHERE p.owner_id = ? AND p.archived_at IS NULL"
-            + " ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?",
+            + " ORDER BY p.created_at DESC, p.id DESC LIMIT ?",
         this::product,
         ownerId,
-        size,
-        (long) page * size);
+        limit);
   }
 
   public OwnedProductSummary summarizeOwned(long ownerId) {

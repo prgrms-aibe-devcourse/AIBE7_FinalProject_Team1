@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import java.io.IOException;
+import java.time.OffsetDateTime;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
 import org.example.springtestci.common.response.ApiResponse;
@@ -15,6 +16,7 @@ import org.example.springtestci.product.dto.UpdateProductImagesRequest;
 import org.example.springtestci.product.dto.UpdateProductRequest;
 import org.example.springtestci.product.service.ProductService;
 import org.springframework.core.io.Resource;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -66,8 +68,12 @@ public class ProductController {
   public ApiResponse<ProductPageResponse> listMine(
       @AuthenticationPrincipal Jwt jwt,
       @RequestParam(defaultValue = "0") @Min(0) int page,
-      @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-    return ApiResponse.success(productService.listMine(userId(jwt), page, size));
+      @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime cursorCreatedAt,
+      @RequestParam(required = false) @Positive Long cursorProductId) {
+    return ApiResponse.success(
+        productService.listMine(userId(jwt), page, size, cursorCreatedAt, cursorProductId));
   }
 
   /** productId에 해당하는 내 제품 한 건을 조회한다. */

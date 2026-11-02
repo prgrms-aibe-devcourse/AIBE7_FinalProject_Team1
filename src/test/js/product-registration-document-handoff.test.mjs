@@ -35,11 +35,17 @@ test('제품 목록 로딩 실패 시 등록 화면에서 인계한 원본을 �
 test('마스킹 화면은 이전 진입의 제품 목록 응답을 반영하지 않는다', () => {
   const loadProducts = docMask.indexOf('async function loadProducts(wanted)');
   const versionCapture = docMask.indexOf('const version = entryVersion;', loadProducts);
-  const request = docMask.indexOf('await api(`/api/v1/products?page=${page}&size=100`)', versionCapture);
+  const request = docMask.indexOf('await api(`/api/v1/products?${params}`)', versionCapture);
   const staleGuard = docMask.indexOf('if (version !== entryVersion) return false;', request);
   const updateOptions = docMask.indexOf("setOptions('증빙을 연결할 제품을 선택해 주세요', products);", staleGuard);
   assert.ok(versionCapture > loadProducts, '제품 목록 요청은 화면 진입 버전을 보관해야 한다');
   assert.ok(staleGuard > request && staleGuard < updateOptions, '이전 진입 응답은 드롭다운 갱신 전에 중단해야 한다');
+});
+
+test('제품 목록 실패 시 등록 화면에서 인계한 원본을 유지한 채 다시 시도할 수 있다', () => {
+  assert.match(docMask, /retry\.hidden = false/);
+  assert.match(docMask, /\[data-dm-products-retry\].*enterPendingDocument/);
+  assert.match(registerPage + fs.readFileSync('src/main/resources/static/pages/docmask.html', 'utf8'), /data-dm-products-retry/);
 });
 
 test('문서함은 가장 최근 화면 진입의 제품 목록만 반영한다', () => {

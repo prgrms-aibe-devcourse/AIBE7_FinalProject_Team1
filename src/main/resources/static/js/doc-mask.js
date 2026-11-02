@@ -477,6 +477,7 @@
     wrapCanvas.addEventListener('pointercancel', cancelDrag);
     find('[data-dm-file]').addEventListener('change', (event) => open(event.target.files[0]));
     find('[data-dm-product]').addEventListener('change', () => fail(''));
+    find('[data-dm-products-retry]').addEventListener('click', enterPendingDocument);
     all('[data-dm-tool]').forEach((button) => button.addEventListener('click', () => setTool(button.dataset.dmTool)));
     find('[data-dm-undo]').addEventListener('click', () => {
       if (!history.length) return;
@@ -519,6 +520,7 @@
   async function loadProducts(wanted) {
     const version = entryVersion;
     const select = find('[data-dm-product]');
+    const retry = find('[data-dm-products-retry]');
     const keep = wanted || select.value;
     const setOptions = (placeholder, products = []) => {
       select.replaceChildren(new Option(placeholder, ''));
@@ -527,13 +529,19 @@
         select.add(new Option(`#${product.productId} ${label}`, String(product.productId)));
       }
     };
+    retry.hidden = true;
     setOptions('제품을 불러오는 중이에요');
     try {
       const products = [];
       let page = 0;
-      let hasNext;
+      let cursor = null;
       do {
-        const response = await api(`/api/v1/products?page=${page}&size=100`);
+        const params = new URLSearchParams({ page: String(page), size: '100' });
+        if (cursor) {
+          params.set('cursorCreatedAt', cursor.createdAt);
+          params.set('cursorProductId', String(cursor.productId));
+        }
+        const response = await api(`/api/v1/products?${params}`);
         if (version !== entryVersion) return false;
         if (response.status === 401) {
           setOptions('로그인 후 제품을 선택할 수 있어요');
@@ -543,9 +551,9 @@
         const result = (await response.json()).data;
         if (version !== entryVersion) return false;
         products.push(...(result?.items || []));
-        hasNext = result?.page?.hasNext === true;
+        cursor = result?.page?.nextCursor || null;
         page += 1;
-      } while (hasNext);
+      } while (cursor);
       if (products.length === 0) {
         setOptions('등록된 제품이 없어요. 제품을 먼저 등록해 주세요');
         return true;
@@ -555,7 +563,8 @@
       return true;
     } catch (error) {
       if (version !== entryVersion) return false;
-      setOptions('제품 목록을 불러오지 못했어요. 화면을 다시 열어 주세요');
+      setOptions('제품 목록을 불러오지 못했어요. 아래 버튼으로 다시 시도해 주세요');
+      retry.hidden = false;
       return false;
     }
   }

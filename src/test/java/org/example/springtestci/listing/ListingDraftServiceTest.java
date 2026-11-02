@@ -23,16 +23,17 @@ class ListingDraftServiceTest {
     ListingDraftService service =
         new ListingDraftService(
             mock(ListingDraftRepository.class), products, mock(ListingDraftQueryRepository.class));
-    when(products.listMine(7L, 0, 100))
-        .thenReturn(ProductPageResponse.of(List.of(product(101L)), 0, 100, 101, 1));
-    when(products.listMine(7L, 1, 100))
-        .thenReturn(ProductPageResponse.of(List.of(product(102L)), 1, 100, 101, 1));
+    ProductResponse first = product(101L);
+    when(products.listMine(7L, 0, 100, null, null))
+        .thenReturn(ProductPageResponse.of(List.of(first), 0, 100, 101, 1, true));
+    when(products.listMine(7L, 1, 100, first.createdAt(), first.productId()))
+        .thenReturn(ProductPageResponse.of(List.of(product(102L)), 1, 100, 101, 1, false));
 
     var response = service.products(7L);
 
     assertEquals(List.of(101L, 102L), response.stream().map(item -> item.productId()).toList());
-    verify(products).listMine(7L, 0, 100);
-    verify(products).listMine(7L, 1, 100);
+    verify(products).listMine(7L, 0, 100, null, null);
+    verify(products).listMine(7L, 1, 100, first.createdAt(), first.productId());
   }
 
   private static ProductResponse product(long id) {

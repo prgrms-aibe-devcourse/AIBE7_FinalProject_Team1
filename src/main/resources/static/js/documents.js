@@ -89,13 +89,18 @@
   async function loadAllProducts() {
     const result = [];
     let page = 0;
-    let hasNext;
+    let cursor = null;
     do {
-      const response = await api('/api/v1/products?page=' + page + '&size=100');
+      const params = new URLSearchParams({ page: String(page), size: '100' });
+      if (cursor) {
+        params.set('cursorCreatedAt', cursor.createdAt);
+        params.set('cursorProductId', String(cursor.productId));
+      }
+      const response = await api('/api/v1/products?' + params);
       result.push(...(response?.items || []));
-      hasNext = response?.page?.hasNext === true;
+      cursor = response?.page?.nextCursor || null;
       page += 1;
-    } while (hasNext);
+    } while (cursor);
     return result;
   }
   /** 문서 화면 진입 때 모든 소유 제품을 읽고 기존 선택을 유지한 채 문서 목록을 연다. */

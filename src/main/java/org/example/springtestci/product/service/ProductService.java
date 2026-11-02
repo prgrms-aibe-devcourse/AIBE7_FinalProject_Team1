@@ -2,6 +2,7 @@ package org.example.springtestci.product.service;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -89,13 +90,25 @@ public class ProductService {
     return get(ownerId, productId);
   }
 
-  /** 소유 제품을 페이지 단위로 조회하고 해당 페이지의 이미지를 한 번에 결합한다. */
+  /** 소유 제품을 생성 시각·ID cursor 다음부터 조회하고 해당 구간의 이미지를 한 번에 결합한다. */
   @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
-  public ProductPageResponse listMine(long ownerId, int page, int size) {
-    if (page < 0 || size < 1 || size > 100) {
+  public ProductPageResponse listMine(
+      long ownerId, int page, int size, OffsetDateTime cursorCreatedAt, Long cursorProductId) {
+    boolean hasCursor = cursorCreatedAt != null && cursorProductId != null;
+    if (page < 0
+        || size < 1
+        || size > 100
+        || (cursorCreatedAt == null) != (cursorProductId == null)
+        || (page == 0 && hasCursor)
+        || (page > 0 && !hasCursor)) {
       throw new CommonException(ErrorCode.INVALID_INPUT);
     }
-    List<ProductResponse> products = productRepository.findOwnedPage(ownerId, page, size);
+    List<ProductResponse> slice =
+        productRepository.findOwnedPage(
+            ownerId, cursorCreatedAt, cursorProductId, Math.addExact(size, 1));
+    boolean hasNext = slice.size() > size;
+    List<ProductResponse> products =
+        hasNext ? List.copyOf(slice.subList(0, size)) : List.copyOf(slice);
     Map<Long, List<ProductImageRecord>> images =
         productRepository.findImages(products.stream().map(ProductResponse::productId).toList());
     List<ProductResponse> items =
@@ -106,7 +119,7 @@ public class ProductService {
                         toImages(product.productId(), images.get(product.productId()))))
             .toList();
     var summary = productRepository.summarizeOwned(ownerId);
-    return ProductPageResponse.of(items, page, size, summary.total(), summary.purchased());
+    return ProductPageResponse.of(items, page, size, summary.total(), summary.purchased(), hasNext);
   }
 
   /** 소유권을 확인한 뒤 암호화된 일련번호를 복호화해 상세 응답에 포함한다. */

@@ -14,6 +14,7 @@ import org.example.springtestci.listing.entity.ListingDraft;
 import org.example.springtestci.listing.repository.ListingDraftQueryRepository;
 import org.example.springtestci.listing.repository.ListingDraftRepository;
 import org.example.springtestci.ownership.event.OwnershipTransferred;
+import org.example.springtestci.product.dto.ProductPageResponse;
 import org.example.springtestci.product.service.ProductService;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.io.Resource;
@@ -46,13 +47,19 @@ public class ListingDraftService {
   public List<DraftProductResponse> products(long userId) {
     List<DraftProductResponse> result = new ArrayList<>();
     int page = 0;
-    boolean hasNext;
+    ProductPageResponse.Cursor cursor = null;
     do {
-      var response = products.listMine(userId, page, 100);
+      var response =
+          products.listMine(
+              userId,
+              page,
+              100,
+              cursor == null ? null : cursor.createdAt(),
+              cursor == null ? null : cursor.productId());
       response.items().stream().map(DraftProductResponse::from).forEach(result::add);
-      hasNext = response.page().hasNext();
+      cursor = response.page().nextCursor();
       page += 1;
-    } while (hasNext);
+    } while (cursor != null);
     return List.copyOf(result);
   }
 
