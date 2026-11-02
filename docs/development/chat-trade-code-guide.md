@@ -47,7 +47,7 @@ Controller
 4. `PublishedListingAccess`와 `JdbcPublishedListingAccess`가 제품을 먼저 잠근 뒤 판매글을 잠그고 ACTIVE/RESERVED 상태를 갱신한다.
 5. `accept()`는 요청 ACCEPTED/RESERVED, 판매글 RESERVED와 `InternalTransferPendingWriter.createPending()`을 같은 트랜잭션에서 처리한다.
 
-`InternalTransferPendingWriter`의 운영 구현은 이 저장소에 없다. PostgreSQL 시험의 내부 JDBC writer와 HTTP 시험 Bean은 원자성 검증용 대역이며 정식 ownership 연결이 아니다.
+`InternalTransferPendingWriter`와 `InternalTradeCompletionPort`의 정식 운영 구현은 `InternalTradeOwnershipService`다. DIRECT는 이 내부 포트를 호출하지 않는다.
 
 ## P3 예약 취소
 
@@ -86,9 +86,17 @@ INTERNAL/PENDING 이전 취소
 3. `ProductService#getForListing()`의 `factsVersion`과 `ListingDetailService#get()`의 공개 projection을 같은 잠금 범위에서 조합한다. READY가 아니거나 샘플인 이력은 완료 근거로 사용하지 않는다.
 4. `TradeCompletionService#complete()`는 종료 재요청을 먼저 반환하고, 진행 중 거래에는 최신 버전·정식 공개 이력·미확인 변경 0건을 다시 검사한 뒤 인증 사용자의 확인만 저장한다.
 5. 양측 확인이 같은 현재 버전이면 `PurchaseRequestRepository#complete()`, `PublishedListingAccess#sell()`, `#rejectPendingByListingId()` 순서로 거래 측 상태를 확정한다.
-6. `InternalTradeCompletionPort#complete()`와 `TradeAuditRecorder#tradeCompleted()`가 같은 트랜잭션에 참여한다. 운영 완료 포트는 아직 없으며 기능 활성화 시 필수 Bean이다.
+6. `InternalTradeCompletionPort#complete()`와 `TradeAuditRecorder#tradeCompleted()`가 같은 트랜잭션에 참여한다. 기능 활성화 시 `InternalTradeOwnershipService` 한 개만 운영 완료 포트로 등록한다.
 
 완료된 거래의 재요청은 원래 방 당사자에게 최소 상태만 반환한다. 이후 제품 소유자 변경이나 facts 버전 증가를 이유로 과거 완료를 다시 수행하지 않는다.
+
+## DIRECT 외부 이전
+
+`OwnershipTransferController → OwnershipTransferService`는 실제 제품 ID로 현재 소유자의 링크 발급·상태 조회·취소와 인증된 수신자의 명시 수락을 처리한다. verify는 읽기 전용이며 INTERNAL 토큰은 404로 숨기고 외부 수락·취소는 기존 409 차단 계약을 유지한다.
+
+제품→판매글→이전 행 순서로 잠근 뒤 소유자·보관·판매·수신자·만료 정각을 재검사한다. 같은 트랜잭션에서 owner/facts·COMPLETED·슬롯 해제·실제 PK의 시스템 TRANSFER·PRIVATE·증빙 보호·감사를 확정한다. 이력·증빙은 정식 `InternalTradeOwnershipRepository`의 저수준 메소드만 재사용한다. `OwnershipTransferred`는 동기 초안 정리에, `ProductFactsChanged`는 커밋 후 AI 갱신에 한 번씩 발행한다. 허용 마스킹 사본의 승계와 재마스킹·업로더·삭제 제한은 현행 `DocumentService`를 따른다.
+
+`ownership.js`는 제품 상세의 발급·취소·재발급과 로컬 QR을, `receive.js`는 토큰 주소 정리·메모리 내 로그인 복귀·명시 수락·응답 유실 후 재확인을 담당한다. Web Locks 인증 흐름과 INTERNAL 거래 화면은 유지한다.
 
 ## 내 판매글 진입
 
