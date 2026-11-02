@@ -910,9 +910,9 @@ class DirectTransferPostgresTest {
     assertThat(http("GET", "/api/v1/products/101/documents", null, 2, false, false).statusCode())
         .isEqualTo(200);
     assertThat(http("GET", "/api/v1/documents/901/file-url", null, 2, false, false).statusCode())
-        .isEqualTo(ErrorCode.DOCUMENT_REDACTION_REQUIRED.getStatus().value());
+        .isEqualTo(ErrorCode.DOCUMENT_REDACTION_REQUIRED.status().value());
     assertThat(http("DELETE", "/api/v1/documents/901", null, 2, false, false).statusCode())
-        .isEqualTo(ErrorCode.DOCUMENT_DELETE_NOT_ALLOWED.getStatus().value());
+        .isEqualTo(ErrorCode.DOCUMENT_DELETE_NOT_ALLOWED.status().value());
     assertThat(http("GET", "/api/v1/documents/901/file-url", null, 1, false, false).statusCode())
         .isEqualTo(404);
     jdbc.update("UPDATE documents SET redaction_required_at=NULL WHERE id=901");

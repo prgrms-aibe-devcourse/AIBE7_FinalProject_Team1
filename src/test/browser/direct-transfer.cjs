@@ -178,6 +178,19 @@ async function decodeSharedQr(page, sharedLink) {
     await receiver.page.locator('.landing-nav .nav-item > [data-page="receive"]').click();
     await receiver.page.locator('[data-receive-message]').filter({ hasText: '이전 링크가 없거나' }).waitFor();
     record('Network failure requires verification retry; explicit accept guarded against double click; completion clears token; new owner sees product 101');
+    step = 'current-registration-three-step-navigation';
+    await receiver.page.evaluate(() => show('register'));
+    await receiver.page.locator('#register.active [data-register-step="1"]:not([hidden])').waitFor();
+    for (const [name, value] of Object.entries({ title: 'browser regression laptop', manufacturer: 'maker', modelName: 'model', serialNumber: 'BROWSER-REGRESSION-105' })) {
+      await receiver.page.locator(`#register [name="${name}"]`).fill(value);
+    }
+    await receiver.page.locator('#register [data-register-step="1"] [data-register-next]').click();
+    await receiver.page.locator('#register [data-register-step="2"]:not([hidden])').waitFor();
+    await receiver.page.locator('#register [data-register-step="2"] [data-register-next]').click();
+    await receiver.page.locator('#register [data-register-step="3"]:not([hidden])').waitFor();
+    await receiver.page.locator('#register [data-register-step="3"] [data-register-prev]').click();
+    await receiver.page.locator('#register [data-register-step="2"]:not([hidden])').waitFor();
+    record('Current three-step laptop registration navigates forward and back with preserved session');
     ensure(counts.uncaughtPageErrors === 0, 'No uncaught browser errors');
     step = 'complete';
     fs.writeFileSync(path.join(evidence, 'browser-result.json'), JSON.stringify({ status: 'PASS', started, ended: new Date().toISOString(), browser: browser.version(), playwrightCore: require('playwright-core/package.json').version, jsQR: require('jsqr/package.json').version, qrGenerator: '2.0.4', passed, counts, tokenMaterialRecorded: false, credentialsRecorded: false, externalRequestsBlocked: true }, null, 2));
