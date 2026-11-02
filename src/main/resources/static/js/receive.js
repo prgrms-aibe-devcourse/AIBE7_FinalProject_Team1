@@ -115,4 +115,5 @@
   document.addEventListener('pastport:auth-changed', authState);
   document.addEventListener('pastport:logout', () => { version += 1; clearToken(); status('로그아웃되어 이전 정보가 지워졌습니다. 링크를 다시 열어 주세요.'); });
   window.addEventListener('pagehide', () => { version += 1; clearToken(); });
+  if (root()) { init(); if (currentToken) navigate('receive'); }
 })();
