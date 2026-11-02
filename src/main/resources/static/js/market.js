@@ -23,6 +23,8 @@ document.addEventListener('click', (event) => {
   const defaults = () => ({ page: 0, size: 20, sort: 'LATEST', ...Object.fromEntries(fields.map(name => [name, ''])) });
   let state = defaults(), root = null, form = null, request = null, initialized = false, active = false, page = null;
   let summaryTimer = null, summaryPolls = 0;
+  // 로그인한 회원인데 서버가 비회원 응답을 준 경우(로그인 쿠키 만료 등)를 한 번만 다시 시도하기 위한 상태.
+  let signedIn = false, memberRetried = false;
   const find = selector => root.querySelector(selector);
   const element = (tag, className, text) => {
     const node = document.createElement(tag); node.className = className;
@@ -98,7 +100,7 @@ document.addEventListener('click', (event) => {
     body.append(element('b', 'price', new Intl.NumberFormat('ko-KR').format(item.price) + '원'), element('h3', '', item.title));
     const ai = item.aiSummary || { status: 'NOT_REQUESTED', text: null };
     const aiBox = element('div', 'mk-ai-summary');
-    const waiting = { LOGIN_REQUIRED: '로그인하면 제품·이력 요약을 확인할 수 있어요.', NOT_REQUESTED: '제품 특징 요약을 준비하고 있어요.', QUEUED: '제품 특징 요약을 준비하고 있어요.', PROCESSING: '제품 특징을 정리하고 있어요.', FAILED: 'AI 요약을 준비하지 못했어요.', STALE: '변경된 정보로 요약을 갱신하고 있어요.' };
+    const waiting = { LOGIN_REQUIRED: signedIn ? '요약을 불러오는 중이에요.' : '로그인하면 제품·이력 요약을 확인할 수 있어요.', NOT_REQUESTED: '제품 특징 요약을 준비하고 있어요.', QUEUED: '제품 특징 요약을 준비하고 있어요.', PROCESSING: '제품 특징을 정리하고 있어요.', FAILED: 'AI 요약을 준비하지 못했어요.', STALE: '변경된 정보로 요약을 갱신하고 있어요.' };
     const old = ai.outdated ? (['QUEUED','PROCESSING'].includes(ai.status) ? ' · 갱신 중' : ' · 이전 정보') : '';
     aiBox.append(element('span', 'mk-ai-label', 'AI 핵심 요약' + old));
     const aiText = element('p', 'mk-ai-text', ai.text || waiting[ai.status] || '요약 상태를 확인하고 있어요.');
@@ -135,6 +137,16 @@ document.addEventListener('click', (event) => {
       if (!response.ok) throw new Error(payload?.fieldErrors?.[0]?.message || payload?.message || '판매글을 불러오지 못했어요.');
       if (!payload?.data) throw new Error('판매글 응답을 확인할 수 없어요. 다시 시도해 주세요.');
       if (controller.signal.aborted || !active) return;
+      // 공개 목록은 로그인 쿠키가 만료돼도 401이 아니라 비회원 응답(LOGIN_REQUIRED)을 준다. 로그인 상태인데 이 응답이면
+      // 로그인이 필요한 API로 세션을 갱신한 뒤 한 번만 다시 읽어, 회원에게 "로그인하면 볼 수 있어요"가 보이지 않게 한다.
+      const guestView = signedIn && payload.data.items.some(item => item.aiSummary?.status === 'LOGIN_REQUIRED');
+      if (guestView && !memberRetried) {
+        memberRetried = true;
+        await fetcher('/api/auth/me', { credentials: 'same-origin', cache: 'no-store', signal: controller.signal }).catch(() => null);
+        if (controller.signal.aborted || !active) return;
+        return load(true);
+      }
+      if (!guestView) memberRetried = false;
       page = payload.data.page;
       const focused = document.activeElement?.closest('[data-listing-id]')?.dataset.listingId;
       grid.replaceChildren(...payload.data.items.map(card));
@@ -214,7 +226,7 @@ document.addEventListener('click', (event) => {
       window.history.replaceState(window.history.state, '', url);
     }
   });
-  document.addEventListener('pastport:auth-changed', () => { clearAi(); if (active) load(true); });
+  document.addEventListener('pastport:auth-changed', event => { signedIn = Boolean(event.detail?.signedIn); memberRetried = false; clearAi(); if (active) load(true); });
   document.addEventListener('visibilitychange', () => {
     clearTimeout(summaryTimer);
     if (document.hidden) { request?.abort(); clearAi(); }

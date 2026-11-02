@@ -157,3 +157,12 @@
 /* 현재 MVP는 노트북만 제공한다. 노트북 외 해시태그와 중고거래 카테고리 칩은 준비 중이라 회색으로 표시하고 누르지 못하게 한다. */
 .lpx-find-tags button.is-soon,.lpx-find-tags button.is-soon:hover,.lpx-find-tags button.is-soon:focus-visible{background:#ececee;color:#a6a8ad;cursor:not-allowed}
 .mk-cats .chip-btn.is-soon,.mk-cats .chip-btn.is-soon:hover{background:#f1f1f3;border-color:var(--line);color:#a6a8ad;cursor:not-allowed}
+/* 홈 "방금 올라온 상품" 카드: 사진을 칸 안에 맞춰 보여 주고, 카드 링크가 사진·글 2열 배치를 깨지 않게 한다. (이미지 크기 규칙이 #market에만 있어 홈에서는 원본 크기로 잘려 보였다.) */
+.lp-grid .mk-thumb img{display:block;width:100%;height:100%;object-fit:contain}
+.lp-grid .mk-card-link{display:grid;grid-template-columns:240px minmax(0,1fr);gap:20px;min-width:0;color:inherit;text-decoration:none}
+@media(max-width:780px){.lp-grid .mk-card-link{grid-template-columns:120px minmax(0,1fr);gap:12px}}
+/* 카드 안에 링크 하나만 있으므로 카드는 1열로 두고, 사진·글 2열 배치는 링크가 맡는다. (카드가 2열 그리드면 링크가 사진 칸에 갇혀 글이 세로로 쌓였다.) */
+.lp-grid .mk-card{display:block;min-width:0}
+/* 글이 길면 한 줄에서 ...으로 줄인다. */
+.lp-grid .mk-body{min-width:0;padding-right:0}
+.lp-grid .mk-body h3,.lp-grid .mk-meta,.lp-grid .mk-body .price{display:block;min-width:0;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
