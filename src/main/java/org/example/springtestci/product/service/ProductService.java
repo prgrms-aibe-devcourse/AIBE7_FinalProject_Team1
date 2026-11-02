@@ -25,6 +25,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.Resource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
@@ -89,7 +90,7 @@ public class ProductService {
   }
 
   /** 소유 제품을 페이지 단위로 조회하고 해당 페이지의 이미지를 한 번에 결합한다. */
-  @Transactional(readOnly = true)
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
   public ProductPageResponse listMine(long ownerId, int page, int size) {
     if (page < 0 || size < 1 || size > 100) {
       throw new CommonException(ErrorCode.INVALID_INPUT);

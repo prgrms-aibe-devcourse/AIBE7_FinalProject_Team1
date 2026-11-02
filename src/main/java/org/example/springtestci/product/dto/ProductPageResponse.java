@@ -11,15 +11,15 @@ public record ProductPageResponse(List<ProductResponse> items, PageMetadata page
 
   public static ProductPageResponse of(
       List<ProductResponse> items, int number, int size, long total, long purchased) {
-    int totalPages = total == 0 ? 0 : (int) ((total + size - 1) / size);
+    long totalPages = total == 0 ? 0 : 1L + (total - 1L) / size;
     return new ProductPageResponse(
         items,
-        new PageMetadata(number, size, total, totalPages, number + 1 < totalPages),
+        new PageMetadata(number, size, total, totalPages, (long) number + 1 < totalPages),
         new Summary(total, purchased));
   }
 
   public record PageMetadata(
-      int number, int size, long totalElements, int totalPages, boolean hasNext) {}
+      int number, int size, long totalElements, long totalPages, boolean hasNext) {}
 
   public record Summary(long registered, long purchased) {}
 }

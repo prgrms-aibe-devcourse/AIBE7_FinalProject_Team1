@@ -23,6 +23,7 @@ import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
 import org.example.springtestci.common.storage.FileStorage;
 import org.example.springtestci.product.dto.CreateProductRequest;
+import org.example.springtestci.product.dto.ProductPageResponse;
 import org.example.springtestci.product.dto.ProductResponse;
 import org.example.springtestci.product.dto.UpdateProductImagesRequest;
 import org.example.springtestci.product.dto.UpdateProductRequest;
@@ -145,6 +146,14 @@ class ProductServiceTest {
   void listRejectsAnUnboundedPageSize() {
     assertCode(ErrorCode.INVALID_INPUT, () -> service.listMine(OWNER, 0, 101));
     verify(productRepository, never()).findOwnedPage(anyLong(), anyInt(), anyInt());
+  }
+
+  @Test
+  void pageMetadataKeepsLargePageCountsAsLongWithoutOverflow() {
+    var response = ProductPageResponse.of(List.of(), 0, 100, Long.MAX_VALUE, 0);
+
+    assertEquals(1L + (Long.MAX_VALUE - 1L) / 100, response.page().totalPages());
+    assertEquals(true, response.page().hasNext());
   }
 
   @Test

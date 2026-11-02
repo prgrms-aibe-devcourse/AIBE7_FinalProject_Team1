@@ -74,9 +74,10 @@ class ProductRepositoryTest {
   @Test
   void ownedProductsArePagedInStableOrderAndImagesAreLoadedInOneBatch() {
     long oldest = insert(24L, "APPLE", "fp-page-oldest");
-    long middle = insert(24L, "APPLE", "fp-page-middle");
+    long middle = insert(24L, "APPLE", "fp-page-middle", LocalDate.of(2026, 10, 20));
     long newest = insert(24L, "APPLE", "fp-page-newest");
     repository.insertImage(oldest, "product-images/page-oldest.png", "image/png", 10L);
+    repository.insertImage(middle, "product-images/page-middle.png", "image/png", 30L);
     repository.insertImage(newest, "product-images/page-newest.png", "image/png", 20L);
 
     var firstPage = repository.findOwnedPage(24L, 0, 2);
@@ -88,9 +89,9 @@ class ProductRepositoryTest {
         List.of(newest, middle), firstPage.stream().map(ProductResponse::productId).toList());
     assertEquals(List.of(oldest), secondPage.stream().map(ProductResponse::productId).toList());
     assertEquals(1, images.get(newest).size());
-    assertFalse(images.containsKey(middle));
+    assertEquals(1, images.get(middle).size());
     assertEquals(3L, summary.total());
-    assertEquals(0L, summary.purchased());
+    assertEquals(1L, summary.purchased());
   }
 
   @Test
@@ -200,10 +201,16 @@ class ProductRepositoryTest {
   }
 
   private long insert(long ownerId, String manufacturerNormalized, String fingerprint) {
+    return insert(ownerId, manufacturerNormalized, fingerprint, null);
+  }
+
+  private long insert(
+      long ownerId, String manufacturerNormalized, String fingerprint, LocalDate purchaseDate) {
     CreateProductRequest request =
         request(
             new CreateProductRequest.Specifications(
-                "Apple M3 Pro", null, 18, 512, "SSD", "14인치", 92, "macOS"));
+                "Apple M3 Pro", null, 18, 512, "SSD", "14인치", 92, "macOS"),
+            purchaseDate);
     long productId =
         repository.insertProduct(
             ownerId, request, manufacturerNormalized, fingerprint, "ciphertext");
@@ -213,11 +220,16 @@ class ProductRepositoryTest {
   }
 
   private static CreateProductRequest request(CreateProductRequest.Specifications specs) {
+    return request(specs, null);
+  }
+
+  private static CreateProductRequest request(
+      CreateProductRequest.Specifications specs, LocalDate purchaseDate) {
     return new CreateProductRequest(
         "MacBook Pro 14",
         "Apple",
         "MacBook Pro 14",
-        null,
+        purchaseDate,
         LocalDate.of(2099, 1, 1),
         "구매 후 1년",
         "SERIAL1234",

@@ -478,7 +478,7 @@
     bind();
   }
 
-  // 내 제품 목록을 드롭다운에 채운다. wanted(제품 번호)가 목록에 있으면 선택해 둔다.
+  /** 모든 제품 페이지를 드롭다운에 채우고 wanted 제품이 있으면 선택한다. 실패 여부를 호출자에 돌려준다. */
   async function loadProducts(wanted) {
     const select = find('[data-dm-product]');
     const keep = wanted || select.value;
@@ -491,21 +491,31 @@
     };
     setOptions('제품을 불러오는 중이에요');
     try {
-      const response = await api('/api/v1/products?size=100');
-      if (response.status === 401) {
-        setOptions('로그인 후 제품을 선택할 수 있어요');
-        return;
-      }
-      if (!response.ok) throw new Error('products');
-      const products = (await response.json()).data?.items || [];
+      const products = [];
+      let page = 0;
+      let hasNext;
+      do {
+        const response = await api(`/api/v1/products?page=${page}&size=100`);
+        if (response.status === 401) {
+          setOptions('로그인 후 제품을 선택할 수 있어요');
+          return false;
+        }
+        if (!response.ok) throw new Error('products');
+        const result = (await response.json()).data;
+        products.push(...(result?.items || []));
+        hasNext = result?.page?.hasNext === true;
+        page += 1;
+      } while (hasNext);
       if (products.length === 0) {
         setOptions('등록된 제품이 없어요. 제품을 먼저 등록해 주세요');
-        return;
+        return true;
       }
       setOptions('증빙을 연결할 제품을 선택해 주세요', products);
       if (keep && products.some((product) => String(product.productId) === String(keep))) select.value = String(keep);
+      return true;
     } catch (error) {
       setOptions('제품 목록을 불러오지 못했어요. 화면을 다시 열어 주세요');
+      return false;
     }
   }
 
@@ -516,14 +526,16 @@
     if (button) pendingProductId = button.dataset.docmaskProductId;
   }, true);
 
+  /** 제품 목록 로딩 성공 뒤에만 등록 화면에서 인계한 제품·원본을 소비한다. */
   async function enterPendingDocument() {
     if (!root) return;
     const version = ++entryVersion;
     const productId = pendingProductId || new URLSearchParams(window.location.search).get('productId');
     const file = pendingFile;
     find('[data-dm-to-passport]').hidden = !productId;
-    await loadProducts(productId);
+    const loaded = await loadProducts(productId);
     if (version !== entryVersion || !root.classList.contains('active')) return;
+    if (!loaded) return;
     pendingProductId = null;
     pendingFile = null;
     if (file) await open(file);
