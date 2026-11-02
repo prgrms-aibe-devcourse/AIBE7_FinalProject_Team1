@@ -88,15 +88,20 @@
         if (!valid()) return;
         busy = false;
         if (append) render(); else root.replaceChildren();
-        const message = document.createElement('p');
+        // 빈 목록과 같은 카드 모양(.dl-empty)으로 보여 주어 화면이 한결같게 한다.
+        const box = document.createElement('div'); box.className = 'dl-empty';
+        const message = document.createElement('b');
         message.setAttribute('role', 'status');
         message.textContent = error.status === 401 ? '로그인이 필요한 서비스입니다.' : '대화방 목록을 불러오지 못했습니다.';
+        const hint = document.createElement('p');
+        hint.textContent = error.status === 401 ? '로그인하면 판매자·구매자와 나눈 채팅을 볼 수 있어요.' : '잠시 후 다시 시도해 주세요.';
         const retry = document.createElement('button');
-        retry.type = 'button'; retry.className = 'sc-btn';
+        retry.type = 'button'; retry.className = 'sc-btn primary';
         retry.textContent = error.status === 401 ? '로그인하기' : '다시 시도';
         if (error.status === 401) retry.dataset.page = 'auth';
         else retry.addEventListener('click', () => load(append));
-        root.append(message, retry);
+        box.append(message, hint, retry);
+        root.append(box);
       }
     }
     return {

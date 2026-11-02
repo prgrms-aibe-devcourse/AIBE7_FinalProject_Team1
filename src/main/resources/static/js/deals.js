@@ -62,7 +62,7 @@
       if (!isCurrent()) return false;
       currentUserId = userId;
       if (!currentUserId) {
-        container.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--muted)"><p style="margin-bottom:8px">로그인이 필요한 서비스입니다.</p><button type="button" class="sc-btn primary sm" data-page="auth">로그인하기</button></div>';
+        container.innerHTML = '<div class="dl-empty"><b>로그인이 필요한 서비스입니다.</b><p>로그인하면 판매자·구매자와 나눈 채팅을 볼 수 있어요.</p><button type="button" class="sc-btn primary" data-page="auth">로그인하기</button></div>';
         return false;
       }
       find('[data-deals-scope]').textContent = entry ? (entry.listingTitle || '이 판매글') + ' · 채팅' : '전체 채팅';
@@ -75,7 +75,7 @@
       return true;
     } catch (e) {
       if (!isCurrent() || e.name === 'AbortError') return false;
-      container.innerHTML = '<p class="sub" style="padding:20px;text-align:center;color:var(--muted)">대화방 목록을 불러오지 못했습니다.</p>';
+      container.innerHTML = '<div class="dl-empty"><b>대화방 목록을 불러오지 못했습니다.</b><p>잠시 후 다시 시도해 주세요.</p></div>';
       return false;
     }
   }
