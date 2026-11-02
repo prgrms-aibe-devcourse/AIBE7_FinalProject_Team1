@@ -282,13 +282,13 @@
       }
       state.products = [];
       form.reset();
-      navigate('home');
+      navigate('passport');
     } catch (error) {
       if (error.status === 401) return showFormMessage(form, '로그인이 필요합니다. 로그인 후 다시 시도해 주세요.');
       showFormMessage(form, error.fieldErrors?.[0]?.message || error.message);
     } finally {
       submit.disabled = false;
-      submit.textContent = '등록하고 내 제품 보기';
+      submit.textContent = '제품 등록';
     }
   };
 
