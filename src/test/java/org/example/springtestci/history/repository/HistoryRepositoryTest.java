@@ -66,10 +66,31 @@ class HistoryRepositoryTest {
         "{\"title\":\"수정\"}",
         "제목 오기 수정",
         "HISTORY_CORRECTED");
+    historyRepository.insertAudit(
+        productId,
+        101L,
+        eventId,
+        "{\"title\":\"수정\"}",
+        "{\"title\":\"수정\"}",
+        "중복 기록 무효화",
+        "HISTORY_VOIDED");
+    jdbc.update(
+        "UPDATE audit_logs SET created_at = ? WHERE event_id = ? AND action = 'HISTORY_CORRECTED'",
+        OffsetDateTime.parse("2026-10-20T03:00:00Z"),
+        eventId);
+    jdbc.update(
+        "UPDATE audit_logs SET created_at = ? WHERE event_id = ? AND action = 'HISTORY_VOIDED'",
+        OffsetDateTime.parse("2026-10-20T01:00:00Z"),
+        eventId);
 
     assertEquals(eventId, historyRepository.findTimeline(productId).get(0).eventId());
     assertEquals(List.of(documentId), historyRepository.findDocumentIds(productId).get(eventId));
-    assertEquals("제목 오기 수정", historyRepository.findLatestChanges(productId).get(eventId).reason());
+    assertEquals("중복 기록 무효화", historyRepository.findLatestChanges(productId).get(eventId).reason());
+    assertEquals(
+        List.of("제목 오기 수정", "중복 기록 무효화"),
+        historyRepository.findChanges(productId).get(eventId).stream()
+            .map(HistoryRepository.HistoryChangeRecord::reason)
+            .toList());
     assertNotNull(
         jdbc.queryForObject(
             "SELECT protected_at FROM documents WHERE id = ?", Object.class, documentId));

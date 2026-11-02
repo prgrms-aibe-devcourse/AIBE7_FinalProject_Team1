@@ -315,6 +315,7 @@ public class HistoryRepository {
     return result;
   }
 
+  /** 감사 로그의 삽입 순서를 기준으로 이벤트별 마지막 정정·무효 기록을 반환한다. */
   public Map<Long, HistoryChangeRecord> findLatestChanges(long productId) {
     Map<Long, HistoryChangeRecord> result = new LinkedHashMap<>();
     jdbc.query(
@@ -322,7 +323,7 @@ public class HistoryRepository {
         SELECT event_id, action, reason, created_at
           FROM audit_logs
          WHERE product_id = ? AND event_id IS NOT NULL
-         ORDER BY event_id, created_at, id
+         ORDER BY event_id, id
         """,
         (org.springframework.jdbc.core.RowCallbackHandler)
             row ->
@@ -332,6 +333,30 @@ public class HistoryRepository {
                         row.getString("action"),
                         row.getString("reason"),
                         row.getObject("created_at", OffsetDateTime.class))),
+        productId);
+    return result;
+  }
+
+  /** 타임라인에서 정정 후 무효 처리까지 빠짐없이 표시할 수 있도록 변경 기록을 발생 순서대로 묶는다. */
+  public Map<Long, List<HistoryChangeRecord>> findChanges(long productId) {
+    Map<Long, List<HistoryChangeRecord>> result = new LinkedHashMap<>();
+    jdbc.query(
+        """
+        SELECT event_id, action, reason, created_at
+          FROM audit_logs
+         WHERE product_id = ? AND event_id IS NOT NULL
+         ORDER BY event_id, id
+        """,
+        (org.springframework.jdbc.core.RowCallbackHandler)
+            row ->
+                result
+                    .computeIfAbsent(
+                        row.getLong("event_id"), ignored -> new java.util.ArrayList<>())
+                    .add(
+                        new HistoryChangeRecord(
+                            row.getString("action"),
+                            row.getString("reason"),
+                            row.getObject("created_at", OffsetDateTime.class))),
         productId);
     return result;
   }
