@@ -5,6 +5,13 @@
 
   const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
   const LANGUAGES = ['kor', 'eng'];
+  const PREP_MIN_SIDE = 1600;
+  const PREP_MAX_FACTOR = 3;
+  const FALLBACK_MIN_WORDS = 20;
+  // 이름 라벨 없이 이메일 바로 위 줄에 적히는 이름(예: 영수증 상단 "문 정원"). 한글 2~4자, 글자 사이 공백은 허용한다.
+  const BARE_NAME = /^[가-힣](?:\s?[가-힣]){1,3}$/;
+  // 사업자등록번호(000-00-00000)는 개인정보가 아니라 상점 정보라서 계좌번호로 오탐하지 않는다.
+  const BUSINESS_NO = /^\d{3}-\d{2}-\d{5}$/;
 
   // OCR이 한글을 글자 단위로 끊어 읽는 경우가 있어서 라벨은 글자 사이 공백을 허용한다. 예: "주 문 번호"
   const label = (words) => '(?:' + words.map((word) => Array.from(word).join('\\s*')).join('|') + ')';
@@ -13,6 +20,7 @@
   const CITY_SUFFIX = label(['특별시', '광역시', '특별자치시', '특별자치도', '도']);
   const NAME_LABEL = label(['성명', '이름', '고객명', '구매자', '주문자', '수령인', '받는분', '예금주']);
   const ID_LABEL = label(['주문번호', '승인번호', '결제번호', '송장번호', '운송장번호', '거래번호']);
+  const SERIAL_LABEL = '(?:' + label(['일련번호', '시리얼번호', '시리얼']) + '|serial\\s*(?:no\\.?|number)?|s\\/n)';
   const DATE_LIKE = /^(?:19|20)\d{2}-\d{1,2}-\d{1,2}$/;
 
   // group은 가릴 부분이 정규식의 몇 번째 묶음인지(0이면 일치한 전체). accept가 false를 돌려주면 건너뛴다.
@@ -24,9 +32,11 @@
     {
       kind: '계좌번호',
       pattern: /\d{2,6}-\d{2,6}-\d{2,8}(?:-\d{1,4})?/dg,
-      accept: (text) => !DATE_LIKE.test(text) && text.replace(/\D/g, '').length >= 10,
+      accept: (text) => !DATE_LIKE.test(text) && !BUSINESS_NO.test(text) && text.replace(/\D/g, '').length >= 10,
     },
     { kind: '주문번호', pattern: new RegExp(`${ID_LABEL}\\s*[:：]?\\s*([A-Za-z0-9-]{6,})`, 'dg'), group: 1 },
+    // 제품 일련번호는 기기를 특정하므로 반드시 가린다. 값에 숫자가 하나도 없으면 라벨 뒤의 일반 단어(예: "number")이므로 건너뛴다.
+    { kind: '일련번호', pattern: new RegExp(`${SERIAL_LABEL}\\s*[:：]?\\s*([A-Za-z0-9-]{6,})`, 'dgi'), group: 1, accept: (text) => /\d/.test(text) },
     // 표 영수증은 이름 칸 바로 옆에 다른 라벨(상호 등)이 붙어 있어서, 글자 사이 간격이 좁은 글자만 한 단어로 이어 붙여 이름으로 본다.
     // 라벨과 값 사이의 표 테두리가 "|", "ㅣ"로 읽혀 끼어들 수 있어 구분 문자로 함께 허용한다.
     { kind: '이름', pattern: new RegExp(`${NAME_LABEL}[\\s:：|ㅣ]*([가-힣]{2,4})(?![가-힣])`, 'dg'), group: 1 },
@@ -40,6 +50,7 @@
   // lines: [{ words: [{ text, x0, y0, x1, y1 }] }] → 가릴 영역 [{ x, y, w, h, kind }]
   function findPiiBoxes(lines) {
     const boxes = [];
+    let previous = null;
     for (const line of lines) {
       const words = (line.words || []).filter((word) => word.text && word.text.trim()).sort((a, b) => a.x0 - b.x0);
       if (!words.length) continue;
@@ -50,6 +61,7 @@
         text += word.text.trim();
         return { word, start, end: text.length };
       });
+      let hasEmail = false;
       for (const rule of RULES) {
         for (const match of text.matchAll(rule.pattern)) {
           const group = rule.group || 0;
@@ -59,8 +71,14 @@
           const hit = spans.filter((span) => span.start < to && span.end > from).map((span) => span.word);
           if (!hit.length) continue;
           boxes.push(union(hit, rule.kind));
+          if (rule.kind === '이메일') hasEmail = true;
         }
       }
+      // 이메일 바로 위 줄에 라벨 없이 적힌 이름은 구매자 이름으로 본다. 윗줄이 한글 2~4자뿐일 때만 가리고, 줄 간격이 벌어지면 건너뛴다.
+      if (hasEmail && previous && BARE_NAME.test(previous.text) && Math.min(...words.map((w) => w.y0)) - previous.bottom < previous.height * 1.5) {
+        boxes.push(union(previous.words, '이름'));
+      }
+      previous = { text, words, bottom: Math.max(...words.map((w) => w.y1)), height: Math.max(...words.map((w) => w.y1 - w.y0)) };
     }
     return boxes.filter((box, index) => !boxes.some((other, otherIndex) => otherIndex !== index && covers(other, box, otherIndex < index)));
   }
@@ -135,22 +153,71 @@
         if (onProgress && message.status === 'recognizing text') onProgress(message.progress);
       },
     });
+    const prepared = prepare(canvas);
     try {
-      // 표가 있는 영수증은 기본 분할 모드에서 이름·주소 칸의 단어가 통째로 빠지는 일이 있어, 페이지 전체를 자동 분할(3)로 읽는다.
-      await worker.setParameters({ tessedit_pageseg_mode: '3' });
-      const { data } = await worker.recognize(canvas);
-      const words = (data.words || []).map((word) => ({
-        text: word.text,
-        x0: word.bbox.x0,
-        y0: word.bbox.y0,
-        x1: word.bbox.x1,
-        y1: word.bbox.y1,
-      }));
-      return findPiiBoxes(groupLines(words));
+      const boxes = await recognizeAll(worker, prepared.canvas);
+      // 키운 이미지 위에서 찾은 좌표를 원본 크기로 되돌린다.
+      const k = prepared.factor;
+      return boxes.map((box) => ({ ...box, x: box.x / k, y: box.y / k, w: box.w / k, h: box.h / k }));
     } finally {
+      if (prepared.canvas !== canvas) {
+        prepared.canvas.width = 0;
+        prepared.canvas.height = 0;
+      }
       await worker.terminate();
     }
   }
 
-  window.PastportDocMaskAuto = { detect, findPiiBoxes, groupLines };
+  // 작은 사진은 글자가 너무 작아 OCR이 놓치므로 긴 변이 PREP_MIN_SIDE가 되도록 키우고(최대 3배), 흑백·대비를 높여 그림자의 영향을 줄인다.
+  // ctx.filter를 지원하지 않는 브라우저에서는 확대만 적용된다.
+  function prepare(canvas) {
+    const factor = Math.max(1, Math.min(PREP_MAX_FACTOR, PREP_MIN_SIDE / Math.max(canvas.width, canvas.height)));
+    const out = document.createElement('canvas');
+    out.width = Math.round(canvas.width * factor);
+    out.height = Math.round(canvas.height * factor);
+    const ctx = out.getContext('2d');
+    ctx.filter = 'grayscale(1) contrast(1.3)';
+    ctx.drawImage(canvas, 0, 0, out.width, out.height);
+    return { canvas: out, factor };
+  }
+
+  // 표 영수증은 자동 분할(3)이 잘 맞고, 기울어지거나 그림자가 진 사진은 3에서 글자를 거의 못 찾는다. 3으로 읽은 결과가 빈약하거나
+  // 가릴 곳이 하나도 없으면 한 덩어리 글(6)로 다시 읽고, 두 결과를 합친다.
+  async function recognizeAll(worker, canvas) {
+    const first = await readWords(worker, canvas, '3');
+    const boxes = findPiiBoxes(groupLines(first));
+    if (first.length >= FALLBACK_MIN_WORDS && boxes.length) return boxes;
+    const second = findPiiBoxes(groupLines(await readWords(worker, canvas, '6')));
+    return mergeBoxes(boxes, second);
+  }
+
+  async function readWords(worker, canvas, mode) {
+    await worker.setParameters({ tessedit_pageseg_mode: mode });
+    const { data } = await worker.recognize(canvas);
+    return (data.words || []).map((word) => ({
+      text: word.text,
+      x0: word.bbox.x0,
+      y0: word.bbox.y0,
+      x1: word.bbox.x1,
+      y1: word.bbox.y1,
+    }));
+  }
+
+  // 두 번째 결과 중 이미 가려진 곳과 절반 넘게 겹치는 상자는 버리고 나머지만 더한다.
+  function mergeBoxes(base, extra) {
+    const merged = [...base];
+    for (const box of extra) {
+      if (!merged.some((other) => overlapRatio(other, box) > 0.5)) merged.push(box);
+    }
+    return merged;
+  }
+
+  function overlapRatio(a, b) {
+    const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+    const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+    if (w <= 0 || h <= 0) return 0;
+    return (w * h) / Math.min(a.w * a.h, b.w * b.h);
+  }
+
+  window.PastportDocMaskAuto = { detect, findPiiBoxes, groupLines, recognizeAll, mergeBoxes };
 })();
