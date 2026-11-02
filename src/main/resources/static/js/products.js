@@ -119,6 +119,9 @@
   };
 
   const specItem = (label, value, suffix = '') => `<div class="product-spec-item"><span>${label}</span><b>${text(value)}${value == null || value === '' ? '' : escapeHtml(suffix)}</b></div>`;
+  const galleryImage = (image, product, index) => image
+    ? `<img data-product-gallery-main data-protected-image="${escapeHtml(image.url)}" data-image-id="${image.imageId}" data-image-index="${index}" alt="${escapeHtml(product.title)} 제품 이미지 ${index + 1}">`
+    : '<div class="product-gallery-empty"><div class="laptop" aria-hidden="true"></div><p>등록된 제품 이미지가 없습니다.</p></div>';
   const editForm = (product) => {
     return `<form class="product-edit-form" data-product-edit-form hidden novalidate>
       <div class="product-edit-heading"><div><h2>제품 정보 수정</h2><p>제품명과 구매·보증 정보를 수정하면 변경 기록이 남습니다.</p></div><button type="button" data-product-edit-cancel aria-label="수정 닫기">×</button></div>
@@ -141,35 +144,43 @@
     const specs = product.specifications || {};
     const images = product.images || [];
     const firstImage = images.find((image) => image.primary) || images[0];
+    const firstImageIndex = Math.max(0, images.indexOf(firstImage));
+    const warrantyLabel = { ACTIVE: '보증 중', EXPIRED: '보증 만료', UNKNOWN: '미확인' }[product.warrantyStatus] || '미확인';
     container.innerHTML = `
       <div class="product-detail-hero">
-        <div class="product-gallery-wrap"><div class="product-gallery">${firstImage
-          ? `<img data-product-gallery-main data-protected-image="${escapeHtml(firstImage.url)}" alt="${escapeHtml(product.title)} 제품 이미지 1">`
-          : '<div class="product-gallery-empty"><div class="laptop" aria-hidden="true"></div></div>'}</div>
+        <div class="product-gallery-wrap"><div class="product-gallery">${galleryImage(firstImage, product, firstImageIndex)}
+          <div class="product-gallery-actions" aria-label="제품 이미지 관리">
+            <label class="product-icon-button" for="product-detail-images" title="이미지 추가 또는 변경" aria-label="이미지 추가 또는 변경">✎</label>
+            ${firstImage ? `<button class="product-icon-button" type="button" data-image-primary data-image-id="${firstImage.imageId}" title="대표 이미지로 지정" aria-label="대표 이미지로 지정" ${firstImage.primary ? 'disabled' : ''}>★</button><button class="product-icon-button danger" type="button" data-image-delete data-image-id="${firstImage.imageId}" title="이미지 삭제" aria-label="이미지 삭제">⌫</button>` : ''}
+          </div>
+          <input id="product-detail-images" class="sr-only" type="file" accept="image/jpeg,image/png,image/webp" multiple data-product-detail-images>
+        </div>
           ${images.length > 1 ? `<div class="product-thumbnails" aria-label="제품 이미지 선택">${images.map((image, index) => `<button type="button" data-product-thumbnail data-image-index="${index}" aria-label="${index + 1}번째 이미지" aria-pressed="${image.imageId === firstImage.imageId}"><img data-protected-image="${escapeHtml(image.url)}" alt=""></button>`).join('')}</div>` : ''}</div>
         <section class="product-detail-card">
           <div class="product-detail-top"><span class="eyebrow">PRODUCT PASSPORT · 내 제품</span><button class="button" type="button" data-product-edit-open>정보 수정</button></div>
           <h1>${escapeHtml(product.title)}</h1><p class="product-model">${escapeHtml(product.manufacturer)} · ${escapeHtml(product.modelName)}</p>
-          <div class="product-facts">
-            <div class="product-fact"><span>구매일</span><b>${date(product.purchaseDate)}</b></div>
-            <div class="product-fact"><span>보증 만료일</span><b>${date(product.warrantyExpiresAt)}</b></div>
-            <div class="product-fact"><span>보증 상태</span><b>${text({ ACTIVE: '보증 중', EXPIRED: '보증 만료', UNKNOWN: '미확인' }[product.warrantyStatus])}</b></div>
-            <div class="product-fact"><span>보증 조건</span><b>${text(product.warrantyTerms)}</b></div>
-            <div class="product-fact"><span>시리얼 번호</span><b>${text(product.serialNumber)}</b></div>
-            <div class="product-fact"><span>제품 정보 버전</span><b>v${escapeHtml(product.factsVersion)}</b></div>
-            <div class="product-fact"><span>등록일</span><b>${dateTime(product.createdAt)}</b></div>
-            <div class="product-fact"><span>등록 이미지</span><b>${product.images?.length || 0}장</b></div>
+          <div class="product-passport-summary">
+            <span class="product-warranty-badge" data-status="${escapeHtml(product.warrantyStatus || 'UNKNOWN')}">${escapeHtml(warrantyLabel)}</span>
+            <p>제품 정보 v${escapeHtml(product.factsVersion)} · 이미지 ${images.length}장</p>
           </div>
-          <button class="button primary" type="button" data-page="docmask" data-docmask-product-id="${escapeHtml(product.productId)}">증빙 문서 올리기</button>
         </section>
       </div>
-      <section class="product-spec-card"><h2>노트북 사양</h2><div class="product-spec-list">
+      <section class="product-overview-card">
+        <div class="product-section-heading"><div><span>PRODUCT INFO</span><h2>구매·보증 정보</h2></div><p>제품의 주요 일정을 한눈에 확인하세요.</p></div>
+        <div class="product-overview-grid">
+          <div class="product-overview-item"><span>구매일</span><b>${date(product.purchaseDate)}</b></div>
+          <div class="product-overview-item"><span>보증 만료일</span><b>${date(product.warrantyExpiresAt)}</b></div>
+          <div class="product-overview-item"><span>보증 상태</span><b>${escapeHtml(warrantyLabel)}</b></div>
+          <div class="product-overview-item"><span>보증 조건</span><b>${text(product.warrantyTerms)}</b></div>
+          <div class="product-overview-item"><span>등록일</span><b>${dateTime(product.createdAt)}</b></div>
+        </div>
+      </section>
+      <section class="product-spec-card"><div class="product-section-heading"><div><span>SPECIFICATIONS</span><h2>노트북 상세 사양</h2></div><p>현재 등록된 하드웨어와 시스템 정보입니다.</p></div><div class="product-spec-list">
         ${specItem('CPU', specs.cpu)}${specItem('GPU', specs.gpu)}${specItem('RAM', specs.ramGb, 'GB')}${specItem('저장 용량', specs.storageGb, `GB ${specs.storageType || ''}`)}
         ${specItem('디스플레이', specs.display)}${specItem('배터리 상태', specs.batteryHealthPercent, '%')}${specItem('운영체제', specs.os)}${specItem('저장 방식', specs.storageType)}
       </div></section>
       ${editForm(product)}
-      ${images.length ? `<section class="product-image-manager"><h2>제품 이미지 관리</h2>${images.map((image, index) => `<div class="product-image-row"><span>${index + 1}번 이미지 ${image.primary ? '· 대표' : ''}</span><div><button class="button" type="button" data-image-move="up" data-image-id="${image.imageId}" ${index === 0 ? 'disabled' : ''}>앞으로</button><button class="button" type="button" data-image-move="down" data-image-id="${image.imageId}" ${index === images.length - 1 ? 'disabled' : ''}>뒤로</button><button class="button" type="button" data-image-primary data-image-id="${image.imageId}" ${image.primary ? 'disabled' : ''}>대표 지정</button><button class="button danger" type="button" data-image-delete data-image-id="${image.imageId}">삭제</button></div></div>`).join('')}</section>` : ''}
-      <section class="product-detail-upload"><div><h2>제품 이미지 추가</h2><p>JPG, PNG, WEBP · 장당 최대 5MB · 제품당 최대 10장</p></div><label class="button primary" for="product-detail-images">＋ 이미지 추가</label><input id="product-detail-images" type="file" accept="image/jpeg,image/png,image/webp" multiple data-product-detail-images></section>`;
+      <section class="product-transfer-action"><div><span>EXTERNAL TRANSFER</span><h2>외부 소유권 이전</h2><p>서비스 밖에서 거래한 제품도 기록과 함께 안전하게 이전할 수 있어요.</p></div><button class="button" type="button" data-page="trade">소유권 이전 시작하기 →</button></section>`;
     hydrateImages(container);
   };
 
@@ -271,13 +282,13 @@
       }
       state.products = [];
       form.reset();
-      navigate('passport');
+      navigate('home');
     } catch (error) {
       if (error.status === 401) return showFormMessage(form, '로그인이 필요합니다. 로그인 후 다시 시도해 주세요.');
       showFormMessage(form, error.fieldErrors?.[0]?.message || error.message);
     } finally {
       submit.disabled = false;
-      submit.textContent = '제품 등록';
+      submit.textContent = '등록하고 내 제품 보기';
     }
   };
 
@@ -362,9 +373,19 @@
     }
     const thumbnail = event.target.closest?.('[data-product-thumbnail]');
     if (thumbnail) {
+      const imageIndex = Number(thumbnail.dataset.imageIndex);
+      const selectedImage = state.current?.images?.[imageIndex];
       const source = thumbnail.querySelector('img')?.src;
       const main = document.querySelector('[data-product-gallery-main]');
-      if (source && main) main.src = source;
+      if (source && main && selectedImage) {
+        main.src = source;
+        main.dataset.imageId = selectedImage.imageId;
+        main.dataset.imageIndex = imageIndex;
+        const primary = document.querySelector('.product-gallery-actions [data-image-primary]');
+        const remove = document.querySelector('.product-gallery-actions [data-image-delete]');
+        if (primary) { primary.dataset.imageId = selectedImage.imageId; primary.disabled = Boolean(selectedImage.primary); }
+        if (remove) remove.dataset.imageId = selectedImage.imageId;
+      }
       document.querySelectorAll('[data-product-thumbnail]').forEach((item) => item.setAttribute('aria-pressed', String(item === thumbnail)));
     }
   }, true);

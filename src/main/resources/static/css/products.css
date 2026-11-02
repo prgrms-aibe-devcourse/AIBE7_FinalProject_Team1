@@ -4,3 +4,54 @@
 .product-register{max-width:1040px;margin:0 auto}.product-register .register-bar button{color:#777a81}.product-register .register-body{padding:28px}.product-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.product-register .form-card{padding:20px}.product-card-heading{display:flex;gap:10px;align-items:flex-start;margin-bottom:18px}.product-card-heading h3{margin:0 0 4px;font-size:15px}.product-card-heading p,.product-help{margin:0;color:#868990;font-size:11px;line-height:1.55}.product-step{display:grid;place-items:center;flex:0 0 24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:800}.product-register .field{margin:12px 0}.product-register .field label{margin-bottom:6px;font-size:11px;font-weight:700;color:#62656b}.product-register .field label b{color:#d85c5c}.product-register .field input,.product-register .field select{width:100%;height:38px;padding:0 11px;border:1px solid #d8dee5;border-radius:6px;background:#fff;color:var(--ink);font:inherit;font-size:12px}.product-register .field input:focus,.product-register .field select:focus{outline:2px solid var(--blue);outline-offset:1px;border-color:transparent}.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.product-spec-row{grid-template-columns:1fr 1fr 1fr}.product-image-field{display:grid;grid-template-columns:1fr auto;gap:8px 14px;align-items:center;margin-top:14px;padding:18px 20px;border:1px solid var(--line);border-radius:7px;background:#fafbfc}.product-image-field strong{font-size:13px}.product-image-field p{margin:5px 0 0;color:#888b91;font-size:10px}.product-image-field input{position:absolute;width:1px;height:1px;opacity:0}.product-image-field>span{grid-column:1/3;color:#777a81;font-size:10px}.product-form-message{margin-top:14px;padding:11px 13px;border-radius:6px;background:#fff1f1;color:#a94040;font-size:11px}.product-form-message[data-kind="success"]{background:#edf8f4;color:var(--blue)}.product-form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.product-form-actions .button{min-width:88px}.button:disabled{cursor:not-allowed;opacity:.55}
 .product-detail-shell{max-width:1040px;margin:0 auto}.product-back{margin-bottom:14px;color:#6c7077;font-size:12px}.product-detail-hero{display:grid;grid-template-columns:minmax(260px,.85fr) 1.15fr;gap:18px}.product-gallery,.product-detail-card{border:1px solid var(--line);border-radius:9px;background:#fff}.product-gallery{min-height:320px;display:grid;place-items:center;overflow:hidden;background:#f1f4f5}.product-gallery img{display:block;width:100%;height:100%;max-height:430px;object-fit:cover}.product-gallery-empty{width:150px}.product-gallery-empty .laptop{height:92px}.product-thumbnails{display:flex;gap:8px;margin-top:9px;overflow-x:auto;padding-bottom:2px}.product-thumbnails button{flex:0 0 66px;height:52px;padding:2px;border:2px solid transparent;border-radius:7px;background:#fff;overflow:hidden}.product-thumbnails button[aria-pressed="true"]{border-color:var(--blue)}.product-thumbnails img{width:100%;height:100%;border-radius:4px;object-fit:cover}.product-detail-card{padding:26px}.product-detail-top{display:flex;align-items:center;justify-content:space-between;gap:12px}.product-detail-top .button{padding:7px 11px;font-size:10px}.product-detail-card .eyebrow{font-size:10px}.product-detail-card h1{margin:7px 0 4px;font-size:25px;letter-spacing:-1px}.product-model{margin:0;color:#777a81;font-size:13px}.product-facts{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:22px}.product-fact{padding:12px;border-radius:6px;background:#f7f9fa}.product-fact span{display:block;margin-bottom:5px;color:#93969c;font-size:10px}.product-fact b{font-size:12px}.product-spec-card{margin-top:16px;padding:22px;border:1px solid var(--line);border-radius:9px;background:#fff}.product-spec-card h2{margin:0 0 15px;font-size:16px}.product-spec-list{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:7px;overflow:hidden}.product-spec-item{min-height:72px;padding:14px;background:#fff}.product-spec-item span{display:block;margin-bottom:7px;color:#92959b;font-size:10px}.product-spec-item b{font-size:12px}.product-edit-form{margin-top:16px;padding:22px;border:1px solid var(--line);border-radius:9px;background:#fff}.product-edit-form[hidden]{display:none}.product-edit-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:13px}.product-edit-heading h2{margin:0 0 4px;font-size:16px}.product-edit-heading p{margin:0;color:#888b91;font-size:10px}.product-edit-heading>button{padding:0 5px;color:#777a81;font-size:22px;line-height:1}.product-edit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0 10px}.product-edit-form .field{margin:8px 0}.product-edit-form .field label{display:block;margin-bottom:6px;color:#62656b;font-size:11px;font-weight:700}.product-edit-form .field label b{color:#d85c5c}.product-edit-form .field input,.product-edit-form .field select{width:100%;height:38px;padding:0 11px;border:1px solid #d8dee5;border-radius:6px;background:#fff;color:var(--ink);font:inherit;font-size:12px}.product-edit-form .field input:focus,.product-edit-form .field select:focus{outline:2px solid var(--blue);outline-offset:1px;border-color:transparent}.product-detail-upload{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-top:16px;padding:18px 20px;border:1px solid var(--line);border-radius:9px;background:#fff}.product-detail-upload h2{margin:0 0 5px;font-size:14px}.product-detail-upload p{margin:0;color:#888b91;font-size:10px}.product-detail-upload input{display:none}.product-toast{position:fixed;right:22px;bottom:22px;z-index:100;padding:12px 16px;border-radius:7px;background:#202329;color:#fff;box-shadow:0 8px 24px rgba(0,0,0,.18);font-size:12px}.product-toast.error{background:#a94040}
 @media(max-width:780px){.product-list .product{grid-template-columns:64px minmax(0,1fr)}.product-list .product-action{grid-column:1/3}.product-list .product-action button{width:100%}.product-search .search{width:155px}.product-form-grid,.product-detail-hero{grid-template-columns:1fr}.field-row,.product-spec-row,.product-edit-grid{grid-template-columns:1fr}.product-register .register-body{padding:20px 15px}.product-spec-list{grid-template-columns:1fr 1fr}.product-detail-upload{align-items:flex-start;flex-direction:column}.product-detail-upload .button{width:100%;text-align:center}}
+
+/* 제품 등록은 기본 정보 안에서 사진을 먼저 고를 수 있게 하고 입력 밀도를 낮춘다. */
+.product-form-grid{align-items:start}
+.product-card-heading{margin-bottom:14px}
+.product-register .field{margin:9px 0}
+.product-register .product-image-field{margin-top:15px;padding:16px;border-style:dashed;border-color:#9fc9bf;border-radius:8px;background:#f5faf8}
+.product-register .product-image-field p{color:#73777c;line-height:1.5}
+.product-register .product-image-field .button{border-color:#9fc9bf;color:var(--blue)}
+
+/* 제품 사진 위의 아이콘으로 추가·대표 지정·삭제를 처리한다. */
+.product-gallery{position:relative;border-radius:11px}
+.product-gallery-empty{width:180px;text-align:center;color:#85898f;font-size:11px}
+.product-gallery-actions{position:absolute;top:12px;right:12px;display:flex;gap:6px;padding:5px;border:1px solid rgba(255,255,255,.8);border-radius:9px;background:rgba(255,255,255,.9);box-shadow:0 4px 16px rgba(24,33,31,.12);backdrop-filter:blur(6px)}
+.product-icon-button{display:grid;place-items:center;width:31px;height:31px;padding:0;border-radius:6px;background:#fff;color:#4d5553;font-size:15px;font-weight:700;cursor:pointer}
+.product-icon-button:hover{background:#edf7f4;color:var(--blue)}
+.product-icon-button.danger{color:#b34b4b}
+.product-icon-button:disabled{color:#fff;background:var(--blue);opacity:1}
+
+/* 구매·보증 일정과 상세 사양을 분리해 빠르게 훑을 수 있게 한다. */
+.product-detail-hero{grid-template-columns:minmax(280px,.9fr) 1.1fr}
+.product-detail-card{display:flex;min-height:320px;flex-direction:column;padding:28px;border-radius:11px}
+.product-detail-card h1{margin:42px 0 7px;font-size:28px}
+.product-passport-summary{display:flex;align-items:center;gap:10px;margin-top:auto;padding-top:22px;border-top:1px solid var(--line)}
+.product-passport-summary p{margin:0;color:#85898f;font-size:11px}
+.product-warranty-badge{padding:6px 9px;border-radius:99px;background:#eef2f3;color:#676d70;font-size:10px;font-weight:700}
+.product-warranty-badge[data-status="ACTIVE"]{background:#e5f5ee;color:#197554}
+.product-warranty-badge[data-status="EXPIRED"]{background:#fff0eb;color:#a85036}
+.product-overview-card,.product-spec-card{margin-top:16px;padding:22px;border:1px solid var(--line);border-radius:11px;background:#fff}
+.product-section-heading{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:16px}
+.product-section-heading span,.product-transfer-action span{display:block;margin-bottom:4px;color:var(--blue);font-size:9px;font-weight:800;letter-spacing:1px}
+.product-section-heading h2,.product-transfer-action h2{margin:0;font-size:16px}
+.product-section-heading p{margin:0;color:#8d9196;font-size:10px}
+.product-overview-grid{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.product-overview-item{min-height:78px;padding:15px;border-left:1px solid var(--line);background:#fbfcfc}
+.product-overview-item:first-child{border-left:0}
+.product-overview-item span{display:block;margin-bottom:8px;color:#92959b;font-size:10px}
+.product-overview-item b{font-size:12px}
+.product-spec-list{border-radius:8px}
+.product-spec-item{min-height:76px;padding:15px}
+
+/* 외부 소유권 이전은 제품 정보와 이력을 모두 확인한 뒤 만나는 마지막 동작이다. */
+.product-transfer-action{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-top:18px;padding:22px;border:1px solid #dce5e2;border-radius:11px;background:#f6faf9}
+.product-transfer-action p{margin:6px 0 0;color:#7d8285;font-size:11px}
+.product-transfer-action .button{border-color:#9fc9bf;color:var(--blue)}
+
+@media(max-width:780px){
+  .product-overview-grid{grid-template-columns:1fr 1fr}
+  .product-overview-item:nth-child(odd){border-left:0}
+  .product-section-heading,.product-transfer-action{align-items:flex-start;flex-direction:column}
+  .product-transfer-action .button{width:100%}
+}

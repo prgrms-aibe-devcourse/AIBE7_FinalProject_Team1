@@ -2,13 +2,13 @@
   <div class="register-bar"><b>제품 등록</b><button type="button" data-page="home">나가기</button></div>
   <div class="register-body">
     <div class="page-title">
-      <div><h1>새 노트북 등록</h1><p>필수 식별 정보와 알고 있는 사양만 입력해 주세요.</p></div>
+      <div><h1>새 제품 등록</h1><p>기본 정보와 상세 정보를 확인한 뒤 바로 등록할 수 있어요.</p></div>
     </div>
 
     <form data-product-form novalidate>
       <div class="product-form-grid">
         <section class="form-card">
-          <div class="product-card-heading"><span class="product-step">1</span><div><h3>기본 정보</h3><p>제품을 식별하는 필수 정보입니다.</p></div></div>
+          <div class="product-card-heading"><span class="product-step">1</span><div><h3>기본 정보</h3><p>제품을 알아볼 수 있는 정보와 사진을 등록해 주세요.</p></div></div>
           <div class="field"><label for="product-title">제품 제목 <b>*</b></label><input id="product-title" name="title" required maxlength="200" placeholder="예: 업무용 노트북"></div>
           <div class="field-row">
             <div class="field"><label for="product-manufacturer">제조사 <b>*</b></label><input id="product-manufacturer" name="manufacturer" required maxlength="100" placeholder="예: Samsung"></div>
@@ -16,15 +16,22 @@
           </div>
           <div class="field"><label for="product-serial">시리얼 번호 <b>*</b></label><input id="product-serial" name="serialNumber" required minlength="4" maxlength="64" autocomplete="off" placeholder="제품 본체의 시리얼 번호"></div>
           <p class="product-help">시리얼 번호는 중복 확인과 암호화 저장에만 사용되며 등록 후 화면에 표시되지 않습니다.</p>
+          <div class="product-image-field">
+            <div><strong>제품 이미지</strong><p>사진을 먼저 등록하면 내 제품 목록에서 쉽게 구분할 수 있어요.</p></div>
+            <label class="button" for="product-images">＋ 이미지 첨부</label>
+            <input id="product-images" name="images" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+            <span data-product-file-summary>선택 사항 · JPG, PNG, WEBP · 장당 최대 5MB · 최대 10장</span>
+          </div>
+        </section>
+
+        <section class="form-card">
+          <div class="product-card-heading"><span class="product-step">2</span><div><h3>상세 정보</h3><p>구매·보증 정보와 알고 있는 사양만 입력해 주세요.</p></div></div>
           <div class="field-row">
             <div class="field"><label for="product-purchase-date">구매일</label><input id="product-purchase-date" name="purchaseDate" type="date"></div>
             <div class="field"><label for="product-warranty-date">보증 만료일</label><input id="product-warranty-date" name="warrantyExpiresAt" type="date"></div>
           </div>
           <div class="field"><label for="product-warranty-terms">보증 조건</label><input id="product-warranty-terms" name="warrantyTerms" maxlength="500" placeholder="예: 구매 후 2년"></div>
-        </section>
-
-        <section class="form-card">
-          <div class="product-card-heading"><span class="product-step">2</span><div><h3>노트북 사양</h3><p>모르는 항목은 비워 두어도 됩니다.</p></div></div>
+          <div data-product-specs>
           <div class="field-row">
             <div class="field"><label for="product-cpu">CPU</label><input id="product-cpu" name="cpu" maxlength="100" placeholder="예: Apple M3 Pro"></div>
             <div class="field"><label for="product-gpu">GPU</label><input id="product-gpu" name="gpu" maxlength="100" placeholder="예: 18코어 GPU"></div>
@@ -39,18 +46,12 @@
             <div class="field"><label for="product-os">운영체제</label><input id="product-os" name="os" maxlength="50" placeholder="예: macOS"></div>
           </div>
           <div class="field"><label for="product-battery">배터리 상태 (%)</label><input id="product-battery" name="batteryHealthPercent" type="number" min="0" max="100" inputmode="numeric" placeholder="예: 92"></div>
+          </div>
         </section>
       </div>
 
-      <section class="product-image-field">
-        <div><strong>제품 이미지</strong><p>선택 사항 · JPG, PNG, WEBP · 장당 최대 5MB · 최대 10장</p></div>
-        <label class="button" for="product-images">이미지 선택</label>
-        <input id="product-images" name="images" type="file" accept="image/jpeg,image/png,image/webp" multiple>
-        <span data-product-file-summary>선택된 이미지 없음</span>
-      </section>
-
       <div class="product-form-message" data-product-form-message role="alert" hidden></div>
-      <div class="product-form-actions"><button class="button" type="button" data-page="home">취소</button><button class="button primary" type="submit" data-product-submit>제품 등록</button></div>
+      <div class="product-form-actions"><button class="button" type="button" data-page="home">취소</button><button class="button primary" type="submit" data-product-submit>등록하고 내 제품 보기</button></div>
     </form>
   </div>
 </div>
