@@ -158,6 +158,13 @@ class DirectTransferPostgresTest {
   void fixtures() {
     testClock.set(Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS));
     committedEvents.set(0);
+    // Redis 나가기 상태는 DB 스키마와 별도로 영속화되므로 재실행 전에 합성 참여자의 키만 초기화한다.
+    var roomLeaves =
+        context.getBean(org.example.springtestci.chat.repository.ChatRoomLeaveRepository.class);
+    roomLeaves.clearLeft(501L, 1L);
+    roomLeaves.clearLeft(501L, 2L);
+    roomLeaves.clearLeft(502L, 1L);
+    roomLeaves.clearLeft(502L, 3L);
     for (String table :
         List.of(
             "products",

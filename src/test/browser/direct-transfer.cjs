@@ -31,7 +31,7 @@ async function context() {
   activePage = page;
   page.on('response', response => {
     const target = new URL(response.url());
-    if (target.origin === base.origin && (['/api/auth/login', '/api/auth/refresh', '/api/v1/products', '/api/v1/products/101'].includes(target.pathname) || target.pathname.startsWith('/api/v1/ownership/transfers'))) httpStatuses.push({ method: response.request().method(), path: target.pathname, status: response.status(), contentType: response.headers()['content-type'] || null });
+    if (target.origin === base.origin && (['/api/auth/login', '/api/auth/refresh', '/api/v1/products', '/api/v1/products/101'].includes(target.pathname) || target.pathname.startsWith('/api/v1/ownership/transfers') || target.pathname.startsWith('/api/v1/chat-rooms'))) httpStatuses.push({ method: response.request().method(), path: target.pathname, status: response.status(), contentType: response.headers()['content-type'] || null });
   });
   page.on('pageerror', () => { counts.uncaughtPageErrors += 1; });
   page.on('dialog', dialog => dialog.accept());
@@ -209,14 +209,19 @@ async function decodeSharedQr(page, sharedLink) {
     step = 'current-chat-list-and-leave';
     await receiver.page.setViewportSize({ width: 390, height: 844 });
     await receiver.page.evaluate(() => show('deals'));
+    step = 'chat-list-wait-room';
     await receiver.page.locator('#deals.active [data-room-id="501"]').waitFor();
     await receiver.page.locator('#deals [data-room-id="501"]').click();
+    step = 'chat-room-wait-visible';
     await receiver.page.locator('#deals [data-deals-chat-section]').waitFor({ state: 'visible' });
     await receiver.page.locator('#deals [data-deals-back]').click();
+    step = 'chat-room-back-to-list';
     await receiver.page.locator('#deals [data-deals-chat-section]').waitFor({ state: 'hidden' });
     await receiver.page.locator('#deals [data-room-id="501"]').click();
     await receiver.page.locator('#deals [data-deals-leave]').click();
+    step = 'chat-room-confirm-leave';
     await receiver.page.locator('[data-confirm-ok]').click();
+    step = 'chat-room-left-list-refresh';
     await receiver.page.locator('#deals [data-room-id="501"]').waitFor({ state: 'detached' });
     record('Current chat list opens room, returns to list, and explicitly leaves the room');
     ensure(counts.uncaughtPageErrors === 0, 'No uncaught browser errors');
