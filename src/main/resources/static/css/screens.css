@@ -416,6 +416,10 @@
 #documents .doc-extract-grid input,#documents .doc-extract-grid textarea{width:100%;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit;font-size:13px;font-weight:400}
 #documents .doc-extract-grid textarea{min-height:72px;resize:vertical}
 #documents .doc-extract-grid input:focus,#documents .doc-extract-grid textarea:focus,#documents .doc-extract-typerow select:focus{outline:2px solid var(--blue);outline-offset:1px}
+#documents .doc-extract-preview{margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#f8fafc;display:grid;gap:8px;font-size:13px}
+#documents .doc-extract-preview-item{display:grid;gap:3px;padding:8px 10px;border-radius:6px;background:#fff;border:1px solid var(--line);min-width:0}
+#documents .doc-extract-preview-item span,#documents .doc-extract-preview-item small{overflow-wrap:anywhere}
+#documents .doc-extract-preview-item .preview-content{white-space:pre-line}
 #documents .doc-extract-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:12px}
 @media(max-width:640px){
   #documents .doc-extract-grid{grid-template-columns:minmax(0,1fr)}

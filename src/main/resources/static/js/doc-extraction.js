@@ -97,12 +97,29 @@
         if (value == null) input.placeholder = '문서에서 확인되지 않음';
         label.append(input); grid.append(label);
       });
+      // 확정하면 저장될 이력을 입력값에 맞춰 미리 보여 준다.
+      const preview = create('div', null, 'doc-extract-preview');
+      const refreshPreview = () => {
+        const events = previewEvents(collect(form));
+        preview.replaceChildren(create('b', '확정하면 이렇게 이력에 저장돼요'));
+        if (!events.length) { preview.append(create('p', '구매일 또는 수리일을 입력하면 저장될 이력이 여기에 보여요.', 'muted')); return; }
+        events.forEach(event => {
+          const card = create('div', null, 'doc-extract-preview-item');
+          card.append(create('strong', event.type + ' 이력 · ' + event.date), create('span', event.title));
+          if (event.vendor) card.append(create('span', '구매처/업체: ' + event.vendor));
+          if (event.price != null) card.append(create('span', '금액: ' + event.price.toLocaleString('ko-KR') + '원'));
+          if (event.content) card.append(create('span', event.content, 'preview-content'));
+          card.append(create('small', '이 문서가 증빙으로 연결되고, 연결되면 삭제할 수 없어요.'));
+          preview.append(card);
+        });
+      };
       const feedback = create('div');
       const actions = create('div', null, 'doc-extract-actions');
       const reject = create('button', '반려', 'button small'); reject.type = 'button';
       const confirm = create('button', '확인하고 확정', 'button primary small'); confirm.type = 'submit';
       actions.append(reject, confirm);
-      form.append(grid, feedback, actions);
+      form.append(grid, preview, feedback, actions);
+      form.addEventListener('input', refreshPreview); refreshPreview();
 
       reject.addEventListener('click', async () => {
         if (!window.confirm('추출 결과를 버릴까요? 이 문서는 다시 추출할 수 있어요.')) return;
@@ -188,8 +205,36 @@
       if (value == null) continue;
       if (!Number.isInteger(value) || value < field.min || (field.max && value > field.max)) return field.label + ' 값을 확인해 주세요.';
     }
+    // 날짜를 임의로 채우지 않으므로 구매일이나 수리일이 있어야 이력을 만들 수 있다.
+    if (!data.purchaseDate && !data.repairDate) return '이력을 만들려면 구매일 또는 수리일이 필요해요. 날짜를 입력해 주세요.';
     return '';
   }
 
-  window.PastportDocExtraction = { panel, collect, validate };
+  // 확정하면 서버가 만들 이력. DocumentProductEventWriter.plan 과 같은 규칙이라 둘을 함께 고쳐야 한다.
+  function previewEvents(data) {
+    const product = [];
+    if (data.productName) product.push('제품명: ' + data.productName);
+    if (data.modelName) product.push('모델명: ' + data.modelName);
+    if (data.warrantyMonths != null) product.push('보증기간: ' + data.warrantyMonths + '개월');
+    const repairLine = data.repairDescription ? '수리 내용: ' + data.repairDescription : null;
+    const events = [];
+    if (data.purchaseDate) {
+      events.push({
+        type: '구매', date: data.purchaseDate, title: data.productName ? data.productName + ' 구매' : '구매',
+        content: [...product, ...(!data.repairDate && repairLine ? [repairLine] : [])].join('\n'),
+        vendor: data.vendor, price: data.price,
+      });
+    }
+    if (data.repairDate) {
+      const carry = !data.purchaseDate;
+      events.push({
+        type: '수리', date: data.repairDate, title: '수리',
+        content: [...(carry ? product : []), ...(repairLine ? [repairLine] : [])].join('\n'),
+        vendor: carry ? data.vendor : null, price: carry ? data.price : null,
+      });
+    }
+    return events;
+  }
+
+  window.PastportDocExtraction = { panel, collect, validate, previewEvents };
 })();

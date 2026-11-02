@@ -34,9 +34,42 @@ test('모든 칸이 비어 있으면 확정할 수 없다', () => {
   assert.match(validate(collect(form({}))), /확정할 내용이 없어요/);
 });
 
-test('값이 하나라도 있으면 통과한다', () => {
+test('구매일이나 수리일이 있으면 통과한다', () => {
   const { collect, validate } = load();
-  assert.equal(validate(collect(form({ vendor: 'OO전자' }))), '');
+  assert.equal(validate(collect(form({ purchaseDate: '2026-03-01' }))), '');
+  assert.equal(validate(collect(form({ repairDate: '2026-09-05' }))), '');
+});
+
+test('날짜가 하나도 없으면 이력을 만들 수 없어 확정을 막는다', () => {
+  const { collect, validate } = load();
+  assert.match(validate(collect(form({ vendor: 'OO전자' }))), /구매일 또는 수리일/);
+});
+
+const values = { productName: '갤럭시북4', modelName: 'NT960XGQ', vendor: 'OO전자', price: '1250000', warrantyMonths: '12' };
+
+test('미리보기: 구매일만 있으면 구매 이력 한 건', () => {
+  const { collect, previewEvents } = load();
+  const events = Array.from(previewEvents(collect(form({ ...values, purchaseDate: '2026-03-01' }))));
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, '구매');
+  assert.equal(events[0].title, '갤럭시북4 구매');
+  assert.equal(events[0].content, '제품명: 갤럭시북4\n모델명: NT960XGQ\n보증기간: 12개월');
+  assert.equal(events[0].vendor, 'OO전자');
+  assert.equal(events[0].price, 1250000);
+});
+
+test('미리보기: 둘 다 있으면 제품 정보는 구매 이력에만, 수리 이력은 수리 내용만', () => {
+  const { collect, previewEvents } = load();
+  const events = Array.from(previewEvents(collect(form({ ...values, purchaseDate: '2026-03-01', repairDate: '2026-09-05', repairDescription: '메인보드 교체' }))));
+  assert.deepEqual(events.map(event => event.type), ['구매', '수리']);
+  assert.equal(events[1].content, '수리 내용: 메인보드 교체');
+  assert.equal(events[1].vendor, null);
+  assert.equal(events[1].price, null);
+});
+
+test('미리보기: 날짜가 없으면 이력이 없다', () => {
+  const { collect, previewEvents } = load();
+  assert.equal(previewEvents(collect(form(values))).length, 0);
 });
 
 test('금액은 0 이상 정수, 보증기간은 0~120개월만 허용한다', () => {
@@ -44,5 +77,5 @@ test('금액은 0 이상 정수, 보증기간은 0~120개월만 허용한다', (
   assert.match(validate(collect(form({ price: '-1' }))), /구매 금액/);
   assert.match(validate(collect(form({ price: '1000.5' }))), /구매 금액/);
   assert.match(validate(collect(form({ warrantyMonths: '121' }))), /보증기간/);
-  assert.equal(validate(collect(form({ price: '0', warrantyMonths: '120' }))), '');
+  assert.equal(validate(collect(form({ purchaseDate: '2026-03-01', price: '0', warrantyMonths: '120' }))), '');
 });
