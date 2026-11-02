@@ -20,3 +20,5 @@ B includes #74 (public history/AI) and #75 (laptop UI/navigation), beyond the in
 팀 B의 게시 서비스는 유효 PENDING DIRECT가 있으면 게시를 거부한다. 경합 검증은 실제 게시가 먼저 성공하면 발급이 거부되는 흐름과 완료가 먼저 잠그면 게시가 거부되는 흐름을 확인하며, 발급 후 ACTIVE 상태가 생긴 경우의 수락 재검사도 별도로 유지한다. B의 취소 시험 한 곳은 INTERNAL verify=200/accept=410이라는 오래된 기대를 가지고 있어 기존 서비스의 실제 404/409 계약으로 정확히 보정했다. R의 INTERNAL 수락/취소=404는 이식하지 않았다.
 
 현재 캐시/페이지 로딩 순서에서 receive HTML이 스크립트보다 먼저 준비될 수 있어 기존 DOM에서도 초기화한다. 현재 버튼 스타일이 hidden 속성을 덮는 충돌은 ownership-actions 안에서만 차단했다. 브라우저 시험은 현재 하위 메뉴 이동과 모바일 목록 복귀 UI를 실제로 사용한다.
+
+후속 충돌 해결: 팀 main `759575f92b51df9bf782a96365fddee37b754ecf`의 정식 `InternalTransferHistoryWriter`를 DIRECT에도 연결했다. 이력 생성·PRIVATE 처리는 해당 포트가 한 번 수행하고, 기존 effects 저장소는 문서 보호에 사용한다. P5 guard·Clock·flush·동기 초안 정리·커밋 후 이벤트는 유지한다. 서비스/시험 생성자에 양측 의존성을 함께 주입하고, 단위 시험은 owner 갱신→flush→이력 포트→문서 보호→초안 이벤트→감사 순서를 확인한다. 브라우저의 제조사 입력은 main의 선택/직접 입력 UI에 맞췄다.
