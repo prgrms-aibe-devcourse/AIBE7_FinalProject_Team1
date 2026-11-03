@@ -18,6 +18,8 @@ Production convergence profiles explicitly use `public` for Flyway, Hibernate an
 CONVERGENCE_SCHEMA=public for human production execution. Arbitrary generated schemas are supported only by isolated
 test configurations; do not use a custom-schema maintenance result as proof that the production public schema converged.
 Both convergence runtime profiles and the runner use **empty ignore patterns** and `outOfOrder=false`.
+Both set PostgreSQL `transactional-lock=false` so the existing nontransactional concurrent-index Java migration
+uses the same advisory-lock mode in the maintenance runner and application startup.
 The checker accepts only the exact production profile combinations above, plus its existing `prod,supabase` value.
 Use a convergence profile for a converged DB; the existing default `*:*` policy is not the convergence contract.
 On Flyway 12.4.0, isolated probes observed `*:*` accepting checksum, type and description mismatches while empty patterns

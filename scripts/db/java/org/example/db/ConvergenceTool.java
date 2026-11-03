@@ -414,6 +414,13 @@ public final class ConvergenceTool {
         }
       }
     }
+    for (String name :
+        List.of(
+            "build.gradle",
+            "src/main/resources/application-db-convergence.yaml",
+            "src/main/resources/application-db-legacy-convergence.yaml")) {
+      result.append(name).append(':').append(hash(Files.readString(Path.of(name)))).append('\n');
+    }
     return hash(result.toString());
   }
 
@@ -431,6 +438,7 @@ public final class ConvergenceTool {
     System.out.println(
         "ignore=" + Arrays.toString(flyway.getConfiguration().getIgnoreMigrationPatterns()));
     System.out.println("outOfOrder=" + flyway.getConfiguration().isOutOfOrder());
+    System.out.println("postgresql.transactional.lock=false");
     for (MigrationInfo info : flyway.info().all()) {
       System.out.printf(
           "%s\t%s\t%s\t%s\t%s\t%s%n",

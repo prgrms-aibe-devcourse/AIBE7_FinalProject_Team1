@@ -12,3 +12,5 @@ spring:
     locations: classpath:db/migration,classpath:db/deploy,classpath:db/convergence,classpath:db/legacy,classpath:db/compatibility/purchase
     ignore-migration-patterns: []
     out-of-order: false
+    postgresql:
+      transactional-lock: false

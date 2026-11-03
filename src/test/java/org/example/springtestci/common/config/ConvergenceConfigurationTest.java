@@ -34,6 +34,22 @@ class ConvergenceConfigurationTest {
                         .get()
                         .isEmpty());
                 assertFalse(binder.bind("spring.flyway.out-of-order", Boolean.class).get());
+                assertFalse(
+                    binder
+                        .bind("spring.flyway.postgresql.transactional-lock", Boolean.class)
+                        .get());
+                assertEquals(
+                    "public", binder.bind("spring.flyway.default-schema", String.class).get());
+                assertEquals(
+                    "public",
+                    context
+                        .getEnvironment()
+                        .getProperty("spring.jpa.properties.hibernate.default_schema"));
+                assertEquals(
+                    "SET search_path TO public",
+                    context
+                        .getEnvironment()
+                        .getProperty("spring.datasource.hikari.connection-init-sql"));
               });
     }
   }
