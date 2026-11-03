@@ -12,6 +12,8 @@
   // 마스킹을 마친 사본. 제품 등록이 성공하면 증빙 문서로 올리고, 그 전에는 이 브라우저 메모리에만 둔다.
   let pending = null;
   let busy = false;
+  // 사본을 버리거나(새 문서 선택·사본 지우기·등록 완료) 화면을 떠날 때마다 올라간다. 그 전에 시작한 추출 요청의 늦은 응답을 버리는 데 쓴다.
+  let generation = 0;
   // 등록 화면의 안내 문구·버튼·동의 상태를 처음으로 되돌린다. 화면이 만들어질 때 prepare()가 채운다.
   let resetUi = () => {};
 
@@ -22,11 +24,21 @@
     return node;
   };
 
-  const toast = (message, kind = '') => {
+  // action이 있으면 알림 안에 버튼을 넣고 더 오래 보여 준다. 누르면 알림을 닫고 action.run()을 부른다.
+  const toast = (message, kind = '', action = null) => {
     document.querySelector('.doc-register-toast')?.remove();
     const box = create('div', message, `product-toast doc-register-toast ${kind}`.trim());
+    if (action) {
+      const retry = create('button', action.label, 'doc-register-toast-action');
+      retry.type = 'button';
+      retry.addEventListener('click', () => {
+        box.remove();
+        action.run();
+      });
+      box.append(' ', retry);
+    }
     document.body.append(box);
-    window.setTimeout(() => box.remove(), 5000);
+    window.setTimeout(() => box.remove(), action ? 20000 : 5000);
   };
 
   const request = (url, options = {}) => {
@@ -49,6 +61,16 @@
     const lastDay = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
     const result = new Date(Date.UTC(year, monthIndex, Math.min(Number(match[3]), lastDay)));
     return result.toISOString().slice(0, 10);
+  }
+
+  // 자동 입력으로 채웠고 사용자가 고치지 않은 칸의 값을 지운다. 값의 출처인 문서(사본)를 버릴 때 함께 정리해, 이전 문서의 값이 다음 등록에 남지 않게 한다.
+  function clearAutofilled(form) {
+    form.querySelectorAll('[data-doc-autofilled]').forEach((input) => {
+      delete input.dataset.docAutofilled;
+      input.value = '';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
   }
 
   // 비어 있는 칸에만 값을 넣는다. 사용자가 이미 입력한 값은 덮어쓰지 않는다.
@@ -130,8 +152,10 @@
 
     const clearPending = () => {
       pending = null;
+      generation += 1;
       discard.hidden = true;
       say('');
+      clearAutofilled(form);
     };
     discard.addEventListener('click', clearPending);
     resetUi = () => {
@@ -163,6 +187,10 @@
     form.addEventListener('input', (event) => {
       if (event.isTrusted && event.target.dataset) delete event.target.dataset.docAutofilled;
     });
+    // 폼이 초기화되면(제품 등록 뒤 form.reset()) 값은 비워지지만 표시는 남으므로, 빈 칸에 강조가 남지 않게 표시도 지운다.
+    form.addEventListener('reset', () => {
+      form.querySelectorAll('[data-doc-autofilled]').forEach((field) => delete field.dataset.docAutofilled);
+    });
 
     button.addEventListener('click', async () => {
       const file = input.files?.[0];
@@ -170,6 +198,8 @@
       busy = true;
       sync();
       say('개인정보를 가릴 화면을 열었어요.');
+      // 이 요청이 시작된 시점의 세대. 응답이 늦게 와도 그 사이 사본을 버렸다면(generation이 바뀜) 결과를 폼에 쓰지 않는다.
+      let token = generation;
       try {
         const picked = await window.PastportDocMask?.pick(file);
         if (!picked) {
@@ -179,6 +209,7 @@
         }
         pending = { blob: picked.blob };
         releaseInput();
+        token = generation;
         say('가려진 사본에서 제품 정보를 읽는 중이에요…');
         const body = new FormData();
         body.append('maskingConfirmed', 'true');
@@ -187,6 +218,8 @@
         body.append('file', picked.blob, fileName(picked.blob));
         const response = await request(PREVIEW_URL, { method: 'POST', body });
         const payload = await response.json().catch(() => null);
+        // 본문을 읽는 동안에도 폼이 초기화될 수 있어서 응답 본문을 읽은 뒤에 확인한다.
+        if (token !== generation) return;
         if (!response.ok) throw new Error(payload?.message || '제품 정보를 읽지 못했어요.');
         const filled = fill(form, payload?.data || {});
         say(
@@ -195,6 +228,7 @@
             : '문서에서 새로 채울 값을 찾지 못했거나 이미 입력된 칸이에요. 가려진 사본은 제품을 등록하면 증빙 문서로 보관돼요.',
         );
       } catch (error) {
+        if (token !== generation) return;
         const kept = pending ? ' 가려진 사본은 제품을 등록하면 증빙 문서로 보관돼요.' : '';
         say(`${error.message} 직접 입력해 주세요.${kept}`, 'error');
       } finally {
@@ -213,17 +247,33 @@
     if (!upload) return;
     // 사본은 이제 이 함수가 들고 있다. 등록이 끝난 화면에 이전 안내와 버튼이 남지 않게 정리한다.
     resetUi();
+    let productId = null;
     try {
-      const productId = (await response.json())?.data?.productId;
-      if (!productId) throw new Error('product');
+      productId = (await response.json())?.data?.productId;
+    } catch (ignored) {
+      // 제품 번호를 못 읽으면 아래에서 안내한다.
+    }
+    if (!productId) {
+      toast('제품은 등록됐지만 증빙 문서를 올리지 못했어요. 제품 상세의 "문서 올리기"에서 다시 올려 주세요.', 'error');
+      return;
+    }
+    await uploadWithRetry(productId, upload.blob);
+  }
+
+  // 사본을 증빙 문서로 올린다. 실패해도 사본은 이 함수의 클로저에 남겨 두고 "다시 올리기" 버튼을 보여 줘서, 원본을 다시 가리지 않고 재시도할 수 있게 한다.
+  async function uploadWithRetry(productId, blob) {
+    try {
       const body = new FormData();
       body.append('maskingConfirmed', 'true');
-      body.append('file', upload.blob, fileName(upload.blob));
+      body.append('file', blob, fileName(blob));
       const saved = await request(`${PRODUCTS_URL}/${productId}/documents`, { method: 'POST', body });
       if (!saved.ok) throw new Error('upload');
       toast('가려진 증빙 문서도 함께 보관했어요.');
     } catch (ignored) {
-      toast('제품은 등록됐지만 증빙 문서를 올리지 못했어요. 제품 상세의 "문서 올리기"에서 다시 올려 주세요.', 'error');
+      toast('제품은 등록됐지만 증빙 문서를 올리지 못했어요.', 'error', {
+        label: '다시 올리기',
+        run: () => uploadWithRetry(productId, blob),
+      });
     }
   }
 

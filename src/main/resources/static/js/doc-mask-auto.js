@@ -96,7 +96,8 @@
       }
       const base = union(tail.length ? tail : label, '일련번호');
       const left = tail.length ? base.x : labelRight;
-      found.push({ x: left, y: base.y, w: Math.max(base.x + base.w - left, height * 8), h: base.h, kind: '일련번호' });
+      // estimated: 값을 읽은 게 아니라 라벨 오른쪽을 짐작해 넓힌 상자다. 회전 재시도를 멈출 근거로 쓰지 않는다.
+      found.push({ x: left, y: base.y, w: Math.max(base.x + base.w - left, height * 8), h: base.h, kind: '일련번호', estimated: true });
     }
     return found;
   }
@@ -243,12 +244,18 @@
   async function recognizeAll(worker, canvas) {
     const first = await readWords(worker, canvas, '3');
     const boxes = findPiiBoxes(groupLines(first));
-    if (first.length >= FALLBACK_MIN_WORDS && boxes.length) return boxes;
+    // 가릴 곳을 찾았더라도 일련번호는 못 찾았고 글자도 부실하게 읽었다면(기울어진 사진에서 이메일만 읽힌 경우) 아래 재시도로 넘어간다.
+    if (boxes.length && (hasLocatedSerial(boxes) || isReadable(first))) return boxes;
     const secondWords = await readWords(worker, canvas, '6');
     const merged = mergeBoxes(boxes, findPiiBoxes(groupLines(secondWords)));
-    // 일련번호를 찾았거나 글자를 잘 읽었다면 거기서 끝낸다. 일련번호가 없는 일반 영수증이 늘 느려지지 않게, 회전 재시도는 읽기 자체가 부실할 때만 한다.
-    if (merged.some((box) => box.kind === '일련번호') || isReadable(first) || isReadable(secondWords)) return merged;
+    // 일련번호 값을 읽었거나 글자를 잘 읽었다면 거기서 끝낸다. 일련번호가 없는 일반 영수증이 늘 느려지지 않게, 회전 재시도는 읽기 자체가 부실할 때만 한다.
+    if (hasLocatedSerial(merged) || isReadable(first) || isReadable(secondWords)) return merged;
     return mergeBoxes(merged, await recognizeTilted(worker, canvas));
+  }
+
+  // 일련번호 값을 읽어서 찾은 상자가 있는지. 라벨만 읽고 오른쪽을 짐작해 넓힌 상자(estimated)는 찾은 것으로 치지 않는다.
+  function hasLocatedSerial(boxes) {
+    return boxes.some((box) => box.kind === '일련번호' && !box.estimated);
   }
 
   // 단어가 충분하고, 그중 신뢰도가 높은 단어가 일정 비율 이상이면 글자를 제대로 읽은 것이다. 기울어진 사진은 단어 수는 있어도 잡음이 대부분이다.
@@ -268,10 +275,10 @@
         let found = [];
         for (const mode of ['3', '6']) {
           found = mergeBoxes(found, findPiiBoxes(groupLines(await readWords(worker, tilted.canvas, mode))));
-          if (found.some((box) => box.kind === '일련번호')) break;
+          if (hasLocatedSerial(found)) break;
         }
         boxes = mergeBoxes(boxes, found.flatMap((box) => unrotateBox(box, tilted)));
-        if (found.some((box) => box.kind === '일련번호')) break;
+        if (hasLocatedSerial(found)) break;
       } finally {
         tilted.canvas.width = 0;
         tilted.canvas.height = 0;
@@ -318,7 +325,7 @@
       const y0 = Math.max(0, Math.min(...corners.map((p) => p.y)));
       const x1 = Math.min(sourceWidth, Math.max(...corners.map((p) => p.x)));
       const y1 = Math.min(sourceHeight, Math.max(...corners.map((p) => p.y)));
-      if (x1 > x0 && y1 > y0) result.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0, kind: box.kind });
+      if (x1 > x0 && y1 > y0) result.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0, kind: box.kind, estimated: box.estimated });
     }
     return result;
   }

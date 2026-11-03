@@ -53,3 +53,4 @@ body.dm-modal-open{overflow:hidden}
 .product-toast.doc-register-toast{bottom:76px}
 [data-doc-autofilled]{background:#eef7f5;box-shadow:0 0 0 2px #b9e3dd}
 .doc-register-discard{margin-top:8px}
+.doc-register-toast-action{margin-left:8px;padding:3px 10px;border:1px solid #fff;border-radius:4px;background:transparent;color:#fff;font-size:12px;cursor:pointer}

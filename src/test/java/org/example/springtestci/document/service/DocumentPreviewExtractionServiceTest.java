@@ -4,14 +4,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Duration;
 import java.util.Map;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
+import org.example.springtestci.common.error.RateLimitedException;
 import org.example.springtestci.common.security.RequestRateLimiter;
 import org.example.springtestci.document.ai.DocumentFactExtractionException;
 import org.example.springtestci.document.ai.DocumentFactExtractor;
@@ -44,9 +48,8 @@ class DocumentPreviewExtractionServiceTest {
             new DocumentFileValidator(), extractorProvider, rateLimiter);
   }
 
-  private Map<String, Object> run(boolean masked, boolean consented) {
-    return service.preview(
-        USER, masked, consented, DocumentType.RECEIPT, "masked.png", "image/png", PNG);
+  private Map<String, Object> preview() {
+    return service.preview(DocumentType.RECEIPT, "masked.png", "image/png", PNG);
   }
 
   private ErrorCode errorOf(Runnable action) {
@@ -54,7 +57,7 @@ class DocumentPreviewExtractionServiceTest {
   }
 
   @Test
-  void 정제된_후보값만_돌려준다() throws Exception {
+  void 정제된_후보값만_돌려주고_받은_파일과_문서_종류를_그대로_AI에_넘긴다() throws Exception {
     when(extractor.extract(any(), any(), any()))
         .thenReturn(
             Map.of(
@@ -62,52 +65,22 @@ class DocumentPreviewExtractionServiceTest {
                 "purchaseDate", "2026-01-05",
                 "ownerPhone", "010-1234-5678"));
 
-    Map<String, Object> facts = run(true, true);
+    Map<String, Object> facts = preview();
 
     assertEquals("NT950XED", facts.get("modelName"));
     assertEquals("2026-01-05", facts.get("purchaseDate"));
     assertNull(facts.get("ownerPhone"));
     assertNull(facts.get("price"));
-    verify(rateLimiter)
-        .check(
-            "document-extraction-preview",
-            "user:1",
-            DocumentPreviewExtractionService.MAX_REQUESTS,
-            DocumentPreviewExtractionService.WINDOW);
+    verify(extractor).extract(eq(PNG), eq("image/png"), eq(DocumentType.RECEIPT));
   }
 
   @Test
-  void 마스킹_확인이_없으면_AI를_호출하지_않는다() throws Exception {
-    assertEquals(ErrorCode.MASKING_NOT_CONFIRMED, errorOf(() -> run(false, true)));
-    verify(extractor, never()).extract(any(), any(), any());
-  }
-
-  @Test
-  void 외부_AI_전송_동의가_없으면_거부한다() throws Exception {
-    assertEquals(ErrorCode.INVALID_INPUT, errorOf(() -> run(true, false)));
-    verify(extractor, never()).extract(any(), any(), any());
-  }
-
-  @Test
-  void AI_구현체가_없으면_사용할_수_없다고_응답한다() {
-    when(extractorProvider.getIfAvailable()).thenReturn(null);
-
-    assertEquals(ErrorCode.DOCUMENT_AI_UNAVAILABLE, errorOf(() -> run(true, true)));
-  }
-
-  @Test
-  void 파일_형식이_올바르지_않으면_거부한다() throws Exception {
+  void 파일_형식이_올바르지_않으면_AI를_호출하지_않는다() throws Exception {
     ErrorCode code =
         errorOf(
             () ->
                 service.preview(
-                    USER,
-                    true,
-                    true,
-                    DocumentType.RECEIPT,
-                    "masked.png",
-                    "image/png",
-                    new byte[] {1, 2, 3}));
+                    DocumentType.RECEIPT, "masked.png", "image/png", new byte[] {1, 2, 3}));
 
     assertEquals(ErrorCode.INVALID_DOCUMENT_FILE, code);
     verify(extractor, never()).extract(any(), any(), any());
@@ -118,6 +91,55 @@ class DocumentPreviewExtractionServiceTest {
     when(extractor.extract(any(), any(), any()))
         .thenThrow(new DocumentFactExtractionException("AI_TIMEOUT"));
 
-    assertEquals(ErrorCode.DOCUMENT_AI_UNAVAILABLE, errorOf(() -> run(true, true)));
+    assertEquals(ErrorCode.DOCUMENT_AI_UNAVAILABLE, errorOf(this::preview));
+  }
+
+  @Test
+  void AI_구현체가_없으면_사용할_수_없다고_응답한다() {
+    when(extractorProvider.getIfAvailable()).thenReturn(null);
+
+    assertEquals(ErrorCode.DOCUMENT_AI_UNAVAILABLE, errorOf(this::preview));
+  }
+
+  @Test
+  void 요청을_받아들이면_사용자별로_횟수를_센다() {
+    service.admit(USER, true, true);
+
+    verify(rateLimiter)
+        .check(
+            "document-extraction-preview",
+            "user:1",
+            DocumentPreviewExtractionService.MAX_REQUESTS,
+            DocumentPreviewExtractionService.WINDOW);
+  }
+
+  @Test
+  void 마스킹_확인이_없으면_횟수도_세지_않고_거부한다() {
+    assertEquals(ErrorCode.MASKING_NOT_CONFIRMED, errorOf(() -> service.admit(USER, false, true)));
+
+    verify(rateLimiter, never()).check(any(), any(), eq(10), any());
+  }
+
+  @Test
+  void 외부_AI_전송_동의가_없으면_거부한다() {
+    assertEquals(ErrorCode.INVALID_INPUT, errorOf(() -> service.admit(USER, true, false)));
+
+    verify(rateLimiter, never()).check(any(), any(), eq(10), any());
+  }
+
+  @Test
+  void AI_구현체가_없으면_요청을_받아들이지_않는다() {
+    when(extractorProvider.getIfAvailable()).thenReturn(null);
+
+    assertEquals(ErrorCode.DOCUMENT_AI_UNAVAILABLE, errorOf(() -> service.admit(USER, true, true)));
+  }
+
+  @Test
+  void 횟수_제한을_넘으면_제한_예외를_그대로_던진다() {
+    doThrow(new RateLimitedException(ErrorCode.REQUEST_RATE_LIMITED, Duration.ofSeconds(30)))
+        .when(rateLimiter)
+        .check(any(), any(), eq(10), any());
+
+    assertThrows(RateLimitedException.class, () -> service.admit(USER, true, true));
   }
 }

@@ -33,31 +33,37 @@ public class DocumentPreviewExtractionService {
   private final RequestRateLimiter rateLimiter;
 
   /**
-   * 마스킹을 확인한 사본에서 제품 사실 후보를 뽑는다.
+   * 파일 본문을 읽기 전에 요청을 받아들일지 정한다. 컨트롤러가 {@code file.getBytes()} 앞에서 호출한다.
    *
-   * <p>횟수 제한은 비용이 드는 AI 호출 앞에서 먼저 센다. 사용자가 반복해서 눌러도 외부 호출이 한도를 넘지 않게 하기 위해서다.
+   * <p>마스킹 확인·동의·AI 사용 가능 여부는 값만 보면 되고, 횟수 제한은 비용이 드는 AI 호출 앞에서 센다. 거절될 요청이 최대 10MB를 힙에 올리지 않게 하고,
+   * 사용자가 반복해서 눌러도 외부 호출이 한도를 넘지 않게 하려고 파일을 읽기 전에 모두 처리한다.
    */
-  public Map<String, Object> preview(
-      Long userId,
-      boolean maskingConfirmed,
-      boolean consented,
-      DocumentType type,
-      String uploadedFilename,
-      String contentType,
-      byte[] content) {
+  public void admit(Long userId, boolean maskingConfirmed, boolean consented) {
     if (!maskingConfirmed) {
       throw new CommonException(ErrorCode.MASKING_NOT_CONFIRMED);
     }
     if (!consented) {
       throw new CommonException(ErrorCode.INVALID_INPUT);
     }
+    if (extractor.getIfAvailable() == null) {
+      throw new CommonException(ErrorCode.DOCUMENT_AI_UNAVAILABLE);
+    }
+    rateLimiter.check("document-extraction-preview", "user:" + userId, MAX_REQUESTS, WINDOW);
+  }
+
+  /**
+   * 마스킹을 확인한 사본에서 제품 사실 후보를 뽑는다. {@link #admit}를 통과한 요청에만 호출한다.
+   *
+   * <p>파일 형식(확장자·MIME·시그니처·크기)을 검증한 뒤 외부 AI를 호출한다.
+   */
+  public Map<String, Object> preview(
+      DocumentType type, String uploadedFilename, String contentType, byte[] content) {
     DocumentFactExtractor aiExtractor = extractor.getIfAvailable();
     if (aiExtractor == null) {
       throw new CommonException(ErrorCode.DOCUMENT_AI_UNAVAILABLE);
     }
     DocumentFileValidator.FileKind kind =
         fileValidator.validate(uploadedFilename, contentType, content);
-    rateLimiter.check("document-extraction-preview", "user:" + userId, MAX_REQUESTS, WINDOW);
     try {
       return ExtractedFactsSanitizer.sanitize(
           aiExtractor.extract(content, kind.contentType(), type));

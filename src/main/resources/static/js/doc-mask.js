@@ -110,7 +110,24 @@
       if (saveButton) saveButton.textContent = '확인하고 사본 저장';
     }
     document.body.classList.remove('dm-modal-open');
+    setBackgroundInert(false);
     if (resolve) resolve(result);
+  }
+
+  // 팝업이 열린 동안 팝업 밖의 모든 화면(머리글·메뉴·등록 폼)을 조작할 수 없게 한다. aria-modal만으로는 키보드 포커스가 팝업 밖으로 나가 가려진 컨트롤에
+  // 닿을 수 있다. 팝업 조상마다 형제 요소에 inert를 걸고, 원래 inert였던 요소는 건드리지 않는다.
+  let inertTargets = [];
+  function setBackgroundInert(on) {
+    inertTargets.forEach((node) => { node.inert = false; });
+    inertTargets = [];
+    if (!on || !root) return;
+    for (let node = root; node && node !== document.body; node = node.parentElement) {
+      Array.from(node.parentElement.children).forEach((sibling) => {
+        if (sibling === node || sibling.inert) return;
+        sibling.inert = true;
+        inertTargets.push(sibling);
+      });
+    }
   }
 
   // 등록 폼 같은 다른 화면에서 호출한다. 화면을 옮기지 않고 팝업으로 마스킹을 마친 뒤, 확인한 사본(Blob)만 돌려준다.
@@ -130,6 +147,7 @@
       root.setAttribute('role', 'dialog');
       root.setAttribute('aria-modal', 'true');
       document.body.classList.add('dm-modal-open');
+      setBackgroundInert(true);
       find('[data-dm-save]').textContent = '확인하고 이 사본 사용';
       find('[data-dm-close]').focus();
       open(file);

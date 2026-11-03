@@ -34,6 +34,8 @@ public class DocumentPreviewController {
       @RequestParam boolean consented,
       @RequestParam DocumentType documentType,
       @RequestPart("file") MultipartFile file) {
+    // 거절될 요청이 파일을 힙에 올리지 않도록 동의·마스킹 확인·횟수 제한을 본문을 읽기 전에 처리한다.
+    previewService.admit(userId(jwt), maskingConfirmed, consented);
     byte[] content;
     try {
       content = file.getBytes();
@@ -42,13 +44,7 @@ public class DocumentPreviewController {
     }
     return ApiResponse.success(
         previewService.preview(
-            userId(jwt),
-            maskingConfirmed,
-            consented,
-            documentType,
-            file.getOriginalFilename(),
-            file.getContentType(),
-            content));
+            documentType, file.getOriginalFilename(), file.getContentType(), content));
   }
 
   /** JWT subject를 사용자 ID로 사용한다. 인증 도메인이 확정되면 공통 컴포넌트로 옮긴다. */
