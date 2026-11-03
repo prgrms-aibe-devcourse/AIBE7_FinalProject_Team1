@@ -78,7 +78,10 @@ class LegacyProductMigrationChecksumTest {
   }
 
   /**
-   * 공유 DB와 같은 전체 이력(V2~V5 포함)을 가진 DB를 만들어, 원본을 함께 읽으면 엄격 검증이 통과하고 읽지 않으면 실패함을 확인한다.
+   * V2~V5 레거시 원본과 현재 canonical migration 체인을 함께 적용한 격리 DB에서, 레거시 원본을 Flyway 위치에 포함할 때 strict
+   * validate가 통과하고 제외할 때 applied-but-unresolved 검증 오류가 발생하는지 확인한다.
+   *
+   * <p>이 시험은 공유 DB의 2701/2706 및 2702/2707 특수 이력 수렴을 재현하지 않는다. 해당 이력 정규화는 별도 DB remediation 범위다.
    *
    * <p>환경 변수 {@code DEPLOY_DDL_TEST_ENABLED=true}와 {@code DEPLOY_DDL_TEST_DB_URL/USER/PASSWORD}가 있을
    * 때만 실행하며, 격리 스키마를 만들고 끝나면 지운다.
@@ -131,7 +134,7 @@ class LegacyProductMigrationChecksumTest {
     void fullChainWithLegacyOriginalsValidatesStrictlyOnlyWhenOriginalsAreLoaded() {
       DataSource dataSource = newSchema();
 
-      // 공유 DB처럼 V2~V5가 먼저 적용되고 이후 날짜형 마이그레이션이 이어진 DB
+      // V2~V5 레거시 원본과 현재 canonical 날짜형 migration을 함께 적용한 격리 DB
       strict(dataSource, MIGRATION, LEGACY).migrate();
 
       JdbcTemplate jdbc = new JdbcTemplate(dataSource);
@@ -145,7 +148,7 @@ class LegacyProductMigrationChecksumTest {
       // 원본을 함께 읽으면 엄격 검증이 통과한다.
       strict(dataSource, MIGRATION, LEGACY).validate();
 
-      // 원본 없이 기본 경로만 읽으면 "적용됐지만 코드에 없는 마이그레이션"으로 실패한다. 현재 공유 DB의 상태와 같다.
+      // V2~V5 원본을 제외하면 applied-but-unresolved 상태가 되어 strict validate가 실패한다.
       assertThrows(FlywayValidateException.class, () -> strict(dataSource, MIGRATION).validate());
     }
   }
