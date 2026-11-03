@@ -40,6 +40,26 @@ function setup(href, result, options = {}) {
   return env;
 }
 
+test('외부 보내기에서 시작한 직접 로그인은 보내기 화면으로 복귀한다', async () => {
+  const env = setup('http://test.invalid/', { user: { id: 2, role: 'USER', nickname: '회원' } }, { expired: false });
+  await flush();
+  env.window.PastportReceive = { resumeAfterLogin: () => false };
+  env.window.PastportOwnershipSend = { resumeAfterLogin() { env.navigations.push('trade'); return true; } };
+  await login(env);
+  assert.deepEqual(env.navigations, ['trade']);
+});
+
+test('수신 링크로 시작한 로그인은 보내기 화면의 복귀 의도보다 우선한다', async () => {
+  const env = setup('http://test.invalid/', { user: { id: 2, role: 'USER', nickname: '회원' } }, { expired: false });
+  await flush();
+  let senderResumed = false;
+  env.window.PastportReceive = { resumeAfterLogin() { env.navigations.push('receive'); return true; } };
+  env.window.PastportOwnershipSend = { resumeAfterLogin() { senderResumed = true; return true; } };
+  await login(env);
+  assert.deepEqual(env.navigations, ['receive']);
+  assert.equal(senderResumed, false);
+});
+
 test('관리자 세션 복구가 성공한 경우에만 고정된 관리자 화면으로 복귀한다', async () => {
   const env = setup('http://test.invalid/?returnTo=admin', { user: { id: 9, role: 'ADMIN' } });
   await flush();

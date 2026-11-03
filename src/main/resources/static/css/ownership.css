@@ -7,3 +7,31 @@
 .ownership-qr { display: block; max-width: 100%; width: 280px; height: auto; image-rendering: pixelated; background: white; margin: 12px 0; }
 [data-receive-message] { white-space: pre-line; line-height: 1.7; }
 .ownership-review { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow: auto; padding: 12px; background: var(--bg, #f5f6f8); border-radius: 8px; }
+
+/* 외부 이전은 제품 선택과 명시적인 링크 발급을 같은 화면에서 진행한다. */
+.external-transfer-note{margin:0 0 24px;color:#5f6368;font-size:14px;line-height:1.8}
+#trade .sc-head p,#receive .sc-head p{color:#5f6368;font-size:14px;line-height:1.8}
+.external-transfer-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
+.external-transfer-picker,.external-transfer-review{min-width:0;padding:24px;border:1px solid var(--line);border-radius:8px;background:#fff}
+#trade h2{margin:0;font-size:18px;line-height:1.5}
+.external-transfer-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}
+[data-external-count]{font-size:13px;font-weight:400;color:#5f6368;white-space:nowrap}
+.external-transfer-search{display:grid;gap:8px;margin-bottom:16px;font-size:14px;font-weight:600}
+.external-transfer-search input{width:100%;min-width:0;min-height:44px;padding:10px 12px;border:1px solid #b8c0c8;border-radius:6px;font:inherit;font-weight:400}
+[data-external-status],.external-transfer-review p{font-size:14px;line-height:1.8;color:#5f6368}
+[data-external-products]{display:grid;gap:12px;max-height:520px;overflow-y:auto}
+.external-product{display:grid;gap:8px;width:100%;padding:16px;border:1px solid var(--line);border-radius:6px;background:#fff;text-align:left;overflow-wrap:anywhere}
+.external-product strong{font-size:16px;font-weight:600;line-height:1.5}
+.external-product span{font-size:14px;line-height:1.6;color:#5f6368}
+.external-product small{font-size:13px;font-weight:600;color:var(--blue)}
+.external-product:hover{border-color:#777e86}
+.external-product[aria-pressed=true]{background:var(--soft);border-color:var(--ink)}
+.external-transfer-caption{margin:0 0 8px}
+#trade [data-external-product-title]{font-size:22px;overflow-wrap:anywhere}
+#trade [data-ownership-root] h2{margin-bottom:12px;font-size:18px}
+#trade .ownership-actions .button{min-height:44px;font-size:14px}
+#trade .ownership-link{min-height:44px;border:1px solid #b8c0c8;border-radius:6px;padding:12px;font-size:14px}
+#trade [data-ownership-share]>.button{min-height:44px;margin-top:8px;font-size:14px}
+#trade [hidden],#trade .ownership-actions:not(:has(button:not([hidden]))){display:none!important}
+@media(max-width:1000px){.external-transfer-layout{grid-template-columns:1fr}}
+@media(max-width:700px){.external-transfer-picker,.external-transfer-review{padding:16px}.external-transfer-heading .button{min-height:44px}.external-transfer-layout{gap:16px}}

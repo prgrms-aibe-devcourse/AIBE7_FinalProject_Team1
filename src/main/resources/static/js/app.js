@@ -1,9 +1,9 @@
-const pageNames={home:'제품 여권',passport:'제품 여권',register:'새 제품 등록',documents:'문서 보관함',ai:'AI 이력 검색',market:'중고 거래',sell:'판매글 작성',auth:'로그인',signup:'회원가입',mypage:'마이페이지',docmask:'문서 마스킹 확인',detail:'판매글 상세',deals:'내 거래',receive:'이전 받기',trade:'거래 · 소유권 이전'};
+const pageNames={home:'제품 여권',passport:'제품 여권',register:'새 제품 등록',documents:'문서 보관함',ai:'AI 이력 검색',market:'중고 거래',sell:'판매글 작성',auth:'로그인',signup:'회원가입',mypage:'마이페이지',docmask:'문서 마스킹 확인',detail:'판매글 상세',deals:'내 거래',receive:'외부 이전 받기',trade:'외부 이전 보내기'};
 pageNames.landing='홈';
 pageNames.guide='이용 가이드';
 pageNames['my-listings']='내 거래';
 
-const pendingPages = new Set(['ai', 'trade']);
+const pendingPages = new Set(['ai']);
 let historyPosition = Number.isSafeInteger(window.history.state?.pastportIndex) ? window.history.state.pastportIndex : 0;
 let activeHistoryUrl = window.location.href;
 let restoringHistory = false;
@@ -34,12 +34,12 @@ const show=(name,mode='push')=>{
 };
 
 // 새로고침하면 보던 화면을 그대로 복원한다. 화면 HTML이 채워진 뒤에 열어야 각 화면의 로딩 로직이 정상 동작한다.
-// 주소에 판매글·작성 대상이 있으면 해당 화면이 직접 복원하므로 건드리지 않는다.
+// 판매글·작성 대상·외부 이전 토큰이 있는 주소는 해당 화면이 직접 복원한다.
 const restorePage=(()=>{
   let saved=null;
   try{saved=sessionStorage.getItem('pastport.page');}catch{}
   const params=new URL(window.location.href).searchParams;
-  const deepLink=['listingId','draftProduct','market'].some(key=>params.has(key))||params.get('returnTo')==='admin';
+  const deepLink=['listingId','draftProduct','market','token'].some(key=>params.has(key))||params.get('returnTo')==='admin';
   if(!saved||deepLink||saved==='landing'||pendingPages.has(saved)||!pageNames[saved])return null;
   return saved;
 })();

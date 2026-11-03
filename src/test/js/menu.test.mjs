@@ -67,7 +67,7 @@ function sectionScreen(initialPage = 'home') {
     ['제품 여권', [['home', '제품 여권 보기', 'passport'], ['register', '새 여권 등록'], ['documents', '문서 보관함', 'docmask']]],
     ['중고거래', [['market', '중고 상품 둘러보기', 'detail'], ['sell', '판매글 작성']]],
     ['내 거래', [['my-listings', '내 판매글'], ['deals', '채팅']]],
-    ['소유권 이전', [['receive', '소유권 이전 받기'], ['trade', '안심 거래 · 소유권 이전']]]
+    ['외부 소유권 이전', [['trade', '보내기'], ['receive', '받기']]]
   ];
   const groups = definitions.map(([title, links]) => {
     const item = env.add('div', { className: 'nav-item' }, nav);
@@ -152,7 +152,7 @@ test('홈·로그인·계정 화면에는 이전 분류의 메뉴나 공간을 �
   }
   await s.document.emit('pastport:page-shown', { id: 'receive' });
   assert.equal(s.side.hidden, false);
-  assert.equal(s.title.textContent, '소유권 이전');
+  assert.equal(s.title.textContent, '외부 소유권 이전');
   assert.equal(s.sectionNav.querySelector('.active').dataset.page, 'receive');
 });
 

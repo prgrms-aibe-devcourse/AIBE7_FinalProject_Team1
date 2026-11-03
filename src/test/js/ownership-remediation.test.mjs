@@ -59,7 +59,7 @@ test('소유자 화면은 확인한 수신자·제품 버전으로 최종 승인
   const transfer = { transferId: 9, productId: 101, status: 'PENDING', recipientId: 2, recipientNickname: '수신자', productTitle: '제품', factsVersion: 7, recipientAcceptedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 3600000).toISOString(), expired: false };
   const env = environment((path, options) => options.method === 'POST' ? { transferId: 9 } : transfer);
   env.window.PastportApi = { fetch: env.window.fetch };
-  env.add('section', { 'data-ownership-root': '' }); env.run('ownership.js', { auth: { user: { id: 1 } } });
+  env.add('section', { 'data-ownership-root': '' }, env.add('section', { id: 'passport', className: 'page active' })); env.run('ownership.js', { auth: { user: { id: 1 } } });
   await env.document.emit('pastport:product-detail-rendered', { product: { productId: 101 } }); await flush();
   const approve = env.document.querySelector('[data-ownership-root]').querySelectorAll('button').find(button => button.textContent.includes('최종 이전 승인'));
   await approve.emit('click'); await flush();
@@ -75,7 +75,7 @@ test('최종 승인 응답 유실은 당사자 상태 조회로 복구한다', a
     return path.endsWith('/9') ? { status: 'COMPLETED' } : transfer;
   });
   env.window.PastportApi = { fetch: env.window.fetch };
-  env.add('section', { 'data-ownership-root': '' }); env.run('ownership.js', { auth: { user: { id: 1 } } });
+  env.add('section', { 'data-ownership-root': '' }, env.add('section', { id: 'passport', className: 'page active' })); env.run('ownership.js', { auth: { user: { id: 1 } } });
   await env.document.emit('pastport:product-detail-rendered', { product: { productId: 101 } }); await flush();
   const approve = env.document.querySelector('[data-ownership-root]').querySelectorAll('button').find(button => button.textContent.includes('최종 이전 승인'));
   await approve.emit('click'); await flush();
@@ -89,7 +89,7 @@ test('계정 전환 뒤 늦게 도착한 승인 응답은 이전 화면을 복�
   const auth = { user: { id: 1 } };
   const env = environment((path, options) => options.method === 'POST' ? pending.promise : transfer);
   env.window.PastportApi = { fetch: env.window.fetch };
-  const root = env.add('section', { 'data-ownership-root': '' }); env.run('ownership.js', { auth });
+  const root = env.add('section', { 'data-ownership-root': '' }, env.add('section', { id: 'passport', className: 'page active' })); env.run('ownership.js', { auth });
   await env.document.emit('pastport:product-detail-rendered', { product: { productId: 101 } }); await flush();
   const approve = root.querySelectorAll('button').find(button => button.textContent.includes('최종 이전 승인'));
   const mutation = approve.emit('click'); await flush();
