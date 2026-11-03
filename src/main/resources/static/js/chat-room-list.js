@@ -23,7 +23,10 @@
     button.type = 'button';
     button.className = 'dl-row' + (selected === room.roomId ? ' on' : '');
     button.dataset.roomId = room.roomId;
-    const icon = document.createElement('span'); icon.className = 'laptop'; icon.setAttribute('aria-hidden', 'true');
+    // 상대방 프로필 사진(없으면 닉네임 첫 글자)을 목록 앞에 보여 준다.
+    const avatars = window.PastportChatAvatar;
+    const icon = avatars ? avatars.create(room.counterpartyNickname) : document.createElement('span');
+    avatars?.fill(icon, room.roomId);
     const body = document.createElement('span');
     const name = document.createElement('b');
     name.textContent = room.counterpartyNickname || '상대방';

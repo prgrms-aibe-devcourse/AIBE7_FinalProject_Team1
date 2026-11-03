@@ -74,6 +74,7 @@ public class AuthController {
   @PostMapping("/login")
   public ResponseEntity<ApiResponse<LoginResponse>> login(
       @Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+    // 이미 로그인 중인 계정은 같은 브라우저든 다른 기기든 로그인할 수 없다.
     return withTokenCookies(authService.login(request, httpRequest.getRemoteAddr()));
   }
 

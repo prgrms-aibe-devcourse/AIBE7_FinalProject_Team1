@@ -62,6 +62,21 @@ body,body:has(#landing.active){background:var(--canvas);font-family:"Pretendard 
 
 .landing-account button.active{font-weight:800;color:#1b1d24}
 
+/* 상단 계정 영역은 프로필 진입과 세션 종료를 구분해, 닉네임 자체가 클릭 대상임을 분명히 한다. */
+.landing-account.is-signed-in{position:relative;gap:8px;color:var(--ink)}
+.landing-account .landing-account-profile{display:inline-flex;align-items:center;gap:7px;min-width:0;padding:5px 12px 5px 5px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink);font-size:13px;font-weight:700;line-height:1;transition:border-color .15s ease,background .15s ease}
+.landing-account .landing-account-profile:hover,.landing-account .landing-account-profile:focus-visible{border-color:var(--blue);background:var(--blue-50);color:var(--blue)}
+.landing-account-avatar{display:grid;place-items:center;flex:none;width:25px;height:25px;overflow:hidden;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:800}
+.landing-account-avatar img{width:100%;height:100%;object-fit:cover}
+.landing-account-name{max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.landing-account-menu{position:absolute;top:calc(100% + 10px);right:0;z-index:40;display:grid;min-width:150px;padding:7px;border:1px solid var(--line);border-radius:8px;background:#fff;box-shadow:0 6px 16px rgba(22,23,29,.14)}
+.landing-account-menu[hidden]{display:none}
+.landing-account-menu button{width:100%;padding:10px 11px;border-radius:5px;color:var(--ink);font-size:12px;font-weight:600;text-align:left}
+.landing-account-menu button:hover,.landing-account-menu button:focus-visible{background:var(--blue-50);color:var(--blue)}
+.landing-account-menu .landing-account-menu-logout{margin-top:4px;padding-top:11px;border-top:1px solid var(--line);color:var(--muted)}
+.landing-account .landing-account-admin{padding:4px 7px;border-radius:999px;background:var(--blue-50);color:var(--blue);font-size:11px;font-weight:800}
+@media(max-width:780px){.landing-account.is-signed-in{gap:4px}.landing-account .landing-account-profile{gap:5px;padding:4px 6px 4px 4px}.landing-account-avatar{width:22px;height:22px;font-size:10px}.landing-account-name{max-width:58px;font-size:11px}.landing-account-menu{top:calc(100% + 7px);min-width:132px}.landing-account .landing-account-admin{display:none}}
+
 .mp-guest{display:grid;justify-items:start;gap:10px}.mp-guest[hidden]{display:none}.mp-guest p{margin:0 0 6px;color:#62646a;font-size:13px}
 .mp-profile{display:flex;align-items:center;gap:20px;padding:22px 24px}.mp-avatar{position:relative;flex:none;width:84px;height:84px;border-radius:50%;background:#e6f2f1;color:var(--blue);border:1px solid var(--line);overflow:hidden;display:grid;place-items:center;font-size:30px;font-weight:800}.mp-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.mp-avatar img[hidden]{display:none}
 .mp-photo-actions{display:flex;gap:6px;margin-top:6px}.mp-photo-btn{font:inherit;font-size:12px;font-weight:600;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:4px;padding:4px 10px;cursor:pointer}.mp-photo-btn:hover{border-color:var(--ink)}.mp-photo-btn[hidden]{display:none}.mp-photo-msg{font-size:12px;color:#c0392b}.mp-photo-msg[hidden]{display:none}

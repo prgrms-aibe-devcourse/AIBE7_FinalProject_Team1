@@ -189,6 +189,13 @@
     if (titleEl) {
       titleEl.innerHTML = `<b>${escapeHtml(room.listingTitle || '판매글')}</b><span>${escapeHtml(room.counterpartyNickname)}님과의 대화</span>`;
     }
+    // 대화방 위쪽에도 상대방 사진을 보여 준다.
+    const topAvatar = find('[data-deals-chat-top]')?.firstElementChild;
+    if (topAvatar && window.PastportChatAvatar) {
+      const avatar = window.PastportChatAvatar.create(room.counterpartyNickname);
+      topAvatar.replaceWith(avatar);
+      window.PastportChatAvatar.fill(avatar, room.roomId);
+    }
     const statusEl = find('[data-deals-listing-status]');
     if (statusEl) {
       statusEl.textContent = statusLabel(room.listingStatus);
@@ -247,8 +254,10 @@
     if (!container) return;
     container.replaceChildren();
 
+    let previousSender = null;
     messages.forEach((msg) => {
       if (msg.system) {
+        previousSender = null;
         const notice = document.createElement('div');
         notice.className = 'msg-system';
         notice.textContent = msg.content;
@@ -259,8 +268,29 @@
       const box = document.createElement('div');
       box.className = 'msg ' + (isMe ? 'me' : 'you');
       const timeStr = msg.createdAt ? new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' }).format(new Date(msg.createdAt)) : '';
-      box.innerHTML = `<p>${escapeHtml(msg.content)}</p><time>${timeStr}</time>`;
-      container.appendChild(box);
+      const sameSender = previousSender === msg.senderId;
+      previousSender = msg.senderId;
+      if (isMe || !window.PastportChatAvatar) {
+        box.innerHTML = `<p>${escapeHtml(msg.content)}</p><time>${timeStr}</time>`;
+        container.appendChild(box);
+        return;
+      }
+      // 받은 메시지는 사진과 이름을 함께 보여 준다. 같은 사람이 이어서 보낸 메시지에는 사진과 이름을 반복하지 않는다.
+      const nickname = currentRoom?.counterpartyNickname || '상대방';
+      const nameHtml = sameSender ? '' : `<b class="msg-name">${escapeHtml(nickname)}</b>`;
+      box.innerHTML = `${nameHtml}<p>${escapeHtml(msg.content)}</p><time>${timeStr}</time>`;
+      const row = document.createElement('div');
+      row.className = 'msg-row';
+      if (sameSender) {
+        const gap = document.createElement('span');
+        gap.className = 'msg-gap';
+        row.append(gap, box);
+      } else {
+        const avatar = window.PastportChatAvatar.create(nickname);
+        if (currentRoom) window.PastportChatAvatar.fill(avatar, currentRoom.roomId);
+        row.append(avatar, box);
+      }
+      container.appendChild(row);
     });
 
     // 상대방이 나갔다는 안내가 있으면 더 이상 메시지를 보낼 수 없다.

@@ -13,17 +13,13 @@
 .mp-stats dd{margin:6px 0 0;font-size:28px;font-weight:700;letter-spacing:-.5px;color:var(--ink)}
 
 .mp-block{margin-top:44px}
-.mp-block-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.mp-block-head{display:flex;align-items:baseline;gap:10px;margin-bottom:14px}
 .mp-block-head h2{margin:0;font-size:22px;letter-spacing:-.6px;color:var(--ink)}
-.mp-block-head button{font-size:13px;color:#62646a;background:none;border:0;cursor:pointer}
-.mp-block-head button:hover{color:var(--blue)}
-.mp-table{width:100%;border-collapse:collapse;border-top:2px solid var(--ink)}
-.mp-table th{padding:12px 8px;font-size:13px;font-weight:700;text-align:center;background:#fafbfb;border-bottom:1px solid var(--line)}
-.mp-table td{padding:14px 8px;font-size:14px;text-align:center;border-bottom:1px solid var(--line);color:var(--ink);overflow-wrap:anywhere}
+.mp-table{width:100%;table-layout:fixed;border-collapse:collapse;border-top:2px solid var(--ink)}
+.mp-table th{padding:12px;font-size:13px;font-weight:700;text-align:center;background:#fafbfb;border-bottom:1px solid var(--line)}
+.mp-table td{padding:14px 12px;font-size:14px;text-align:center;border-bottom:1px solid var(--line);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mp-table td.mp-left{text-align:left}
-.mp-table .mp-empty-row{padding:36px 8px;color:#80848a}
-.mp-table tbody tr[data-page]{cursor:pointer}
-.mp-table tbody tr[data-page]:hover{background:#f4f9f9}
+.mp-table .mp-empty-row{padding:36px 12px;color:#80848a;white-space:normal;word-break:keep-all}
 .mp-empty-row .sc-btn{margin-top:12px}
 .mp-empty-row p{margin:0 0 4px}
 
@@ -32,3 +28,41 @@
   .mp-stats{width:100%}
   .mp-stats>div{flex:1;min-width:0;padding:0 8px}
 }
+.mp-link-text{padding:0;font:inherit;font-weight:600;text-align:left;color:var(--ink);background:none;border:0;cursor:pointer}
+.mp-hint{margin-left:8px;padding:1px 8px;font-size:11px;color:#62646a;border:1px solid var(--line);border-radius:999px;white-space:nowrap}
+.mp-table tbody tr[data-page]:hover .mp-link-text,.mp-link-text:focus-visible{color:var(--blue)}
+.mp-table tbody tr[data-page]:hover .mp-hint,.mp-link-text:focus-visible .mp-hint{color:var(--blue);border-color:var(--blue)}
+/* 열 너비: 첫 칸(제목)을 넓게, 나머지 둘은 같은 폭. 길면 말줄임(…)으로 줄인다. */
+.mp-table th:nth-child(1){width:46%}
+.mp-table th:nth-child(2),.mp-table th:nth-child(3){width:27%}
+.mp-table td.mp-left{text-align:left}
+.mp-link-text{display:flex;align-items:center;max-width:100%;min-width:0}
+.mp-link-text>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mp-hint{flex:none}
+@media(max-width:640px){
+  .mp-table th,.mp-table td{padding-left:6px;padding-right:6px;font-size:13px}
+  .mp-table th:nth-child(1){width:50%}
+  .mp-table th:nth-child(2),.mp-table th:nth-child(3){width:25%}
+  .mp-hint{display:none}
+}
+/* 프로필 영역 버튼: 사진 변경은 틸색 테두리 버튼, 삭제는 조용한 글자 버튼으로 구분한다. */
+#mypage .mp-photo-actions{align-items:center;gap:10px;margin-top:10px}
+.mp-photo-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 14px;font:inherit;font-size:12px;font-weight:700;line-height:1;color:var(--blue);background:#fff;border:1px solid var(--blue);border-radius:999px;cursor:pointer;transition:color .15s,background .15s}
+.mp-photo-btn:hover{color:#fff;background:var(--blue)}
+.mp-photo-btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#mypage .mp-photo-msg{margin-top:6px}
+/* 사진 변경 팝업 */
+.mp-dialog{width:min(380px,calc(100vw - 32px));padding:24px;border:0;border-radius:12px;color:var(--ink);box-shadow:0 16px 48px rgba(22,23,29,.22)}
+.mp-dialog::backdrop{background:rgba(22,23,29,.45)}
+.mp-dialog h2{margin:0 0 18px;font-size:18px;letter-spacing:-.5px}
+.mp-dialog-body{display:grid;justify-items:center;gap:8px;padding:20px 12px;border-radius:8px;background:#f4f6f7;text-align:center}
+.mp-avatar-lg{width:120px;height:120px;font-size:44px}
+.mp-dialog-body strong{font-size:17px;letter-spacing:-.5px}
+.mp-dialog-body small{font-size:12px;line-height:1.5;color:#62646a;word-break:keep-all}
+.mp-dialog-tools{display:flex;justify-content:center;gap:8px;margin-top:14px}
+.mp-dialog .mp-photo-msg{display:block;margin-top:10px;text-align:center}
+.mp-dialog .mp-photo-msg[hidden]{display:none}
+.mp-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+/* 행 어디에 올려도 눌러서 이동할 수 있다는 것을 손가락 모양 커서와 배경색으로 알려 준다. */
+.mp-table tbody tr[data-page],.mp-table tbody tr[data-page] td{cursor:pointer}
+.mp-table tbody tr[data-page]:hover{background:#f4f9f9}

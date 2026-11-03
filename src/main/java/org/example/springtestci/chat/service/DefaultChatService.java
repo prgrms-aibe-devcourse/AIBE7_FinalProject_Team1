@@ -152,6 +152,12 @@ public class DefaultChatService implements ChatService {
   }
 
   @Override
+  @Transactional(readOnly = true)
+  public long findCounterpartyId(long roomId, long actorId) {
+    return counterpartyId(requireActiveParticipant(roomId, actorId), actorId);
+  }
+
+  @Override
   @Transactional
   public ChatMessageResponse sendMessage(long roomId, long actorId, String content) {
     ChatRoom sendRoom = requireActiveParticipant(roomId, actorId);

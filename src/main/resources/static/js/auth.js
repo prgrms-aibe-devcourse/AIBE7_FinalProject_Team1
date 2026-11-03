@@ -47,18 +47,65 @@ const auth = (() => {
     const box = document.querySelector('.landing-account');
     if (!box) return;
     box.replaceChildren();
+    box.className = user ? 'landing-account is-signed-in' : 'landing-account';
     if (user) {
-      const name = document.createElement('button');
-      name.type = 'button';
-      name.dataset.page = 'mypage';
-      name.textContent = `${user.nickname}님`;
+      const nickname = user.nickname || '사용자';
+      const profile = document.createElement('button');
+      profile.type = 'button';
+      profile.className = 'landing-account-profile';
+      profile.dataset.authMenuToggle = '';
+      profile.setAttribute('aria-expanded', 'false');
+      profile.setAttribute('aria-haspopup', 'menu');
+      profile.setAttribute('aria-label', `${nickname}님 마이페이지`);
+
+      const avatar = document.createElement('span');
+      avatar.className = 'landing-account-avatar';
+      avatar.setAttribute('aria-hidden', 'true');
+      const avatarSource = readAvatar();
+      if (avatarSource) {
+        const image = document.createElement('img');
+        image.src = avatarSource;
+        image.alt = '';
+        avatar.append(image);
+      } else {
+        avatar.textContent = [...nickname][0] || '?';
+      }
+
+      const name = document.createElement('span');
+      name.className = 'landing-account-name';
+      name.textContent = `${nickname}님`;
+
+      profile.append(avatar, name);
+
       const logout = document.createElement('button');
       logout.type = 'button';
+      logout.className = 'landing-account-logout';
       logout.dataset.authLogout = '';
       logout.textContent = '로그아웃';
-      box.append(name, document.createTextNode(' '), logout);
+
+      const menu = document.createElement('div');
+      menu.className = 'landing-account-menu';
+      menu.dataset.authMenu = '';
+      menu.hidden = true;
+      [
+        ['mypage', '내 계정'],
+        ['passport', '내 제품'],
+        ['my-listings', '내 판매글'],
+        ['deals', '채팅'],
+      ].forEach(([page, label]) => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.dataset.page = page;
+        item.textContent = label;
+        menu.append(item);
+      });
+      const menuLogout = logout.cloneNode(true);
+      menuLogout.className = 'landing-account-menu-logout';
+      menu.append(menuLogout);
+      box.append(profile, menu);
       if (user.role === 'ADMIN') {
         const admin = document.createElement('a');
+        admin.className = 'landing-account-admin';
         admin.href = '/admin';
         admin.textContent = '관리자';
         box.append(admin);
@@ -123,9 +170,30 @@ const auth = (() => {
     }
   };
 
-  // 프로필 사진: 서버 저장 API가 아직 없어 이 브라우저(localStorage)에 계정별로 축소본만 보관한다.
-  const avatarKey = () => `pastport:avatar:${user?.id}`;
-  const readAvatar = () => { try { return localStorage.getItem(avatarKey()); } catch { return null; } };
+  // 프로필 사진은 서버(DB)에 저장한다. 로그인 직후 한 번 받아 오고, 받은 이미지는 object URL로 화면에 쓴다.
+  let avatarSrc = null;
+  let avatarTicket = 0;
+  const readAvatar = () => avatarSrc;
+  const setAvatarSrc = (src) => {
+    if (avatarSrc?.startsWith('blob:')) URL.revokeObjectURL(avatarSrc);
+    avatarSrc = src;
+  };
+  /** 서버에서 내 사진을 받아 온다. 사진이 없거나(204) 실패하면 닉네임 첫 글자를 보여 준다. */
+  const loadAvatar = async () => {
+    const ticket = ++avatarTicket;
+    const owner = user?.id;
+    if (!owner) { setAvatarSrc(null); return; }
+    let next = null;
+    try {
+      const response = await authFetch('/api/v1/me/profile-image', { cache: 'no-store' });
+      if (response.status === 200) next = URL.createObjectURL(await response.blob());
+    } catch { /* 사진을 못 받아도 기본 이미지로 보여 준다. */ }
+    if (ticket !== avatarTicket || user?.id !== owner) { if (next) URL.revokeObjectURL(next); return; }
+    setAvatarSrc(next);
+    renderHeader();
+    const member = document.querySelector('#mypage [data-mp="member"]');
+    if (member) renderAvatar(member); else renderSideAccount();
+  };
 
   /** 저장된 프로필 사진이 있으면 이미지로, 없으면 닉네임 첫 글자를 보여준다. */
   const renderAvatar = (member) => {
@@ -134,11 +202,10 @@ const auth = (() => {
     img.hidden = !src;
     if (src) img.src = src; else img.removeAttribute('src');
     member.querySelector('[data-mp-field="initial"]').hidden = !!src;
-    member.querySelector('[data-mp-remove]').hidden = !src;
     renderSideAccount();
   };
 
-  /** 선택한 이미지를 256px 정사각형 JPEG로 잘라 줄인다. */
+  /** 선택한 이미지를 256px 정사각형 JPEG로 잘라 줄인 Blob으로 돌려준다. 서버도 같은 규격으로 다시 검증한다. */
   const shrinkImage = (file) => new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const image = new Image();
@@ -148,35 +215,111 @@ const auth = (() => {
       canvas.width = canvas.height = size;
       canvas.getContext('2d').drawImage(image, (image.width - side) / 2, (image.height - side) / 2, side, side, 0, 0, size, size);
       URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL('image/jpeg', 0.85));
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('이미지를 줄이지 못했어요.'))), 'image/jpeg', 0.85);
     };
     image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('이미지를 읽지 못했어요.')); };
     image.src = url;
   });
 
-  document.addEventListener('change', async (event) => {
-    const input = event.target.closest?.('[data-mp-file]');
-    if (!input || !user) return;
-    const member = input.closest('[data-mp="member"]');
-    const msg = member.querySelector('[data-mp-msg]');
-    const file = input.files[0];
-    input.value = '';
-    msg.hidden = true;
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { msg.textContent = '5MB 이하 이미지만 올릴 수 있어요.'; msg.hidden = false; return; }
+  // 프로필 사진 변경 팝업: 고른 사진을 저장 전에 원형 미리보기로 확인하고, 닉네임과 함께 보여 준다.
+  // pendingAvatar: undefined=변경 없음, null=기본 이미지로, { blob, url }=새로 고른 사진
+  let pendingAvatar;
+  const discardPending = () => {
+    if (pendingAvatar?.url) URL.revokeObjectURL(pendingAvatar.url);
+    pendingAvatar = undefined;
+  };
+  const dialogParts = () => {
+    const dialog = document.querySelector('[data-mp-dialog]');
+    if (!dialog) return null;
+    const q = (name) => dialog.querySelector(`[data-mp-${name}]`);
+    return { dialog, img: q('pimg'), initial: q('pinitial'), name: q('pname'), msg: q('pmsg'), save: q('save') };
+  };
+  const paintPreview = (parts) => {
+    const src = pendingAvatar === undefined ? readAvatar() : pendingAvatar?.url || null;
+    parts.img.hidden = !src;
+    if (src) parts.img.src = src; else parts.img.removeAttribute('src');
+    parts.initial.hidden = !!src;
+    parts.initial.textContent = [...(user?.nickname || '')][0] || '';
+    parts.name.textContent = user?.nickname || '';
+  };
+  const showDialogMessage = (parts, text) => { parts.msg.textContent = text || ''; parts.msg.hidden = !text; };
+
+  /** 선택한 변경을 서버에 저장한다. 성공하면 새 사진(또는 기본 이미지)을 화면에 반영하고 팝업을 닫는다. */
+  const saveAvatar = async (parts) => {
+    if (pendingAvatar === undefined) { parts.dialog.close(); return; }
+    const owner = user?.id;
+    parts.save.disabled = true;
+    showDialogMessage(parts, '저장하는 중이에요…');
     try {
-      localStorage.setItem(avatarKey(), await shrinkImage(file));
-      renderAvatar(member);
-    } catch (e) {
-      msg.textContent = e.message || '사진을 저장하지 못했어요.'; msg.hidden = false;
+      let response;
+      if (pendingAvatar === null) {
+        response = await authFetch('/api/v1/me/profile-image', { method: 'DELETE' });
+      } else {
+        const form = new FormData();
+        form.append('file', pendingAvatar.blob, 'profile.jpg');
+        response = await authFetch('/api/v1/me/profile-image', { method: 'PUT', body: form });
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        showDialogMessage(parts, response.status === 401 ? '로그인이 필요해요.' : body?.message || '사진을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.');
+        return;
+      }
+      if (user?.id !== owner) return;
+      // 새 사진의 object URL은 화면이 계속 쓰므로 팝업을 닫을 때 해제하지 않고 넘겨 준다.
+      const saved = pendingAvatar;
+      pendingAvatar = undefined;
+      setAvatarSrc(saved ? saved.url : null);
+      renderHeader();
+      const member = document.querySelector('#mypage [data-mp="member"]');
+      if (member) renderAvatar(member); else renderSideAccount();
+      parts.dialog.close();
+    } catch {
+      showDialogMessage(parts, '서버에 연결하지 못했어요. 연결 상태를 확인해 주세요.');
+    } finally {
+      parts.save.disabled = false;
     }
-  });
+  };
 
   document.addEventListener('click', (event) => {
-    const button = event.target.closest?.('[data-mp-remove]');
-    if (!button || !user) return;
-    try { localStorage.removeItem(avatarKey()); } catch { /* 저장소를 쓸 수 없으면 무시 */ }
-    renderAvatar(button.closest('[data-mp="member"]'));
+    const parts = dialogParts();
+    if (!parts || !user) return;
+    const target = event.target;
+    if (target.closest?.('[data-mp-open]')) {
+      discardPending();
+      showDialogMessage(parts, '');
+      paintPreview(parts);
+      parts.dialog.showModal();
+    } else if (target.closest?.('[data-mp-premove]')) {
+      discardPending();
+      pendingAvatar = null; showDialogMessage(parts, ''); paintPreview(parts);
+    } else if (target.closest?.('[data-mp-cancel]') || target === parts.dialog) {
+      parts.dialog.close();
+    } else if (target.closest?.('[data-mp-save]')) {
+      saveAvatar(parts);
+    }
+  });
+  // 저장하지 않고 닫으면(취소·바깥 클릭·Esc) 고른 사진을 버린다.
+  document.addEventListener('close', (event) => {
+    if (event.target?.matches?.('[data-mp-dialog]')) discardPending();
+  }, true);
+
+  document.addEventListener('change', async (event) => {
+    const input = event.target.closest?.('[data-mp-pfile]');
+    const parts = dialogParts();
+    if (!input || !parts || !user) return;
+    const file = input.files[0];
+    input.value = '';
+    showDialogMessage(parts, '');
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { showDialogMessage(parts, '10MB 이하 이미지만 고를 수 있어요.'); return; }
+    try {
+      const blob = await shrinkImage(file);
+      discardPending();
+      pendingAvatar = { blob, url: URL.createObjectURL(blob) };
+      paintPreview(parts);
+    } catch (e) {
+      showDialogMessage(parts, e.message || '사진을 읽지 못했어요.');
+    }
   });
 
   /** 왼쪽 사이드바 하단의 내 계정 영역을 로그인한 사용자 정보로 채운다. */
@@ -200,10 +343,13 @@ const auth = (() => {
 
   /** 로그인 응답으로 세션 상태를 갱신하고 화면에 반영한다. */
   const setSession = (data) => {
+    const previousId = user?.id;
     user = data?.user ?? null;
+    if (user?.id !== previousId) { discardPending(); setAvatarSrc(null); }
     renderHeader();
     renderSideAccount();
     renderMyPage();
+    if (user && user.id !== previousId) loadAvatar();
     document.dispatchEvent(new CustomEvent('pastport:auth-changed', { detail: { signedIn: Boolean(user), userId: user?.id ?? null } }));
   };
 
@@ -401,6 +547,32 @@ const auth = (() => {
       message(form, error.fieldErrors?.[0]?.message || error.message);
     }
   });
+  document.addEventListener('click', (event) => {
+    const account = document.querySelector('.landing-account.is-signed-in');
+    if (!account) return;
+    const toggle = event.target.closest?.('[data-auth-menu-toggle]');
+    const menu = account.querySelector('[data-auth-menu]');
+    if (toggle) {
+      const open = menu.hidden;
+      menu.hidden = !open;
+      toggle.setAttribute('aria-expanded', String(open));
+      return;
+    }
+    if (!event.target.closest?.('.landing-account')) {
+      menu.hidden = true;
+      account.querySelector('[data-auth-menu-toggle]')?.setAttribute('aria-expanded', 'false');
+    }
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    const account = document.querySelector('.landing-account.is-signed-in');
+    const menu = account?.querySelector('[data-auth-menu]');
+    if (!menu || menu.hidden) return;
+    menu.hidden = true;
+    const toggle = account.querySelector('[data-auth-menu-toggle]');
+    toggle?.setAttribute('aria-expanded', 'false');
+    toggle?.focus();
+  });
   document.addEventListener('click', async (event) => {
     if (!event.target.closest?.('[data-auth-logout]')) return;
     document.dispatchEvent(new CustomEvent('pastport:logout', { detail: {} }));
@@ -424,6 +596,15 @@ const auth = (() => {
     if (id === 'mypage') renderMyPage();
     const slot = ['auth', 'signup'].includes(id) && document.querySelector(`#${id} [data-auth-art]`);
     if (slot) slot.outerHTML = await artHtml.catch(() => '');
+  });
+
+  // 로그인한 뒤 뒤로 가기·앞으로 가기로 로그인·회원가입 화면이 열리면 안내하고 메인 화면으로 보낸다.
+  // 기록이 늘지 않도록 현재 기록의 화면 이름을 먼저 홈으로 바꿔, 뒤로 가기를 다시 눌러도 이 화면에 갇히지 않게 한다.
+  document.addEventListener('pastport:page-shown', (event) => {
+    if (!user || !['auth', 'signup'].includes(event.detail?.id)) return;
+    window.history.replaceState({ ...window.history.state, page: 'landing' }, '', window.location.href);
+    goto('landing');
+    alert('이미 로그인되어 있습니다.');
   });
 
   // 새로고침 후 HttpOnly refresh 쿠키가 남아 있으면 세션을 복구한다.

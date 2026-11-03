@@ -1,0 +1,14 @@
+/* 채팅 상대방 프로필 사진(카카오톡·디스코드처럼 사진과 이름을 함께 보여 준다) */
+.chat-avatar{display:grid;place-items:center;flex:none;width:36px;height:36px;overflow:hidden;border-radius:50%;background:#e6f2f1;color:var(--blue);font-size:14px;font-weight:800;line-height:1}
+.chat-avatar img{width:100%;height:100%;object-fit:cover}
+.chat-avatar.is-lg{width:44px;height:44px;font-size:17px}
+.dl-row .chat-avatar{align-self:start;width:44px;height:44px;font-size:17px}
+.dl-top .chat-avatar{width:44px;height:44px;font-size:17px}
+
+/* 받은 메시지: 사진 + 이름 + 말풍선. 같은 사람이 이어서 보낸 메시지는 사진·이름 없이 자리만 맞춘다. */
+.msg-row{display:flex;align-items:flex-start;gap:8px;max-width:80%;justify-self:start}
+.msg-row .msg{min-width:0;max-width:none}
+.msg-row .chat-avatar{margin-top:1px}
+.msg-row .msg-gap{width:36px;flex:none}
+.msg-name{font-size:12px;font-weight:700;color:var(--ink)}
+@media(max-width:700px){.msg-row{max-width:92%}}
