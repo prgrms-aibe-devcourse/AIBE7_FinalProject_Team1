@@ -21,6 +21,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.web.util.ServletRequestPathUtils;
 
 @ExtendWith(MockitoExtension.class)
 class RateLimitInterceptorTest {
@@ -123,6 +124,38 @@ class RateLimitInterceptorTest {
         .preHandle(
             new MockHttpServletRequest("POST", path), new MockHttpServletResponse(), new Object());
     verify(rateLimiter).check("product-question", "user:7", 10, Duration.ofMinutes(1));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"", "/pastport"})
+  void matchesEncodedApplicationPathsWithOrWithoutAContextPath(String contextPath) {
+    MockHttpServletRequest request =
+        new MockHttpServletRequest("POST", contextPath + "/api/v1/products/1/ai/%71uestions");
+    request.setContextPath(contextPath);
+    new RateLimitInterceptor(rateLimiter)
+        .preHandle(request, new MockHttpServletResponse(), new Object());
+    verify(rateLimiter).check("product-question", "ip:127.0.0.1", 10, Duration.ofMinutes(1));
+  }
+
+  @Test
+  void usesTheParsedMvcApplicationPathForOtherLimitedEndpoints() {
+    MockHttpServletRequest request =
+        new MockHttpServletRequest("POST", "/pastport/api/v1/chat-rooms/3/%6dessages");
+    request.setContextPath("/pastport");
+    ServletRequestPathUtils.parseAndCache(request);
+    new RateLimitInterceptor(rateLimiter)
+        .preHandle(request, new MockHttpServletResponse(), new Object());
+    verify(rateLimiter).check("chat-send", "ip:127.0.0.1", 30, Duration.ofMinutes(1));
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {"/api/v1/products/1/ai/%2571uestions", "/api/v1/products/1%2Fai%2Fquestions"})
+  void doesNotDecodeTwiceOrTreatAnEncodedSlashAsAPathSeparator(String path) {
+    new RateLimitInterceptor(rateLimiter)
+        .preHandle(
+            new MockHttpServletRequest("POST", path), new MockHttpServletResponse(), new Object());
+    verify(rateLimiter, never()).check(anyString(), anyString(), anyInt(), any());
   }
 
   /** 소유권 이전 수락도 규칙에 걸린다. */

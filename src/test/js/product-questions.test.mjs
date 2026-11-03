@@ -15,8 +15,8 @@ function panel(handler, scope = 'listings', globals = {}) {
 }
 
 const answer = { answer: '등록된 메모리는 16GB예요.', sources: [] };
-const failure = (status, retryAfter = null) => ({ response: {
-  ok: false, status, headers: { get: () => retryAfter }, async json() { return {}; }
+const failure = (status, retryAfter = null, code = undefined) => ({ response: {
+  ok: false, status, headers: { get: () => retryAfter }, async json() { return { code }; }
 } });
 
 test('무관한 질문은 제품 답변·근거 부족과 구분한 범위 안내로 표시한다', async () => {
@@ -118,30 +118,38 @@ for (const [name, handler] of [
   });
 }
 
-test('요청 제한 때 질문을 복구하고 대기 시간이 지난 뒤 수정한 질문을 보낸다', async () => {
-  let now = Date.now();
-  const env = panel((path, options, calls) => calls.length === 1 ? failure(429, '10') : answer,
-    'listings', { Date: class extends Date { static now() { return now; } } });
-  env.input.value = '최근 수리 기록이 있나요?';
-  await env.form.emit('submit');
-  assert.equal(env.input.value, '최근 수리 기록이 있나요?');
-  assert.equal(env.input.disabled, false);
-  assert.equal(env.submit.disabled, true);
-  assert.equal(env.submit.textContent, '10초 후 다시 질문');
-  assert.match(env.root.querySelector('.pq-message').textContent, /질문 요청이 많아요/);
-  assert.match(env.root.textContent, /1분에 질문 10회까지/);
-  env.input.value = '현재 메모리 사양을 알려줘';
-  await env.form.emit('submit');
-  assert.equal(env.calls.length, 1);
-  now += 10000;
-  for (const tick of env.intervals.values()) tick();
-  assert.equal(env.submit.disabled, false);
-  await env.form.emit('submit');
-  assert.equal(env.calls.length, 2);
-  assert.deepEqual(JSON.parse(env.calls[1].options.body), { question: '현재 메모리 사양을 알려줘' });
-  assert.equal(env.input.value, '');
-  assert.equal(env.output.querySelector('.pq-question').textContent, '현재 메모리 사양을 알려줘');
-});
+for (const [name, code, notice] of [
+  ['질문 접수 제한', 'COMMON_003', '질문 요청이 많아요. 표시된 시간이 지난 뒤 다시 질문해 주세요.'],
+  ['AI 생성 제한', 'AI_007', 'AI 답변 생성이 잠시 제한됐어요. 표시된 시간이 지난 뒤 다시 질문해 주세요.'],
+  ['코드 없는 제한', undefined, '요청이 많아요. 표시된 시간이 지난 뒤 다시 질문해 주세요.'],
+  ['알 수 없는 제한', 'UNKNOWN_LIMIT', '요청이 많아요. 표시된 시간이 지난 뒤 다시 질문해 주세요.']
+]) {
+  test(`${name}: 원인에 맞게 안내하고 질문 복구·대기 후 재전송을 유지한다`, async () => {
+    let now = Date.now();
+    const env = panel((path, options, calls) => calls.length === 1 ? failure(429, '10', code) : answer,
+      'listings', { Date: class extends Date { static now() { return now; } } });
+    env.input.value = '최근 수리 기록이 있나요?';
+    await env.form.emit('submit');
+    assert.equal(env.input.value, '최근 수리 기록이 있나요?');
+    assert.equal(env.input.disabled, false);
+    assert.equal(env.submit.disabled, true);
+    assert.equal(env.submit.textContent, '10초 후 다시 질문');
+    assert.equal(env.root.querySelector('.pq-message').textContent, notice);
+    assert.match(env.root.textContent, /1분에 질문 10회까지/);
+    assert.match(env.root.textContent, /AI 답변 생성은 별도 제한/);
+    env.input.value = '현재 메모리 사양을 알려줘';
+    await env.form.emit('submit');
+    assert.equal(env.calls.length, 1);
+    now += 10000;
+    for (const tick of env.intervals.values()) tick();
+    assert.equal(env.submit.disabled, false);
+    await env.form.emit('submit');
+    assert.equal(env.calls.length, 2);
+    assert.deepEqual(JSON.parse(env.calls[1].options.body), { question: '현재 메모리 사양을 알려줘' });
+    assert.equal(env.input.value, '');
+    assert.equal(env.output.querySelector('.pq-question').textContent, '현재 메모리 사양을 알려줘');
+  });
+}
 
 for (const status of [401, 404]) {
   test(`${status}: 로그인·조회 권한을 잃으면 질문을 입력란이나 답변 영역에 남기지 않는다`, async () => {
