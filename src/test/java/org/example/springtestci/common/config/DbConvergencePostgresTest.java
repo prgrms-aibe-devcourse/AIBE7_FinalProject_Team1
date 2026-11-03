@@ -2,17 +2,21 @@ package org.example.springtestci.common.config;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.example.db.ConvergenceTool;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
@@ -23,6 +27,7 @@ class DbConvergencePostgresTest {
   private static final String USER = System.getenv("DEPLOY_DDL_TEST_DB_USER");
   private static final String PASSWORD = System.getenv("DEPLOY_DDL_TEST_DB_PASSWORD");
   private static final List<String> SCHEMAS = new ArrayList<>();
+  @TempDir Path directory;
 
   record Database(String schema, String url) {
     JdbcTemplate jdbc() {
@@ -232,8 +237,9 @@ class DbConvergencePostgresTest {
       String state = ConvergenceTool.snapshot(connection, "synthetic-target");
       ConvergenceTool.normalize(connection);
       assertEquals(state, ConvergenceTool.snapshot(connection, "synthetic-target"));
-      String plan = "created=" + Instant.now() + "\n" + state;
-      ConvergenceTool.approve(connection, plan, ConvergenceTool.hash(plan), "synthetic-target");
+      String plan = ConvergenceTool.plan(connection, "synthetic-target", "PURGE");
+      ConvergenceTool.approve(
+          connection, plan, ConvergenceTool.hash(plan), "synthetic-target", "PURGE");
       ConvergenceTool.purge(connection);
       connection.commit();
     }
@@ -268,26 +274,38 @@ class DbConvergencePostgresTest {
     finish(database, "dated");
     user(database);
     try (Connection connection = database.connection()) {
-      String plan =
-          "created="
-              + Instant.now()
-              + "\n"
-              + ConvergenceTool.snapshot(connection, "synthetic-target");
+      String plan = ConvergenceTool.plan(connection, "synthetic-target", "PURGE");
+      for (String invalid :
+          List.of(
+              plan.replaceFirst("created=[^\\n]+", "created=2000-01-01T00:00:00Z"),
+              plan.replaceFirst("source=[^\\n]+", "source=changed"),
+              plan.replaceFirst("catalog=[^\\n]+", "catalog=changed"))) {
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                ConvergenceTool.approve(
+                    connection,
+                    invalid,
+                    ConvergenceTool.hash(invalid),
+                    "synthetic-target",
+                    "PURGE"));
+        connection.rollback();
+      }
       assertThrows(
           IllegalArgumentException.class,
-          () -> ConvergenceTool.approve(connection, plan, "", "synthetic-target"));
+          () -> ConvergenceTool.approve(connection, plan, "", "synthetic-target", "PURGE"));
       assertThrows(
           IllegalArgumentException.class,
           () ->
               ConvergenceTool.approve(
-                  connection, plan, ConvergenceTool.hash(plan), "other-target"));
+                  connection, plan, ConvergenceTool.hash(plan), "other-target", "PURGE"));
       connection.rollback();
       product(database, database.jdbc().queryForObject("select id from users", Long.class));
       assertThrows(
           IllegalArgumentException.class,
           () ->
               ConvergenceTool.approve(
-                  connection, plan, ConvergenceTool.hash(plan), "synthetic-target"));
+                  connection, plan, ConvergenceTool.hash(plan), "synthetic-target", "PURGE"));
       connection.rollback();
     }
     assertEquals(1, database.jdbc().queryForObject("select count(*) from products", Integer.class));
@@ -347,12 +365,9 @@ class DbConvergencePostgresTest {
               .lines()
               .filter(line -> line.startsWith("PRESERVE "))
               .toList();
-      String plan =
-          "created="
-              + Instant.now()
-              + "\n"
-              + ConvergenceTool.snapshot(connection, "synthetic-target");
-      ConvergenceTool.approve(connection, plan, ConvergenceTool.hash(plan), "synthetic-target");
+      String plan = ConvergenceTool.plan(connection, "synthetic-target", "PURGE");
+      ConvergenceTool.approve(
+          connection, plan, ConvergenceTool.hash(plan), "synthetic-target", "PURGE");
       ConvergenceTool.purge(connection);
       connection.commit();
       assertEquals(
@@ -363,6 +378,94 @@ class DbConvergencePostgresTest {
               .toList());
     }
     assertEquals(0, database.jdbc().queryForObject("select count(*) from products", Integer.class));
+  }
+
+  @Test
+  void cliOperationApprovalsRejectCrossPurposeAndMalformedPlans() throws Exception {
+    Database database = legacy();
+    product(database, 99999);
+    Path planFile = directory.resolve("approval.txt");
+    Map<String, String> environment =
+        new HashMap<>(
+            Map.of(
+                "CONVERGENCE_DB_URL", database.url(),
+                "CONVERGENCE_DB_USER", USER,
+                "CONVERGENCE_DB_PASSWORD", PASSWORD,
+                "CONVERGENCE_SCHEMA", database.schema(),
+                "CONVERGENCE_DATABASE",
+                    database.jdbc().queryForObject("select current_database()", String.class),
+                "CONVERGENCE_TARGET_ID", "synthetic-cli",
+                "CONVERGENCE_URL_SHA256", ConvergenceTool.hash(database.url()),
+                "CONVERGENCE_PLAN", planFile.toString()));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> ConvergenceTool.run(new String[] {"plan", "legacy"}, environment));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> ConvergenceTool.run(new String[] {"plan", "legacy", "UNKNOWN"}, environment));
+    String before;
+    try (Connection connection = database.connection()) {
+      before = ConvergenceTool.snapshot(connection, "unchanged");
+    }
+    for (String operation : List.of("NORMALIZE", "PURGE")) {
+      ConvergenceTool.run(new String[] {"plan", "legacy", operation}, environment);
+      String plan = Files.readString(planFile);
+      environment.put("CONVERGENCE_APPROVED_PLAN_SHA256", ConvergenceTool.hash(plan));
+      String wrongAction = operation.equals("NORMALIZE") ? "purge" : "normalize";
+      assertTrue(
+          assertThrows(
+                  IllegalArgumentException.class,
+                  () -> ConvergenceTool.run(new String[] {wrongAction, "legacy"}, environment))
+              .getMessage()
+              .contains("operation"));
+      for (String malformed :
+          List.of(
+              plan.replace("operation=" + operation + "\n", ""),
+              plan.replace("operation=" + operation, "operation=UNKNOWN"),
+              plan.replace(
+                  "operation=" + operation,
+                  "operation=" + operation + "\noperation=" + operation))) {
+        Files.writeString(planFile, malformed);
+        environment.put("CONVERGENCE_APPROVED_PLAN_SHA256", ConvergenceTool.hash(malformed));
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                ConvergenceTool.run(
+                    new String[] {operation.toLowerCase(java.util.Locale.ROOT), "legacy"},
+                    environment));
+      }
+      try (Connection connection = database.connection()) {
+        assertEquals(before, ConvergenceTool.snapshot(connection, "unchanged"));
+      }
+    }
+    ConvergenceTool.run(new String[] {"plan", "legacy", "NORMALIZE"}, environment);
+    environment.put(
+        "CONVERGENCE_APPROVED_PLAN_SHA256", ConvergenceTool.hash(Files.readString(planFile)));
+    ConvergenceTool.run(new String[] {"normalize", "legacy"}, environment);
+    assertEquals(
+        4,
+        database
+            .jdbc()
+            .queryForObject(
+                "select count(*) from flyway_schema_history where version in ('2026102103','2026102701','2026102803','2026102804')",
+                Integer.class));
+    ConvergenceTool.run(new String[] {"plan", "legacy", "NORMALIZE"}, environment);
+    environment.put(
+        "CONVERGENCE_APPROVED_PLAN_SHA256", ConvergenceTool.hash(Files.readString(planFile)));
+    ConvergenceTool.run(new String[] {"normalize", "legacy"}, environment);
+    assertTrue(
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ConvergenceTool.run(new String[] {"purge", "legacy"}, environment))
+            .getMessage()
+            .contains("operation"));
+    assertEquals(1, database.jdbc().queryForObject("select count(*) from products", Integer.class));
+    ConvergenceTool.run(new String[] {"plan", "legacy", "PURGE"}, environment);
+    environment.put(
+        "CONVERGENCE_APPROVED_PLAN_SHA256", ConvergenceTool.hash(Files.readString(planFile)));
+    ConvergenceTool.run(new String[] {"purge", "legacy"}, environment);
+    assertEquals(0, database.jdbc().queryForObject("select count(*) from products", Integer.class));
+    assertEquals(1, database.jdbc().queryForObject("select count(*) from users", Integer.class));
   }
 
   @Test

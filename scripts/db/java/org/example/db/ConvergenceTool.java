@@ -83,8 +83,8 @@ public final class ConvergenceTool {
             MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
   }
 
-  private static String required(String key) {
-    String value = System.getenv(key);
+  private static String required(Map<String, String> environment, String key) {
+    String value = environment.get(key);
     if (value == null || value.isBlank()) throw new IllegalArgumentException("Missing " + key);
     return value;
   }
@@ -342,15 +342,51 @@ public final class ConvergenceTool {
     }
   }
 
-  public static void approve(Connection connection, String plan, String approvedHash, String target)
+  private static String scope(String operation) {
+    return switch (operation) {
+      case "NORMALIZE" ->
+          "history version/script only: purchase 2701->2103, summary 2706->2701, ownership 2702->2803 and 2707->2804; all other history fields preserved";
+      case "PURGE" ->
+          "DELETE all rows: "
+              + String.join(",", PURGE)
+              + "; PRESERVE "
+              + String.join(",", PRESERVE)
+              + "; preserve sequences";
+      default -> throw new IllegalArgumentException("Unknown plan operation");
+    };
+  }
+
+  public static String plan(Connection connection, String target, String operation)
       throws Exception {
+    return "created="
+        + Instant.now()
+        + "\noperation="
+        + operation
+        + "\nscope="
+        + scope(operation)
+        + "\n"
+        + snapshot(connection, target);
+  }
+
+  public static void approve(
+      Connection connection, String plan, String approvedHash, String target, String operation)
+      throws Exception {
+    String expectedScope = scope(operation);
     if (!hash(plan).equals(approvedHash))
       throw new IllegalArgumentException("Plan approval differs");
-    Instant created = Instant.parse(plan.substring(8, plan.indexOf('\n')));
+    String[] sections = plan.split("\n", 4);
+    if (sections.length != 4
+        || !sections[0].startsWith("created=")
+        || !sections[1].equals("operation=" + operation)
+        || plan.lines().filter(line -> line.startsWith("operation=")).count() != 1
+        || !sections[2].equals("scope=" + expectedScope))
+      throw new IllegalArgumentException(
+          "Plan operation missing, unknown, duplicated or differs from action");
+    Instant created = Instant.parse(sections[0].substring(8));
     if (created.isBefore(Instant.now().minusSeconds(1800)) || created.isAfter(Instant.now()))
       throw new IllegalArgumentException("Plan expired");
     lockTables(connection);
-    if (!plan.substring(plan.indexOf('\n') + 1).equals(snapshot(connection, target)))
+    if (!sections[3].equals(snapshot(connection, target)))
       throw new IllegalArgumentException("Plan drift; no writes permitted");
   }
 
@@ -464,20 +500,29 @@ public final class ConvergenceTool {
   }
 
   public static void main(String[] args) throws Exception {
+    run(args, System.getenv());
+  }
+
+  public static void run(String[] args, Map<String, String> environment) throws Exception {
     String action = args[0];
     String lineage = args[1];
     if (!List.of("check", "manifest", "plan", "purge", "normalize", "migrate").contains(action))
       throw new IllegalArgumentException("Unknown action");
-    String url = required("CONVERGENCE_DB_URL");
-    String schema = required("CONVERGENCE_SCHEMA");
+    String operation =
+        action.equals("plan")
+            ? (args.length == 3 ? args[2] : "")
+            : action.toUpperCase(java.util.Locale.ROOT);
+    if (action.equals("plan")) scope(operation);
+    String url = required(environment, "CONVERGENCE_DB_URL");
+    String schema = required(environment, "CONVERGENCE_SCHEMA");
     if (!schema.matches("[a-z][a-z0-9_]*")
         || schema.startsWith("pg_")
         || schema.equals("information_schema"))
       throw new IllegalArgumentException("Invalid application schema");
-    if (!hash(url).equals(required("CONVERGENCE_URL_SHA256")))
+    if (!hash(url).equals(required(environment, "CONVERGENCE_URL_SHA256")))
       throw new IllegalArgumentException("Connection target digest differs");
-    String user = required("CONVERGENCE_DB_USER");
-    String password = required("CONVERGENCE_DB_PASSWORD");
+    String user = required(environment, "CONVERGENCE_DB_USER");
+    String password = required(environment, "CONVERGENCE_DB_PASSWORD");
     Flyway flyway = configuration(url, user, password, schema, lineage).load();
     try (Connection connection = DriverManager.getConnection(url, user, password)) {
       connection.setSchema(schema);
@@ -489,11 +534,19 @@ public final class ConvergenceTool {
         statement.execute("set local lock_timeout='5s'");
         statement.execute("set local statement_timeout='60s'");
       }
-      if (!required("CONVERGENCE_DATABASE").equals(scalar(connection, "select current_database()"))
+      if (!required(environment, "CONVERGENCE_DATABASE")
+              .equals(scalar(connection, "select current_database()"))
           || !schema.equals(scalar(connection, "select current_schema()")))
         throw new IllegalArgumentException("Database/schema differs");
       String target =
-          hash(required("CONVERGENCE_TARGET_ID") + "\n" + url + "\n" + schema + "\n" + lineage);
+          hash(
+              required(environment, "CONVERGENCE_TARGET_ID")
+                  + "\n"
+                  + url
+                  + "\n"
+                  + schema
+                  + "\n"
+                  + lineage);
       if (action.equals("manifest")) {
         manifest(flyway);
       } else if (action.equals("check")) {
@@ -508,20 +561,25 @@ public final class ConvergenceTool {
           } while (statement.getMoreResults());
         }
       } else if (action.equals("plan")) {
-        String plan = "created=" + Instant.now() + "\n" + snapshot(connection, target);
-        Files.writeString(Path.of(required("CONVERGENCE_PLAN")), plan);
+        String plan = plan(connection, target, operation);
+        Files.writeString(Path.of(required(environment, "CONVERGENCE_PLAN")), plan);
         System.out.println("plan_sha256=" + hash(plan));
       } else if (action.equals("normalize") || action.equals("purge")) {
-        String plan = Files.readString(Path.of(required("CONVERGENCE_PLAN")));
-        if (action.equals("normalize")) verifyHistory(connection, flyway, true);
-        approve(connection, plan, required("CONVERGENCE_APPROVED_PLAN_SHA256"), target);
+        String plan = Files.readString(Path.of(required(environment, "CONVERGENCE_PLAN")));
+        approve(
+            connection,
+            plan,
+            required(environment, "CONVERGENCE_APPROVED_PLAN_SHA256"),
+            target,
+            operation);
         if (action.equals("normalize")) {
+          verifyHistory(connection, flyway, true);
           if (!lineage.equals("legacy"))
             throw new IllegalArgumentException("Normalization requires legacy lineage");
           try (var statement =
               connection.prepareStatement(
                   "select set_config('pastport.expected_database', ?, true), set_config('pastport.expected_schema', ?, true)")) {
-            statement.setString(1, required("CONVERGENCE_DATABASE"));
+            statement.setString(1, required(environment, "CONVERGENCE_DATABASE"));
             statement.setString(2, schema);
             statement.execute();
           }

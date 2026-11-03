@@ -84,7 +84,7 @@ From the reviewed source root, use `./gradlew` on Unix or `./gradlew.bat` on Win
 ```text
 ./gradlew dbConvergence -PdbLineage=legacy -PdbAction=manifest --console=plain
 ./gradlew dbConvergence -PdbLineage=legacy -PdbAction=check --console=plain
-./gradlew dbConvergence -PdbLineage=legacy -PdbAction=plan --console=plain
+./gradlew dbConvergence -PdbLineage=legacy -PdbAction=plan -PdbPlanOperation=NORMALIZE --console=plain
 ```
 
 `check` and `plan` use a read-only, repeatable-read transaction. The checker emits labeled count/digest lines, logical
@@ -109,9 +109,9 @@ Build/run inside the extracted source using its wrapper. Capture the final head 
 | 2 | Obtain restorable backup, restore an isolated clone, run this same package there | Actual clone rehearsal PASS | No backup/restore proof or incomplete schema/data inventory |
 | 3 | Stop **all** writers: team IDE bootRun, workers, apps, EC2 service | Maintenance window confirmed | Any uncontrolled writer |
 | 4 | Run manifest and check; review all history, DDL, unknown objects and counts | Current evidence, all required queries ran | Unknown lineage, failed/missing/duplicate history, invalid index, missing prerequisites |
-| 5 | Generate plan; approve exact target, normalization and source/script hashes | Approval recorded | Historical counts used as approval, plan stale/drift |
+| 5 | Generate plan with `-PdbAction=plan -PdbPlanOperation=NORMALIZE`; approve target, history version/script scope and source hashes | Approval recorded | Missing/unknown operation, historical counts used as approval, plan stale/drift |
 | 6 | Set approved hash privately; `./gradlew dbConvergence -PdbLineage=legacy -PdbAction=normalize` | All four identities canonical, other fields unchanged | Guard/timeout/error: transaction rolls back; recheck before retry |
-| 7 | Generate **new** plan after normalization; approve exact deletion scope | Current rows explicitly classified as disposable | Any business row must be retained or an unknown table/trigger/reference exists |
+| 7 | Generate **new** plan with `-PdbAction=plan -PdbPlanOperation=PURGE` after normalization; approve exact allowlist deletion scope | Current rows explicitly classified as disposable | Any business row must be retained or an unknown table/trigger/reference exists |
 | 8 | `./gradlew dbConvergence -PdbLineage=legacy -PdbAction=purge` | Allowlisted business rows gone, users/profile/history digests preserved | Approval/target/source/content/catalog drift or DML error: rollback |
 | 9 | `./gradlew dbConvergence -PdbLineage=legacy -PdbAction=migrate` | Entire chain, strict validate, second migrate=0 | Error/ignored/pending/unresolved migration, unexpected DDL |
 | 10 | check + manifest again; compare catalog, required constraints/indexes and preserved rows | DB owner records DB GO | Any violation, NOT_RUN, unexpected counts or missing validated contract |
@@ -122,8 +122,19 @@ the entire listed business-table contents are approved for disposal. Retained-bu
 There is no arbitrary subset deletion or table override. Unknown rows cannot be classified from the historical snapshot.
 The runner locks all existing application tables in stable name order, rechecks the full plan (target, source digest,
 table contents including preserved tables, history, columns, constraints, indexes), then writes. There are 5s lock and 60s
-statement timeouts. A failed multi-statement step rolls back. A successful write invalidates its old plan.
+statement timeouts on the maintenance JDBC transaction. A failed multi-statement step rolls back.
+Every plan includes exactly one `operation=NORMALIZE` or `operation=PURGE` plus its scope, covered by the
+approved SHA-256. Execution must match that operation; missing, unknown, duplicate and cross-purpose operations
+are rejected. Old plans without an operation must be regenerated and approved again. Changed contents/history
+invalidate the snapshot; a no-op normalization may leave it unchanged, but never authorizes purge.
+Generate and approve a fresh purpose-specific plan before every write step.
 The plan is read-only; there is no delete-and-rollback dry-run masquerading as a plan.
+
+The maintenance transaction's `SET LOCAL` timeouts do not propagate to Flyway's separate migration connections,
+including nontransactional concurrent indexing. Before an actual clone rehearsal, inspect the effective
+`lock_timeout` and `statement_timeout` on the approved migration role/connection and agree on cancellation
+limits separately. On interruption inspect applied history and index validity as described below; do not assume
+all migrations roll back together. Use an approved connection compatible with PostgreSQL session advisory locks.
 
 Purge uses a fixed child-before-parent DELETE allowlist in code, retaining sequences/identities. It preserves `users`,
 `user_profile_images` and `flyway_schema_history`; auth/storage/managed schemas are outside scope. It refuses unknown

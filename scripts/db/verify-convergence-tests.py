@@ -16,6 +16,7 @@ required = {
     "m6HistoryIdentityAndIgnorePoliciesAreMeasured",
     "m6NormalizationRejectsPartialAndWrongCatalog",
     "purgePreservesUsersProfileBytesAndHistoryOnSuccess",
+    "cliOperationApprovalsRejectCrossPurposeAndMalformedPlans",
 }
 cases = [
     case

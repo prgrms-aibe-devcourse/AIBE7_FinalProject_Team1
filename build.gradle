@@ -88,4 +88,7 @@ tasks.register('dbConvergence', JavaExec) {
     classpath = sourceSets.dbTools.runtimeClasspath
     mainClass = 'org.example.db.ConvergenceTool'
     args providers.gradleProperty('dbAction').getOrElse('check'), providers.gradleProperty('dbLineage').getOrElse('dated')
+    if (providers.gradleProperty('dbPlanOperation').isPresent()) {
+        args providers.gradleProperty('dbPlanOperation').get()
+    }
 }
