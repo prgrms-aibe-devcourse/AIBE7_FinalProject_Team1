@@ -88,6 +88,13 @@ assert_no_values "$temporary/env-output" "$env_file"
 for key in GEMINI_API_KEY LOG_FILE DOTENV_PATH; do grep -qx "$key: SET" "$temporary/env-output"; done
 pass 'valid env; no values printed'
 cp "$env_file" "$temporary/valid.env"
+for profile in prod,supabase,db-convergence prod,supabase,db-legacy-convergence; do
+    cp "$temporary/valid.env" "$env_file"
+    sed -i "s/^SPRING_PROFILES_ACTIVE=.*/SPRING_PROFILES_ACTIVE=$profile/" "$env_file"
+    bash "$scripts/check-env.sh" "$env_file" > "$temporary/profile-result"
+    pass 'explicit convergence profile accepted'
+done
+cp "$temporary/valid.env" "$env_file"
 for key in GEMINI_API_KEY LOG_FILE DOTENV_PATH; do
     cp "$temporary/valid.env" "$env_file"
     sed -i "/^$key=/d" "$env_file"

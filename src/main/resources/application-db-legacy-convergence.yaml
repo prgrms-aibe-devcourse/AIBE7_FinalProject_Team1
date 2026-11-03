@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    hikari:
+      connection-init-sql: SET search_path TO public
+  jpa:
+    properties:
+      hibernate:
+        default_schema: public
+  flyway:
+    schemas: public
+    default-schema: public
+    locations: classpath:db/migration,classpath:db/deploy,classpath:db/convergence,classpath:db/legacy,classpath:db/compatibility/purchase
+    ignore-migration-patterns: []
+    out-of-order: false
+    postgresql:
+      transactional-lock: false

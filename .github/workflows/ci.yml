@@ -187,6 +187,7 @@ jobs:
           --tests '*NormalizeOwnershipVersionPostgresTest'
           --tests '*ListingDraftOwnershipHttpTest'
           --tests '*LegacyProductMigrationChecksumTest*'
+          --tests '*DbConvergencePostgresTest'
           --rerun-tasks
           --console=plain
       - name: Verify legacy PostgreSQL test execution
@@ -207,11 +208,41 @@ jobs:
               raise SystemExit('Legacy PostgreSQL test must execute exactly once and pass without skipping')
           print(f'{method}: tests=1 failures=0 errors=0 skipped=0 (JUnit XML)')
           PY
+      - name: Verify convergence PostgreSQL test execution
+        run: python3 scripts/db/verify-convergence-tests.py
+      - name: Resolve full candidate migration manifest
+        env:
+          CONVERGENCE_DB_URL: jdbc:postgresql://localhost:5432/sale_ai_test
+          CONVERGENCE_DB_USER: aibe7
+          CONVERGENCE_DB_PASSWORD: local-ci-test-only
+          CONVERGENCE_DATABASE: sale_ai_test
+          CONVERGENCE_SCHEMA: public
+          CONVERGENCE_TARGET_ID: disposable-ci-postgresql
+        run: |
+          export CONVERGENCE_URL_SHA256=$(printf '%s' "$CONVERGENCE_DB_URL" | sha256sum | cut -d' ' -f1)
+          ./gradlew dbConvergence -PdbLineage=legacy -PdbAction=manifest --console=plain > build/convergence-manifest.txt
+      - name: Preserve primary convergence evidence
+        run: |
+          mkdir -p build/convergence-primary-junit
+          cp build/test-results/test/TEST-*.xml build/convergence-primary-junit/
+      - name: Run HTTP regressions on normalized legacy schema
+        env:
+          CONVERGENCE_API_LINEAGE: legacy
+          SALE_DRAFT_TEST_DB_URL: jdbc:postgresql://localhost:5432/sale_ai_test
+          SALE_DRAFT_TEST_DB_USER: aibe7
+          SALE_DRAFT_TEST_DB_PASSWORD: local-ci-test-only
+        run: |
+          ./gradlew test --tests '*InternalTradeOwnershipHttpPostgresTest' --rerun-tasks --console=plain
+          python3 scripts/db/verify-convergence-tests.py --api-only
       - name: Upload P5 PostgreSQL test report
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: p5-postgres-test-report
-          path: build/reports/tests/test
+          path: |
+            build/reports/tests/test
+            build/test-results/test/TEST-*.xml
+            build/convergence-manifest.txt
+            build/convergence-primary-junit/TEST-*.xml
           if-no-files-found: ignore
           retention-days: 7

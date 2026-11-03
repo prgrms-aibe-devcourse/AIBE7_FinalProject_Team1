@@ -13,6 +13,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import org.example.db.ConvergenceTool;
 import org.example.springtestci.SpringTestCiApplication;
 import org.example.springtestci.ai.repository.ListingSummaryRepository;
 import org.example.springtestci.ai.service.*;
@@ -182,7 +183,7 @@ class InternalTradeOwnershipHttpPostgresTest {
 
   /** 스키마 소유 연결을 컨텍스트와 별도로 보관해, 마이그레이션·기동 실패 때도 정리할 수 있다. */
   @BeforeAll
-  static void start() {
+  static void start() throws Exception {
     String url = System.getenv("SALE_DRAFT_TEST_DB_URL");
     if (url == null || !url.startsWith("jdbc:postgresql:") || !url.contains("sale_ai_test"))
       throw new IllegalStateException("Dedicated test DB required");
@@ -193,27 +194,34 @@ class InternalTradeOwnershipHttpPostgresTest {
             url,
             System.getenv("SALE_DRAFT_TEST_DB_USER"),
             System.getenv("SALE_DRAFT_TEST_DB_PASSWORD"));
-    // 정식 history를 먼저 만든 뒤 기존 pending P2/P3를 적용한다. 버전 번호와 원본 SQL은 수정하지 않는다.
-    Flyway.configure()
-        .configuration(Map.of("flyway.postgresql.transactional.lock", "false"))
-        .dataSource(schemaSource)
-        .schemas(schema)
-        .defaultSchema(schema)
-        .locations("classpath:db/migration")
-        .load()
-        .migrate();
-    Flyway.configure()
-        .configuration(Map.of("flyway.postgresql.transactional.lock", "false"))
-        .dataSource(schemaSource)
-        .schemas(schema)
-        .defaultSchema(schema)
-        .locations(
-            "classpath:db/migration",
-            "classpath:db/pending/trade-p2",
-            "classpath:db/pending/trade-p3")
-        .outOfOrder(true)
-        .load()
-        .migrate();
+    boolean legacy = "legacy".equals(System.getenv("CONVERGENCE_API_LINEAGE"));
+    if (legacy) {
+      prepareLegacy(url);
+    } else {
+      // 정식 history를 먼저 만든 뒤 기존 pending P2/P3를 적용한다. 버전 번호와 원본 SQL은 수정하지 않는다.
+      Flyway.configure()
+          .configuration(Map.of("flyway.postgresql.transactional.lock", "false"))
+          .dataSource(schemaSource)
+          .schemas(schema)
+          .defaultSchema(schema)
+          .locations("classpath:db/migration")
+          .load()
+          .migrate();
+      Flyway.configure()
+          .configuration(Map.of("flyway.postgresql.transactional.lock", "false"))
+          .dataSource(schemaSource)
+          .schemas(schema)
+          .defaultSchema(schema)
+          .locations(
+              "classpath:db/migration",
+              "classpath:db/pending/trade-p2",
+              "classpath:db/pending/trade-p3",
+              "classpath:db/convergence",
+              "classpath:db/deploy")
+          .outOfOrder(true)
+          .load()
+          .migrate();
+    }
     var app = new SpringApplication(SpringTestCiApplication.class);
     app.addPrimarySources(List.of(Faults.class));
     app.setDefaultProperties(
@@ -228,10 +236,12 @@ class InternalTradeOwnershipHttpPostgresTest {
             "--spring.datasource.username=" + System.getenv("SALE_DRAFT_TEST_DB_USER"),
             "--spring.datasource.password=" + System.getenv("SALE_DRAFT_TEST_DB_PASSWORD"),
             "--spring.flyway.enabled=true",
-            "--spring.flyway.out-of-order=true",
+            "--spring.flyway.out-of-order=false",
             "--spring.flyway.schemas=" + schema,
             "--spring.flyway.default-schema=" + schema,
-            "--spring.flyway.locations=classpath:db/migration,classpath:db/pending/trade-p2,classpath:db/pending/trade-p3",
+            "--spring.flyway.locations="
+                + String.join(",", ConvergenceTool.locations(legacy ? "legacy" : "pending")),
+            "--spring.flyway.ignore-migration-patterns=",
             "--spring.jpa.hibernate.ddl-auto=validate",
             "--spring.jpa.properties.hibernate.default_schema=" + schema,
             "--app.features.listing-history.enabled=true",
@@ -261,6 +271,50 @@ class InternalTradeOwnershipHttpPostgresTest {
     } finally {
       if (context != null) context.close();
     }
+  }
+
+  /** 격리 스키마에 원본 기반 구이력을 합성하고 정규화·purge를 각각 커밋한 뒤 strict migration을 적용한다. */
+  private static void prepareLegacy(String url) throws Exception {
+    JdbcTemplate setup = new JdbcTemplate(schemaSource);
+    setup.execute("create schema " + schema);
+    var configuration =
+        ConvergenceTool.configuration(
+            url,
+            System.getenv("SALE_DRAFT_TEST_DB_USER"),
+            System.getenv("SALE_DRAFT_TEST_DB_PASSWORD"),
+            schema,
+            "legacy");
+    configuration.target("2026103001").load().migrate();
+    setup.execute(
+        "update flyway_schema_history set version='2026102706',script='V2026102706__support_listing_summary_refresh.sql' where version='2026102701'");
+    setup.execute(
+        "update flyway_schema_history set version='2026102701',script='V2026102701__create_purchase_requests.sql' where version='2026102103'");
+    setup.execute(
+        "update flyway_schema_history set version='2026102702',script='V2026102702__create_ownership_tables.sql' where version='2026102803'");
+    setup.execute(
+        "update flyway_schema_history set version='2026102707',script='V2026102707__add_ownership_pending_slot.sql' where version='2026102804'");
+    try (var connection = schemaSource.getConnection()) {
+      connection.setAutoCommit(false);
+      try (var statement = connection.createStatement()) {
+        statement.execute(
+            "select set_config('pastport.expected_database',current_database(),true),set_config('pastport.expected_schema',current_schema(),true)");
+      }
+      ConvergenceTool.normalize(connection);
+      connection.commit();
+      ConvergenceTool.purge(connection);
+      connection.commit();
+    }
+    Flyway finalFlyway =
+        ConvergenceTool.configuration(
+                url,
+                System.getenv("SALE_DRAFT_TEST_DB_USER"),
+                System.getenv("SALE_DRAFT_TEST_DB_PASSWORD"),
+                schema,
+                "legacy")
+            .load();
+    finalFlyway.migrate();
+    finalFlyway.validate();
+    assertEquals(0, finalFlyway.migrate().migrationsExecuted);
   }
 
   @BeforeEach
@@ -764,6 +818,84 @@ class InternalTradeOwnershipHttpPostgresTest {
   private void assertDraftPreserved() {
     assertEquals(1, count("listing_drafts", "id=" + draftId));
     assertEquals(2, count("draft_images", "draft_id=" + draftId));
+  }
+
+  /** 격리 인증 대역의 새 회원 식별자로 실제 제품 암호화·파일 업로드와 프로필 DB 경로를 검증한다. */
+  @Test
+  void convergenceApiCreatesEncryptedProductDocumentsImagesAndProfile() throws Exception {
+    long actor =
+        jdbc.queryForObject(
+            "insert into users(id,email,password_hash,nickname,role,email_verified,created_at,updated_at) select max(id)+1,'api-convergence@synthetic.invalid','isolated-auth-double','api-smoke','USER',true,now(),now() from users returning id",
+            Long.class);
+    String serial = "CONVERGENCE-" + UUID.randomUUID().toString().toUpperCase(Locale.ROOT);
+    var product =
+        send(
+            "POST",
+            "/api/v1/products",
+            actor,
+            "{\"title\":\"convergence smoke\",\"manufacturer\":\"Synthetic\",\"modelName\":\"M\",\"serialNumber\":\""
+                + serial
+                + "\"}");
+    assertEquals(201, product.statusCode(), product.body());
+    long productId = data(product).path("productId").asLong();
+    assertTrue(productId > 0);
+    assertNotEquals(
+        serial,
+        jdbc.queryForObject(
+            "select serial_number_ciphertext from products where id=?", String.class, productId));
+    assertEquals(
+        serial,
+        context
+            .getBean(SerialNumberProtector.class)
+            .decrypt(
+                jdbc.queryForObject(
+                    "select serial_number_ciphertext from products where id=?",
+                    String.class,
+                    productId)));
+    var buffer = new java.io.ByteArrayOutputStream();
+    javax.imageio.ImageIO.write(
+        new java.awt.image.BufferedImage(16, 16, java.awt.image.BufferedImage.TYPE_INT_RGB),
+        "png",
+        buffer);
+    byte[] image = buffer.toByteArray();
+    assertEquals(
+        201,
+        multipart("POST", "/api/v1/products/" + productId + "/images", actor, image).statusCode());
+    var document =
+        multipart(
+            "POST",
+            "/api/v1/products/" + productId + "/documents?maskingConfirmed=true",
+            actor,
+            image);
+    assertEquals(201, document.statusCode(), document.body());
+    assertEquals(204, multipart("PUT", "/api/v1/me/profile-image", actor, image).statusCode());
+    assertEquals(1, count("user_profile_images", "user_id=" + actor));
+    assertEquals(200, send("GET", "/api/v1/me/profile-image", actor, null).statusCode());
+    assertEquals(200, send("GET", "/api/v1/products/" + productId, actor, null).statusCode());
+    assertEquals(404, send("GET", "/api/v1/products/" + productId, 2, null).statusCode());
+    assertEquals(204, send("DELETE", "/api/v1/products/" + productId, actor, null).statusCode());
+  }
+
+  /** 테스트 파일은 서비스 저장소를 통해 저장하며 요청에는 격리 JWT만 사용한다. */
+  private static HttpResponse<String> multipart(
+      String method, String path, long actor, byte[] content) throws Exception {
+    String boundary = "convergenceBoundary";
+    var bytes = new java.io.ByteArrayOutputStream();
+    bytes.write(
+        ("--"
+                + boundary
+                + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"synthetic.png\"\r\nContent-Type: image/png\r\n\r\n")
+            .getBytes(StandardCharsets.UTF_8));
+    bytes.write(content);
+    bytes.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+    return HTTP.send(
+        HttpRequest.newBuilder(URI.create(base + path))
+            .timeout(Duration.ofSeconds(20))
+            .header("Authorization", "Bearer " + token(actor))
+            .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+            .method(method, HttpRequest.BodyPublishers.ofByteArray(bytes.toByteArray()))
+            .build(),
+        HttpResponse.BodyHandlers.ofString());
   }
 
   private long createRequest(long room, long actor) throws Exception {
