@@ -8,6 +8,11 @@
   const PREP_MIN_SIDE = 1600;
   const PREP_MAX_FACTOR = 3;
   const FALLBACK_MIN_WORDS = 20;
+  // 사진이 기울어 OCR이 글자를 못 읽는 경우의 재시도 각도(도). 시계 방향이 +이다. 사진은 보통 15° 안팎으로 기울어 찍히므로 큰 각도부터 본다.
+  const TILT_ANGLES = [16, -16, 8, -8];
+  // 이 신뢰도(%) 이상인 두 글자 이상 단어가 이 비율을 넘어야 "잘 읽었다"고 본다.
+  const READABLE_CONFIDENCE = 60;
+  const READABLE_SHARE = 0.4;
   // 이름 라벨 없이 이메일 바로 위 줄에 적히는 이름(예: 영수증 상단 "문 정원"). 한글 2~4자, 글자 사이 공백은 허용한다.
   const BARE_NAME = /^[가-힣](?:\s?[가-힣]){1,3}$/;
   // 사업자등록번호(000-00-00000)는 개인정보가 아니라 상점 정보라서 계좌번호로 오탐하지 않는다.
@@ -23,7 +28,7 @@
   const ID_LABEL = label(['주문번호', '승인번호', '결제번호', '송장번호', '운송장번호', '거래번호']);
   // 부품번호·모델번호는 제품 종류를 나타낼 뿐 개인을 특정하지 않아 가리지 않는다. 일련번호와 모양이 비슷해서 단독 토큰 규칙에서 따로 뺀다.
   const PART_LABEL = '(?:' + label(['부품번호', '모델번호', '품번']) + '|[Pp][Aa][Rr][Tt]\\s*(?:[Nn][Oo]\\.?|[Nn]umber)?)';
-  const SERIAL_LABEL = '(?:' + label(['시리얼번호', '시리얼']) + '|일?\\s*련\\s*[번빈민]?\\s*호|serial\\s*(?:no\\.?|number)?|s\\/n)';
+  const SERIAL_LABEL = '(?:' + label(['시리얼번호', '시리얼']) + '|일?\\s*련\\s*[번빈민]?\\s*호|serial\\s*(?:no\\.?|number)?|s\\/n|(?<![A-Za-z])sn(?=\\s*[:：.]))';
   const CARD_LABEL = label(['카드번호']);
   const DATE_LIKE = /^(?:19|20)\d{2}-\d{1,2}-\d{1,2}$/;
 
@@ -66,7 +71,7 @@
   // 대문자·숫자 9~12자. 숫자만이면 바코드·금액이고, 숫자 없이 글자만이면 모음이 적을 때만(영어 단어 제외) 일련번호로 본다.
   function isSerialShaped(text) {
     if (!/[A-Z]/.test(text)) return false;
-    if (/d/.test(text)) return true;
+    if (/\d/.test(text)) return true;
     return (text.match(/[AEIOU]/g) || []).length / text.length <= 0.3;
   }
 
@@ -239,8 +244,83 @@
     const first = await readWords(worker, canvas, '3');
     const boxes = findPiiBoxes(groupLines(first));
     if (first.length >= FALLBACK_MIN_WORDS && boxes.length) return boxes;
-    const second = findPiiBoxes(groupLines(await readWords(worker, canvas, '6')));
-    return mergeBoxes(boxes, second);
+    const secondWords = await readWords(worker, canvas, '6');
+    const merged = mergeBoxes(boxes, findPiiBoxes(groupLines(secondWords)));
+    // 일련번호를 찾았거나 글자를 잘 읽었다면 거기서 끝낸다. 일련번호가 없는 일반 영수증이 늘 느려지지 않게, 회전 재시도는 읽기 자체가 부실할 때만 한다.
+    if (merged.some((box) => box.kind === '일련번호') || isReadable(first) || isReadable(secondWords)) return merged;
+    return mergeBoxes(merged, await recognizeTilted(worker, canvas));
+  }
+
+  // 단어가 충분하고, 그중 신뢰도가 높은 단어가 일정 비율 이상이면 글자를 제대로 읽은 것이다. 기울어진 사진은 단어 수는 있어도 잡음이 대부분이다.
+  function isReadable(words) {
+    if (words.length < FALLBACK_MIN_WORDS) return false;
+    const real = words.filter((word) => word.text.trim().length >= 2);
+    if (!real.length) return false;
+    return real.filter((word) => word.conf >= READABLE_CONFIDENCE).length / real.length >= READABLE_SHARE;
+  }
+
+  // 사진을 몇 가지 각도로 돌려 다시 읽는다. 일련번호를 찾으면 거기서 멈추고, 찾은 위치는 원래 사진 좌표로 되돌린다.
+  async function recognizeTilted(worker, canvas) {
+    let boxes = [];
+    for (const degrees of TILT_ANGLES) {
+      const tilted = rotateCanvas(canvas, degrees);
+      try {
+        let found = [];
+        for (const mode of ['3', '6']) {
+          found = mergeBoxes(found, findPiiBoxes(groupLines(await readWords(worker, tilted.canvas, mode))));
+          if (found.some((box) => box.kind === '일련번호')) break;
+        }
+        boxes = mergeBoxes(boxes, found.flatMap((box) => unrotateBox(box, tilted)));
+        if (found.some((box) => box.kind === '일련번호')) break;
+      } finally {
+        tilted.canvas.width = 0;
+        tilted.canvas.height = 0;
+      }
+    }
+    return boxes;
+  }
+
+  // 가운데를 기준으로 돌린 캔버스를 만든다. 빈 곳은 흰색으로 채운다.
+  function rotateCanvas(canvas, degrees) {
+    const radians = (degrees * Math.PI) / 180;
+    const sin = Math.sin(radians);
+    const cos = Math.cos(radians);
+    const width = Math.ceil(Math.abs(canvas.width * cos) + Math.abs(canvas.height * sin));
+    const height = Math.ceil(Math.abs(canvas.width * sin) + Math.abs(canvas.height * cos));
+    const out = document.createElement('canvas');
+    out.width = width;
+    out.height = height;
+    const ctx = out.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, width, height);
+    ctx.translate(width / 2, height / 2);
+    ctx.rotate(radians);
+    ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
+    return { canvas: out, sin, cos, sourceWidth: canvas.width, sourceHeight: canvas.height };
+  }
+
+  // 돌린 사진 위의 상자를 원래 좌표로 되돌린다. 기울어진 글줄을 한 상자로 감싸면 이웃 줄까지 덮이므로, 글줄 방향으로 잘게 나눠 조각마다 감싼다.
+  function unrotateBox(box, tilted) {
+    const { canvas, sin, cos, sourceWidth, sourceHeight } = tilted;
+    const back = (x, y) => {
+      const dx = x - canvas.width / 2;
+      const dy = y - canvas.height / 2;
+      return { x: dx * cos + dy * sin + sourceWidth / 2, y: -dx * sin + dy * cos + sourceHeight / 2 };
+    };
+    // 조각이 짧을수록 기울어서 생기는 위아래 번짐이 줄어든다. 글자 높이만큼씩 나눈다.
+    const pieces = Math.max(1, Math.min(16, Math.ceil(box.w / box.h)));
+    const step = box.w / pieces;
+    const result = [];
+    for (let i = 0; i < pieces; i += 1) {
+      const left = box.x + step * i;
+      const corners = [back(left, box.y), back(left + step, box.y), back(left, box.y + box.h), back(left + step, box.y + box.h)];
+      const x0 = Math.max(0, Math.min(...corners.map((p) => p.x)));
+      const y0 = Math.max(0, Math.min(...corners.map((p) => p.y)));
+      const x1 = Math.min(sourceWidth, Math.max(...corners.map((p) => p.x)));
+      const y1 = Math.min(sourceHeight, Math.max(...corners.map((p) => p.y)));
+      if (x1 > x0 && y1 > y0) result.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0, kind: box.kind });
+    }
+    return result;
   }
 
   async function readWords(worker, canvas, mode) {
@@ -248,6 +328,7 @@
     const { data } = await worker.recognize(canvas);
     return (data.words || []).map((word) => ({
       text: word.text,
+      conf: word.confidence,
       x0: word.bbox.x0,
       y0: word.bbox.y0,
       x1: word.bbox.x1,
