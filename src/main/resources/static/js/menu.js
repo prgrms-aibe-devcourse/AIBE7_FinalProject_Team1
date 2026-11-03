@@ -17,6 +17,17 @@
     })
   );
 
+  // 이용 가이드는 하위 메뉴가 없어 위 묶음에 포함되지 않으므로, 전체메뉴에는 마이페이지 앞에 한 묶음으로 추가한다.
+  const guideColumn = document.createElement('div');
+  guideColumn.className = 'mega-col';
+  const guideTitle = document.createElement('button');
+  guideTitle.type = 'button'; guideTitle.className = 'mega-title'; guideTitle.dataset.page = 'guide'; guideTitle.textContent = '이용 가이드';
+  const guideItem = document.createElement('button');
+  guideItem.type = 'button'; guideItem.dataset.page = 'guide';
+  guideItem.innerHTML = '<b>서비스 이용 방법</b><small>등록부터 거래·소유권 이전까지 순서대로</small>';
+  guideColumn.append(guideTitle, guideItem);
+  grid.append(guideColumn);
+
   // 마이페이지는 상단 메뉴에는 두지 않고(계정 영역에서 이동) 전체메뉴에만 한 묶음으로 추가한다.
   const mypageColumn = document.createElement('div');
   mypageColumn.className = 'mega-col';
