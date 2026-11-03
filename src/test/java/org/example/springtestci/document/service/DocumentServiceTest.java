@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -34,6 +35,7 @@ import org.example.springtestci.document.repository.DocumentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
@@ -345,8 +347,11 @@ class DocumentServiceTest {
 
     service.delete(5L, OWNER);
 
-    verify(extractionRepository).deleteByDocumentId(document.getId());
-    verify(documentRepository).delete(document);
+    // 외래키 때문에 자식 행(교체 기록, 추출)을 문서보다 먼저 지워야 한다.
+    InOrder order = inOrder(replacementRepository, extractionRepository, documentRepository);
+    order.verify(replacementRepository).deleteByDocumentId(document.getId());
+    order.verify(extractionRepository).deleteByDocumentId(document.getId());
+    order.verify(documentRepository).delete(document);
     verify(fileStorage).delete("documents/100/k.pdf");
   }
 

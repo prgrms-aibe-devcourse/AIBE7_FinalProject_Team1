@@ -253,7 +253,7 @@ public class DocumentService {
 
   /**
    * 현재 소유자가 본인이 올렸고 이력에 연결된 적이 없는(보호되지 않은) 사본만 삭제한다. 이전받은 사본과 이력에 연결된 사본은 삭제할 수 없다. 문서에 딸린 AI 추출
-   * 기록도 함께 지운다.
+   * 기록과 교체 기록도 함께 지운다.
    */
   @Transactional
   public void delete(Long documentId, Long userId) {
@@ -265,6 +265,8 @@ public class DocumentService {
     if (!document.isUploadedBy(userId) || document.isProtected()) {
       throw new CommonException(ErrorCode.DOCUMENT_DELETE_NOT_ALLOWED);
     }
+    // 문서를 가리키는 외래키가 있어 자식 행을 먼저 지운다. 보호되지 않은 문서는 이력에 연결된 적이 없어 교체 기록을 남길 이유가 없다.
+    replacementRepository.deleteByDocumentId(document.getId());
     extractionRepository.deleteByDocumentId(document.getId());
     documentRepository.delete(document);
     deleteStoredFileAfterCommit(document.getObjectKey());
