@@ -3,9 +3,6 @@
 <!--
 README 작성 전 채워야 할 항목 (완료하면 이 블록과 아래 TODO 주석을 지운다)
 
-[필수]
-4. 팀원 이름·담당 영역              → "팀원" 섹션 (GitHub 계정은 커밋 기록으로 채워 둠)
-
 [확인]
 5. 서비스 한 줄 소개 문구 확정      → 제목 바로 아래
 
@@ -87,16 +84,13 @@ MVP 범위(P0/P1)는 [MVP 범위 설정](docs/MVP_SCOPE.md), 세부 동작·권�
 
 ## 팀원
 
-<!-- TODO(4): 팀원 이름과 담당 영역을 채운다. GitHub 계정은 커밋 기록에서 확인한 값이다.
-     (이 목록에 없는 팀원이 있으면 직접 추가) -->
-
 | 이름  | GitHub | 담당 |
 |-----| --- | --- |
-| 정태현 | [JtaeHyeon](https://github.com/JtaeHyeon) | TODO |
-| 남윤아 | [yeunyeuna](https://github.com/yeunyeuna) | TODO |
-| 박정민 | [pjmoo](https://github.com/pjmoo) | TODO |
-| 박한솔 | [goarns77](https://github.com/goarns77) | TODO |
-| 정주성 | [Seong0321](https://github.com/Seong0321) | TODO |
+| 정태현 | [JtaeHyeon](https://github.com/JtaeHyeon) | 판매글 기능 전반, AI 판매글 생성, QnA·관리자 조회 |
+| 남윤아 | [yeunyeuna](https://github.com/yeunyeuna) | 증빙 문서 보관, 개인정보 마스킹, AI 정보 추출 |
+| 박정민 | [pjmoo](https://github.com/pjmoo) | 통합 UI/UX, 회원 인증 |
+| 박한솔 | [goarns77](https://github.com/goarns77) | 채팅·대화방, 거래 트랜잭션, 소유권 트랜잭션, AWS 배포 |
+| 정주성 | [Seong0321](https://github.com/Seong0321) | 제품 CRUD, 소유권 이력 관리, 안정성 검증 |
 
 ## 기술 스택
 
