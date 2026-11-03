@@ -103,6 +103,14 @@ public class AuthService {
    * 비밀번호가 맞은 뒤에만 확인해 틀린 비밀번호로는 로그인 여부를 알 수 없다.
    */
   public AuthTokens login(LoginRequest request, String clientIp) {
+    return login(request, clientIp, null);
+  }
+
+  /**
+   * 로그인한다. 이미 로그인 중이어도 요청이 그 회원의 현재 Refresh Token(같은 브라우저의 쿠키)을 가져왔다면 다시 로그인할 수 있다. 창을 로그아웃 없이 닫았다가
+   * 같은 브라우저로 돌아온 경우를 위한 것이며, 다른 브라우저·기기는 쿠키가 없어 계속 거부된다.
+   */
+  public AuthTokens login(LoginRequest request, String clientIp, String currentRefreshToken) {
     String email = normalizeEmail(request.email());
     // 제한 중에는 비밀번호를 비교하지 않고 바로 거부한다.
     loginRateLimiter.checkAllowed(email, clientIp);
@@ -122,8 +130,9 @@ public class AuthService {
       user.markEmailVerified();
       userRepository.save(user);
     }
-    // 동시에 로그인해도 시작 표시를 원자적으로 만들 수 있는 한 곳만 통과한다. 이미 로그인 중이면 예외 없이 거부한다.
-    if (!refreshTokenStore.startSession(user.getId())) {
+    // 동시에 로그인해도 시작 표시를 원자적으로 만들 수 있는 한 곳만 통과한다. 이미 로그인 중이면 같은 브라우저의 현재 토큰일 때만 이어 받고, 아니면 거부한다.
+    if (!refreshTokenStore.startSession(user.getId())
+        && !refreshTokenStore.resumeSession(user.getId(), currentRefreshToken)) {
       throw new CommonException(ErrorCode.ALREADY_LOGGED_IN);
     }
     try {

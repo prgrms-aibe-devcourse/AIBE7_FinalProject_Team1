@@ -87,6 +87,27 @@ public class RefreshTokenStore {
     return true;
   }
 
+  /**
+   * 이미 로그인 중인 회원이 같은 브라우저에서 다시 로그인하는 경우를 허용한다. 요청이 가져온 Refresh Token이 그 회원의 현재 토큰일 때만 {@code true}를
+   * 돌려주고, 그 토큰을 폐기한 뒤 로그인 중 표시를 연장한다. 토큰 삭제 성공 여부로 판정하므로 같은 토큰으로 동시에 요청해도 한 번만 통과한다. 이어서 발급하는 새 토큰이
+   * 현재 토큰이 된다.
+   */
+  public boolean resumeSession(long userId, String refreshToken) {
+    if (refreshToken == null || refreshToken.isBlank()) {
+      return false;
+    }
+    String tokenKey = key(refreshToken);
+    String current = redisTemplate.opsForValue().get(CURRENT_PREFIX + userId);
+    if (!tokenKey.equals(current)) {
+      return false;
+    }
+    if (!Boolean.TRUE.equals(redisTemplate.delete(tokenKey))) {
+      return false;
+    }
+    redisTemplate.opsForValue().set(SESSION_PREFIX + userId, "1", SESSION_LEASE);
+    return true;
+  }
+
   /** 회원의 로그인 중 표시와 현재 토큰을 지운다. 로그아웃하거나 로그인 시작이 실패했을 때 쓴다. */
   public void endSession(long userId) {
     String current = redisTemplate.opsForValue().getAndDelete(CURRENT_PREFIX + userId);

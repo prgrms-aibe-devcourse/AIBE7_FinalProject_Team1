@@ -198,6 +198,22 @@ class AuthServiceTest {
     assertEquals(7L, tokens.user().id());
   }
 
+  /** 이미 로그인 중이어도 같은 브라우저의 현재 Refresh Token을 가져오면 다시 로그인할 수 있다. */
+  @Test
+  void loginIsAllowedAgainWithTheCurrentRefreshTokenOfTheSameBrowser() throws Exception {
+    User user = user(7L, "user@example.com", "hashed");
+    when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+    when(passwordEncoder.matches("Passw0rd!", "hashed")).thenReturn(true);
+    when(refreshTokenStore.startSession(7L)).thenReturn(false);
+    when(refreshTokenStore.resumeSession(7L, "cookie")).thenReturn(true);
+    when(refreshTokenStore.issue(7L)).thenReturn("new-refresh");
+
+    AuthTokens tokens =
+        authService.login(new LoginRequest("user@example.com", "Passw0rd!"), IP, "cookie");
+
+    assertEquals("new-refresh", tokens.refreshToken());
+  }
+
   /** 이미 다른 곳에서 로그인 중이면 비밀번호가 맞아도 새 로그인을 거부하고 토큰을 발급하지 않는다. */
   @Test
   void loginIsRefusedWhileTheAccountIsLoggedInElsewhere() throws Exception {
