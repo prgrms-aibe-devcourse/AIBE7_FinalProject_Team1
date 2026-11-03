@@ -244,8 +244,9 @@
   async function recognizeAll(worker, canvas) {
     const first = await readWords(worker, canvas, '3');
     const boxes = findPiiBoxes(groupLines(first));
-    // 가릴 곳을 찾았더라도 일련번호는 못 찾았고 글자도 부실하게 읽었다면(기울어진 사진에서 이메일만 읽힌 경우) 아래 재시도로 넘어간다.
-    if (boxes.length && (hasLocatedSerial(boxes) || isReadable(first))) return boxes;
+    // 단어를 충분히(20개 이상) 읽었고 가릴 곳도 찾았을 때만 여기서 끝낸다. 읽은 단어가 적으면 일련번호를 찾았더라도 모드 6으로 다시 읽어야 한다(모드 6에서만
+    // 읽히는 이름·이메일이 남지 않게). 20개 이상 읽었어도 일련번호를 못 찾았고 글자가 부실하면(기울어진 사진에서 이메일만 읽힌 경우) 아래 재시도로 넘어간다.
+    if (first.length >= FALLBACK_MIN_WORDS && boxes.length && (hasLocatedSerial(boxes) || isReadable(first))) return boxes;
     const secondWords = await readWords(worker, canvas, '6');
     const merged = mergeBoxes(boxes, findPiiBoxes(groupLines(secondWords)));
     // 일련번호 값을 읽었거나 글자를 잘 읽었다면 거기서 끝낸다. 일련번호가 없는 일반 영수증이 늘 느려지지 않게, 회전 재시도는 읽기 자체가 부실할 때만 한다.
@@ -343,11 +344,13 @@
     }));
   }
 
-  // 두 번째 결과 중 이미 가려진 곳과 절반 넘게 겹치는 상자는 버리고 나머지만 더한다.
+  // 두 번째 결과 중 이미 가려진 곳과 절반 넘게 겹치는 상자는 버리고 나머지만 더한다. 단, 라벨만 읽고 짐작해 넓힌 상자(estimated)는 값을 읽어 찾은 상자를
+  // 밀어내지 못한다. 짐작 상자는 값 전체를 덮지 못할 수 있어서, 찾은 상자를 버리면 일련번호 일부가 가려지지 않은 채 남는다.
   function mergeBoxes(base, extra) {
     const merged = [...base];
     for (const box of extra) {
-      if (!merged.some((other) => overlapRatio(other, box) > 0.5)) merged.push(box);
+      const covered = merged.some((other) => !(other.estimated && !box.estimated) && overlapRatio(other, box) > 0.5);
+      if (!covered) merged.push(box);
     }
     return merged;
   }

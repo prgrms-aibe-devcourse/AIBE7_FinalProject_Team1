@@ -63,8 +63,26 @@
     return result.toISOString().slice(0, 10);
   }
 
+  // 자동 입력으로 채운 보증 만료일을 계산한 보증 개월 수. 구매일을 고치면 이 값으로 만료일을 다시 계산한다.
+  let autofillMonths = null;
+
+  // 구매일을 사용자가 고쳤을 때, 만료일이 아직 자동 입력값이면 고친 날짜로 다시 계산한다.
+  // 날짜를 키보드로 입력하는 중에는 값이 잠깐 비어 있다가(예: "0"만 친 순간) 완성되므로, 입력 중(input)에는 계산되는 날짜가 있을 때만 바꾸고
+  // 만료일을 비우는 것은 사용자가 구매일 칸을 떠났을 때(focusout, final)만 한다. 계산할 수 없는 채로 끝나면 틀린 날짜가 남지 않게 비운다.
+  function recomputeWarranty(form, final) {
+    const expiry = form.elements.warrantyExpiresAt;
+    if (!expiry || !expiry.dataset.docAutofilled || !autofillMonths) return;
+    const next = addMonths(form.elements.purchaseDate?.value, autofillMonths);
+    if (!next && !final) return;
+    expiry.value = next || '';
+    if (!next) delete expiry.dataset.docAutofilled;
+    expiry.dispatchEvent(new Event('input', { bubbles: true }));
+    expiry.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
   // 자동 입력으로 채웠고 사용자가 고치지 않은 칸의 값을 지운다. 값의 출처인 문서(사본)를 버릴 때 함께 정리해, 이전 문서의 값이 다음 등록에 남지 않게 한다.
   function clearAutofilled(form) {
+    autofillMonths = null;
     form.querySelectorAll('[data-doc-autofilled]').forEach((input) => {
       delete input.dataset.docAutofilled;
       input.value = '';
@@ -78,18 +96,19 @@
     const filled = [];
     const set = (name, label, value, max) => {
       const input = form.elements[name];
-      if (!input || value == null || value === '' || input.value.trim() !== '') return;
+      if (!input || value == null || value === '' || input.value.trim() !== '') return false;
       input.value = max ? String(value).slice(0, max) : String(value);
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
       input.dataset.docAutofilled = 'true';
       filled.push(label);
+      return true;
     };
     set('title', '제품 이름', facts.productName, 200);
     set('modelName', '모델명', facts.modelName, 100);
     set('purchaseDate', '구매일', facts.purchaseDate);
     const base = form.elements.purchaseDate?.value || facts.purchaseDate;
-    set('warrantyExpiresAt', '보증 만료일', addMonths(base, facts.warrantyMonths));
+    if (set('warrantyExpiresAt', '보증 만료일', addMonths(base, facts.warrantyMonths))) autofillMonths = facts.warrantyMonths;
     return filled;
   }
 
@@ -148,6 +167,8 @@
     };
     const sync = () => {
       button.disabled = busy || !input.files?.[0] || !consentBox.checked;
+      // 추출 요청이 진행되는 동안에는 문서 종류를 바꿀 수 없다. 바꿔도 이미 보낸 요청에는 반영되지 않아 화면과 결과의 문서 종류가 어긋난다.
+      type.disabled = busy;
     };
 
     const clearPending = () => {
@@ -183,9 +204,15 @@
       clearPending();
       window.setTimeout(sync, 0);
     });
-    // 사용자가 직접 고친 칸은 자동 입력 표시를 지운다.
+    // 사용자가 직접 고친 칸은 자동 입력 표시를 지운다. 구매일을 고치면 자동 입력된 만료일도 그 날짜로 다시 계산한다.
     form.addEventListener('input', (event) => {
-      if (event.isTrusted && event.target.dataset) delete event.target.dataset.docAutofilled;
+      if (!event.isTrusted || !event.target.dataset) return;
+      delete event.target.dataset.docAutofilled;
+      if (event.target.name === 'purchaseDate') recomputeWarranty(form, false);
+    });
+    // 입력이 끝난 시점은 칸을 떠날 때다. 브라우저가 날짜를 타이핑하는 중간 상태에도 change를 보내서 change는 끝으로 볼 수 없다.
+    form.addEventListener('focusout', (event) => {
+      if (event.target.name === 'purchaseDate') recomputeWarranty(form, true);
     });
     // 폼이 초기화되면(제품 등록 뒤 form.reset()) 값은 비워지지만 표시는 남으므로, 빈 칸에 강조가 남지 않게 표시도 지운다.
     form.addEventListener('reset', () => {
@@ -261,8 +288,13 @@
   }
 
   // 사본을 증빙 문서로 올린다. 실패해도 사본은 이 함수의 클로저에 남겨 두고 "다시 올리기" 버튼을 보여 줘서, 원본을 다시 가리지 않고 재시도할 수 있게 한다.
-  async function uploadWithRetry(productId, blob) {
+  async function uploadWithRetry(productId, blob, retrying = false) {
     try {
+      // 응답만 유실되고 서버에는 이미 저장됐을 수 있다. 다시 올리기 전에 같은 사본이 있는지 보고, 있으면 또 올리지 않는다(문서는 제품당 20개 한도).
+      if (retrying && (await alreadySaved(productId, blob))) {
+        toast('가려진 증빙 문서도 함께 보관했어요.');
+        return;
+      }
       const body = new FormData();
       body.append('maskingConfirmed', 'true');
       body.append('file', blob, fileName(blob));
@@ -272,8 +304,20 @@
     } catch (ignored) {
       toast('제품은 등록됐지만 증빙 문서를 올리지 못했어요.', 'error', {
         label: '다시 올리기',
-        run: () => uploadWithRetry(productId, blob),
+        run: () => uploadWithRetry(productId, blob, true),
       });
+    }
+  }
+
+  // 제품에 같은 종류·크기의 문서가 이미 있으면 이 사본이 저장된 것으로 본다. 서버에 중복 방지 키가 없어서 목록으로 확인한다. 목록을 못 읽으면 저장 안 된 것으로 본다.
+  async function alreadySaved(productId, blob) {
+    try {
+      const response = await request(`${PRODUCTS_URL}/${productId}/documents`);
+      if (!response.ok) return false;
+      const documents = (await response.json())?.data || [];
+      return documents.some((item) => item.byteSize === blob.size && item.contentType === blob.type);
+    } catch (ignored) {
+      return false;
     }
   }
 
