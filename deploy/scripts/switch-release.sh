@@ -11,12 +11,30 @@ for gate in CODE DB STORAGE HTTPS ENV ARTIFACT; do
     [[ $(grep -c "^$gate=GO$" "$go_file") == 1 ]] || die 'pre-start gate missing'
 done
 target="$root/releases/$sha.jar"; verify_release "$target"
+gate_value() {
+    [[ $(grep -c "^$1=" "$go_file") == 1 ]] || die 'deployment mode/commit approval missing or duplicated'
+    sed -n "s/^$1=//p" "$go_file"
+}
+mode=$(gate_value RELEASE_MODE)
+candidate=$(gate_value CANDIDATE_SHA)
+[[ $candidate == "$(sed -n 's/^commit=//p' "${target%.jar}.manifest.txt")" ]] || die 'candidate approval differs from artifact'
+[[ $mode == BOOTSTRAP || $mode == UPGRADE ]] || die 'explicit BOOTSTRAP or UPGRADE required'
 previous=''
+if [[ $mode == BOOTSTRAP ]]; then
+    [[ ! -e $root/current.jar && ! -L $root/current.jar ]] || die 'bootstrap requires no current link; preserve and review existing state'
+    if systemctl is-active --quiet pastport.service; then die 'bootstrap refuses an active service'; fi
+fi
 if [[ -e $root/current.jar || -L $root/current.jar ]]; then
     [[ -L $root/current.jar ]] || die 'current must be a symlink'
     previous=$(readlink -f -- "$root/current.jar")
     [[ $previous == "$root/releases/"* && $(dirname -- "$previous") == "$root/releases" ]] || die 'previous release outside root'
     verify_release "$previous"
+fi
+if [[ $mode == UPGRADE ]]; then
+    [[ -n $previous ]] || die 'upgrade requires a reviewed previous release'
+    approved_previous=$(gate_value PREVIOUS_SHA)
+    [[ $approved_previous == "$(sed -n 's/^commit=//p' "${previous%.jar}.manifest.txt")" ]] || die 'previous approval differs from artifact'
+    [[ $(gate_value PREVIOUS_COMPATIBILITY) == GO ]] || die 'previous schema/environment/storage compatibility approval required'
 fi
 printf '%s\n' "$previous" > "$root/previous-release.txt"
 activate "$target"

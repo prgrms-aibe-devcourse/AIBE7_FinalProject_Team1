@@ -15,6 +15,9 @@ STUB
 cat > "$temporary/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$MOCK_LOG"
+if [[ $1 == is-active ]]; then [[ -f $MOCK_LOG.active ]]; exit; fi
+if [[ $1 == restart ]]; then touch "$MOCK_LOG.active"; fi
+if [[ $1 == stop ]]; then rm -f "$MOCK_LOG.active"; fi
 STUB
 cat > "$temporary/bin/curl" <<'STUB'
 #!/usr/bin/env bash
@@ -115,6 +118,14 @@ reject bash "$scripts/check-env.sh" "$env_file"; pass 'signing secret must diffe
 cp "$temporary/valid.env" "$env_file"
 go_file="$temporary/gates"
 printf '%s=GO\n' CODE DB STORAGE HTTPS ENV ARTIFACT > "$go_file"; chmod 600 "$go_file"
+approve_mode() {
+    local mode=$1 candidate=$2 previous=${3:-}
+    sed -i '/^RELEASE_MODE=/d; /^CANDIDATE_SHA=/d; /^PREVIOUS_SHA=/d; /^PREVIOUS_COMPATIBILITY=/d' "$go_file"
+    printf 'RELEASE_MODE=%s\nCANDIDATE_SHA=%s00000000000000000000000000000000\n' "$mode" "$candidate" >> "$go_file"
+    if [[ -n $previous ]]; then
+        printf 'PREVIOUS_SHA=%s00000000000000000000000000000000\nPREVIOUS_COMPATIBILITY=GO\n' "$previous" >> "$go_file"
+    fi
+}
 fixture() {
     local sha=$1 digest
     printf 'dummy jar %s\n' "$sha" > "$FIXTURE/$sha.jar"
@@ -132,13 +143,33 @@ reject bash "$scripts/stage-release.sh" s3://release-fixture/artifacts aaaaaaaa 
 fixture cccccccc; printf 'corrupt' >> "$FIXTURE/cccccccc.jar"
 reject bash "$scripts/stage-release.sh" s3://release-fixture/artifacts cccccccc "$root"
 [[ ! -e $root/releases/cccccccc.jar ]]; pass 'bad checksum cannot be staged'
+reject bash "$scripts/switch-release.sh" aaaaaaaa "$env_file" "$go_file" "$root"; pass 'missing deployment mode rejected'
+approve_mode INVALID aaaaaaaa
+reject bash "$scripts/switch-release.sh" aaaaaaaa "$env_file" "$go_file" "$root"; pass 'unknown deployment mode rejected'
+approve_mode UPGRADE aaaaaaaa bbbbbbbb
+reject bash "$scripts/switch-release.sh" aaaaaaaa "$env_file" "$go_file" "$root"; pass 'upgrade without predecessor rejected'
+approve_mode BOOTSTRAP aaaaaaaa
+touch "$MOCK_LOG.active"
+reject bash "$scripts/switch-release.sh" aaaaaaaa "$env_file" "$go_file" "$root"
+[[ ! -e $root/current.jar && -f $MOCK_LOG.active ]]; pass 'bootstrap preserves active service and links'
+rm "$MOCK_LOG.active"
 bash "$scripts/switch-release.sh" aaaaaaaa "$env_file" "$go_file" "$root"
 [[ $(readlink "$root/current.jar") == "$root/releases/aaaaaaaa.jar" ]]; pass 'atomic activation with mocked service and HTTP'
 bash "$scripts/stage-release.sh" s3://release-fixture/artifacts bbbbbbbb "$root"
+reject bash "$scripts/switch-release.sh" bbbbbbbb "$env_file" "$go_file" "$root"
+[[ $(readlink "$root/current.jar") == "$root/releases/aaaaaaaa.jar" ]]; pass 'bootstrap refuses stale existing link'
+approve_mode UPGRADE bbbbbbbb cccccccc
+reject bash "$scripts/switch-release.sh" bbbbbbbb "$env_file" "$go_file" "$root"; pass 'wrong predecessor approval rejected'
+approve_mode UPGRADE bbbbbbbb aaaaaaaa
+sed -i 's/^PREVIOUS_COMPATIBILITY=GO$/PREVIOUS_COMPATIBILITY=NO/' "$go_file"
+reject bash "$scripts/switch-release.sh" bbbbbbbb "$env_file" "$go_file" "$root"; pass 'unverified predecessor compatibility rejected'
+approve_mode UPGRADE bbbbbbbb aaaaaaaa
 bash "$scripts/switch-release.sh" bbbbbbbb "$env_file" "$go_file" "$root"
 [[ $(cat "$root/previous-release.txt") == "$root/releases/aaaaaaaa.jar" ]]; pass 'previous target recorded'
+approve_mode UPGRADE aaaaaaaa bbbbbbbb
 bash "$scripts/rollback-release.sh" aaaaaaaa "$env_file" "$go_file" "$root"
 [[ $(readlink "$root/current.jar") == "$root/releases/aaaaaaaa.jar" ]]; pass 'explicit rollback checks and restores artifact'
+approve_mode UPGRADE bbbbbbbb aaaaaaaa
 sed -i 's/^DB=GO$/DB=NO/' "$go_file"
 reject bash "$scripts/switch-release.sh" bbbbbbbb "$env_file" "$go_file" "$root"
 [[ $(readlink "$root/current.jar") == "$root/releases/aaaaaaaa.jar" ]]; pass 'DB NO prevents activation'
@@ -156,4 +187,12 @@ STUB
 export MOCK_ROOT="$root"
 reject bash "$scripts/switch-release.sh" bbbbbbbb "$env_file" "$go_file" "$root"
 [[ $(readlink "$root/current.jar") == "$root/releases/aaaaaaaa.jar" ]]; pass 'unhealthy new release automatically restores healthy predecessor'
+bootstrap_root="$temporary/bootstrap-failure"
+bash "$scripts/stage-release.sh" s3://release-fixture/artifacts bbbbbbbb "$bootstrap_root"
+approve_mode BOOTSTRAP bbbbbbbb
+rm -f "$MOCK_LOG.active"
+export MOCK_ROOT="$bootstrap_root"
+reject bash "$scripts/switch-release.sh" bbbbbbbb "$env_file" "$go_file" "$bootstrap_root"
+[[ ! -e $bootstrap_root/current.jar && ! -L $bootstrap_root/current.jar && ! -f $MOCK_LOG.active && -f $bootstrap_root/releases/bbbbbbbb.jar ]]
+pass 'bootstrap failure stops service, removes only new link, preserves artifacts'
 printf 'PASS: %s deployment tests (no AWS/systemd/network)\n' "$count"
