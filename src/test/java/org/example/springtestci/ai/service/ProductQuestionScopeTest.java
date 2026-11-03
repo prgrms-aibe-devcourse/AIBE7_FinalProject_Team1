@@ -23,7 +23,10 @@ class ProductQuestionScopeTest {
         "What should I eat for dinner?",
         "Tell me a joke",
         "저 녁 메 뉴 추 천 해 줘",
-        "메\u200b뉴 골라줘"
+        "메\u200b뉴 골라줘",
+        "노트북 사양과 비트코인 시세 알려줘",
+        "코인셀 배터리 이력과 코인 시세 알려줘",
+        "코인셀 배터리 이력과 저녁 메뉴 추천해줘"
       })
   void unrelatedAndMixedRequestsAreOutside(String question) {
     assertTrue(ProductQuestionScope.isUnrelated(question), question);
@@ -44,7 +47,11 @@ class ProductQuestionScopeTest {
         "What is the registered RAM?",
         "Show repair history",
         "ＣＰＵ 사양은?",
-        "화면 크기는?"
+        "화면 크기는?",
+        "코인셀 배터리 교체 기록이 있나요?",
+        "코인 셀 배터리 교체 기록이 있나요?",
+        "코인 배터리를 교체한 기록이 있나요?",
+        "코인\u200b셀 교체 이력이 있나요?"
       })
   void registeredProductQuestionsStillReachTheirReadTools(String question) {
     assertFalse(ProductQuestionScope.isUnrelated(question), question);

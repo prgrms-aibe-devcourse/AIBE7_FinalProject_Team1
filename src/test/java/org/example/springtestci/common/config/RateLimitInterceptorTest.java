@@ -12,6 +12,8 @@ import org.example.springtestci.common.security.RequestRateLimiter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -106,6 +108,21 @@ class RateLimitInterceptorTest {
 
     verify(rateLimiter).check("ai-ask", "ip:10.0.0.5", 10, Duration.ofMinutes(1));
     verify(rateLimiter).check("ai-estimate-price", "ip:10.0.0.5", 10, Duration.ofMinutes(1));
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "/api/v1/products/1/ai/questions", "/api/v1/products/99/ai/questions",
+        "/api/v1/listings/3/ai/questions", "/api/v1/listings/88/ai/questions"
+      })
+  void productAndListingQuestionsShareOnePerUserBucket(String path) {
+    Jwt jwt = Jwt.withTokenValue("token").header("alg", "none").subject("7").build();
+    SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt));
+    new RateLimitInterceptor(rateLimiter)
+        .preHandle(
+            new MockHttpServletRequest("POST", path), new MockHttpServletResponse(), new Object());
+    verify(rateLimiter).check("product-question", "user:7", 10, Duration.ofMinutes(1));
   }
 
   /** 소유권 이전 수락도 규칙에 걸린다. */

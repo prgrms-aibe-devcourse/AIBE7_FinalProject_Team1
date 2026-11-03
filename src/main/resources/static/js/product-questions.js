@@ -47,7 +47,7 @@
     input.name = 'question'; input.maxLength = 1000; input.required = true; input.rows = 3;
     input.setAttribute('aria-label', '제품 이력 질문'); input.placeholder = '예: 현재 메모리 사양과 교체 기록을 알려줘'; label.append(input);
     const actions = create('div', null, 'pq-actions'), submit = create('button', '질문하기', 'sc-btn primary'); submit.type = 'submit';
-    actions.append(submit, create('span', '최대 1,000자 · 질문할 때만 AI를 호출해요.', 'pq-help')); form.append(label, actions);
+    actions.append(submit, create('span', '최대 1,000자 · 1분에 질문 10회까지', 'pq-help')); form.append(label, actions);
     const message = create('p', '', 'pq-message'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
     const output = create('div', null, 'pq-output'); output.hidden = true;
     const panel = { root, request:null, timer:null, busy:false, until:0 }; panels.set(context.scope, panel);
@@ -89,7 +89,7 @@
             panel.timer = setInterval(controls, 1000);
           }
           if (response.status === 401 || response.status === 404) restoreQuestion = false;
-          throw new Error(response.status === 401 ? '로그인 후 질문해 주세요.' : response.status === 404 ? '현재 이 제품이나 판매글에 질문할 수 없어요.' : response.status === 409 ? '확인 중 제품 정보나 이력이 바뀌었어요. 최신 내용을 확인한 뒤 다시 질문해 주세요.' : response.status === 429 ? 'AI 요청이 많아요. 표시된 시간이 지난 뒤 다시 질문해 주세요.' : response.status >= 500 ? '지금은 AI 답변을 만들지 못했어요. 잠시 후 다시 질문해 주세요. 제품과 전체 이력은 계속 확인할 수 있어요.' : payload?.fieldErrors?.[0]?.message || payload?.message || '질문을 처리하지 못했어요.');
+          throw new Error(response.status === 401 ? '로그인 후 질문해 주세요.' : response.status === 404 ? '현재 이 제품이나 판매글에 질문할 수 없어요.' : response.status === 409 ? '확인 중 제품 정보나 이력이 바뀌었어요. 최신 내용을 확인한 뒤 다시 질문해 주세요.' : response.status === 429 ? '질문 요청이 많아요. 표시된 시간이 지난 뒤 다시 질문해 주세요.' : response.status >= 500 ? '지금은 AI 답변을 만들지 못했어요. 잠시 후 다시 질문해 주세요. 제품과 전체 이력은 계속 확인할 수 있어요.' : payload?.fieldErrors?.[0]?.message || payload?.message || '질문을 처리하지 못했어요.');
         }
         const answer = payload?.data;
         if (typeof answer?.answer !== 'string' || !Array.isArray(answer.sources)) throw new Error('답변을 확인할 수 없어요. 다시 질문해 주세요.');

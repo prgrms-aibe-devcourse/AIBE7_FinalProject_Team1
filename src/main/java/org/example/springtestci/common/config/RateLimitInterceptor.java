@@ -73,7 +73,20 @@ public class RateLimitInterceptor implements HandlerInterceptor {
               HttpMethod.POST,
               "/api/v1/ownership/transfers/accept",
               10,
-              Duration.ofMinutes(10)));
+              Duration.ofMinutes(10)),
+          // 제품/판매글이나 대상 ID를 바꿔도 같은 회원별 질문 한도를 공유한다.
+          new Rule(
+              "product-question",
+              HttpMethod.POST,
+              "/api/v1/products/*/ai/questions",
+              10,
+              Duration.ofMinutes(1)),
+          new Rule(
+              "product-question",
+              HttpMethod.POST,
+              "/api/v1/listings/*/ai/questions",
+              10,
+              Duration.ofMinutes(1)));
 
   private final AntPathMatcher pathMatcher = new AntPathMatcher();
   private final RequestRateLimiter rateLimiter;
