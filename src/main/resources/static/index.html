@@ -47,6 +47,7 @@
   <link rel="stylesheet" href="/css/mypage.css?v=20261103-row2">
   <link rel="stylesheet" href="/css/chat-avatar.css">
   <link rel="stylesheet" href="/css/sale-compose.css">
+  <link rel="stylesheet" href="/css/guide.css">
 </head>
 <body>
   <header class="site-header"><div class="landing-shell">
@@ -57,7 +58,7 @@
           </div>
           <nav class="landing-nav">
             <button class="nav-all" id="nav-all" aria-expanded="false" aria-controls="mega"><span class="burger" aria-hidden="true"></span>전체메뉴</button>
-            <div class="nav-item"><button data-page="landing">홈</button></div><div class="nav-item"><button data-page="home">제품 여권</button><div class="nav-drop"><button data-page="home" data-nav-related="passport"><b>제품 여권 보기</b><small>내 제품 목록과 공개 가능한 이력 확인</small></button><button data-page="register"><b>새 여권 등록</b><small>구매 정보와 문서를 함께 등록</small></button><button data-page="documents" data-nav-related="docmask"><b>문서 보관함</b><small>영수증·보증서·수리 문서 모아보기</small></button></div></div><div class="nav-item"><button data-page="market">중고거래</button><div class="nav-drop"><button data-page="market" data-nav-related="detail"><b>중고 상품 둘러보기</b><small>이력이 확인된 노트북 보기</small></button><button data-page="sell"><b>판매글 작성</b><small>제품 여권과 함께 판매글 등록</small></button></div></div><div class="nav-item"><button data-page="my-listings">내 거래</button><div class="nav-drop"><button data-page="my-listings"><b>내 판매글</b><small>등록한 판매글 목록 관리</small></button><button data-page="deals"><b>채팅</b><small>문의부터 예약까지 한눈에</small></button></div></div><div class="nav-item"><button data-page="receive">소유권 이전</button><div class="nav-drop"><button data-page="receive"><b>소유권 이전 받기</b><small>외부 이전용 · QR로 제품과 기록 이어받기</small></button><button data-page="trade"><b>안심 거래 · 소유권 이전</b><small>외부 이전용 · 일회성 QR로 안전하게 인계</small></button></div></div><button class="landing-nav-more">내 제품의 기록을 한 곳에서 관리하세요.</button>
+            <div class="nav-item"><button data-page="landing">홈</button></div><div class="nav-item"><button data-page="home">제품 여권</button><div class="nav-drop"><button data-page="home" data-nav-related="passport"><b>제품 여권 보기</b><small>내 제품 목록과 공개 가능한 이력 확인</small></button><button data-page="register"><b>새 여권 등록</b><small>구매 정보와 문서를 함께 등록</small></button><button data-page="documents" data-nav-related="docmask"><b>문서 보관함</b><small>영수증·보증서·수리 문서 모아보기</small></button></div></div><div class="nav-item"><button data-page="market">중고거래</button><div class="nav-drop"><button data-page="market" data-nav-related="detail"><b>중고 상품 둘러보기</b><small>이력이 확인된 노트북 보기</small></button><button data-page="sell"><b>판매글 작성</b><small>제품 여권과 함께 판매글 등록</small></button></div></div><div class="nav-item"><button data-page="my-listings">내 거래</button><div class="nav-drop"><button data-page="my-listings"><b>내 판매글</b><small>등록한 판매글 목록 관리</small></button><button data-page="deals"><b>채팅</b><small>문의부터 예약까지 한눈에</small></button></div></div><div class="nav-item"><button data-page="receive">소유권 이전</button><div class="nav-drop"><button data-page="receive"><b>소유권 이전 받기</b><small>외부 이전용 · QR로 제품과 기록 이어받기</small></button><button data-page="trade"><b>안심 거래 · 소유권 이전</b><small>외부 이전용 · 일회성 QR로 안전하게 인계</small></button></div></div><div class="nav-item"><button data-page="guide">이용 가이드</button></div><button class="landing-nav-more">내 제품의 기록을 한 곳에서 관리하세요.</button>
           </nav>
   </div>
   <div class="mega" id="mega" hidden><div class="landing-shell"><div class="mega-grid" id="mega-grid"></div></div></div></header>
@@ -89,6 +90,7 @@
       <section class="page" id="deals"></section>
       <section class="page" id="receive"></section>
       <section class="page" id="trade"></section>
+      <section class="page" id="guide"></section>
     </main>
   </div>
   <script src="/js/auth-session.js?v=20261101-bounded"></script>
@@ -123,5 +125,6 @@
   <script src="/vendor/qrcode-generator-2.0.4.js"></script>
   <script src="/js/ownership.js"></script>
   <script src="/js/receive.js"></script>
+  <script src="/js/guide.js"></script>
 </body>
 </html>

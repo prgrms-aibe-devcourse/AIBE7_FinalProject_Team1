@@ -1,0 +1,75 @@
+/* 이용 가이드 화면. 기존 색상 변수(--blue, --ink, --line, --muted, --soft)만 사용한다. */
+.gd{display:grid;gap:20px}
+.gd-jump{display:flex;flex-wrap:wrap;gap:8px;position:sticky;top:0;z-index:2;padding:10px 0;background:var(--canvas)}
+.gd-jump button{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink);font-size:13px;font-weight:700;cursor:pointer}
+.gd-jump button:hover,.gd-jump button:focus-visible{border-color:var(--blue);color:var(--blue)}
+.gd-jump span{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:800}
+.gd-sec{padding:24px;background:#fff;border:1px solid var(--line);border-radius:8px;scroll-margin-top:72px}
+.gd-sec>header{display:flex;gap:14px;align-items:flex-start;margin-bottom:16px}
+.gd-sec h2{margin:0;font-size:20px;letter-spacing:-.5px}
+.gd-sec>header p{margin:4px 0 0;font-size:14px;line-height:1.55;color:var(--muted)}
+.gd-no{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:8px;background:var(--blue);color:#fff;font-size:15px;font-weight:800}
+.gd-steps{list-style:none;margin:0;padding:0;display:grid;gap:10px;counter-reset:gd}
+.gd-steps li{counter-increment:gd;position:relative;padding:14px 16px 14px 54px;background:var(--soft);border-radius:6px}
+.gd-steps li:before{content:counter(gd);position:absolute;left:16px;top:14px;display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#fff;border:1px solid var(--blue);color:var(--blue);font-size:12px;font-weight:800}
+.gd-steps b,.gd-flow b{display:block;font-size:15px}
+.gd-steps span,.gd-flow span{display:block;margin-top:4px;font-size:13px;line-height:1.6;color:#4a4d55}
+.gd-steps em{display:block;margin-top:6px;font-size:12.5px;line-height:1.55;font-style:normal;color:var(--muted)}
+.gd-steps em:before{content:"· "}
+.gd-flow{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.gd-flow li{padding:14px;background:var(--soft);border-radius:6px;border-top:3px solid var(--blue)}
+.gd-two{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.gd-two>div{padding:14px 16px;border:1px solid var(--line);border-radius:6px}
+.gd-two h3{margin:0 0 6px;font-size:14px}
+.gd-two ul{margin:0;padding-left:18px;font-size:13px;line-height:1.65;color:#4a4d55}
+.gd-note{margin:14px 0 0;padding:10px 14px;border-radius:6px;background:var(--soft);font-size:13px;line-height:1.55;color:#4a4d55}
+.gd-shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:18px}
+.gd-shots figure{margin:0;display:grid;grid-template-rows:auto 1fr;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#fff}
+.gd-shots a{display:block;background:var(--canvas);line-height:0}
+.gd-shots img{width:100%;height:220px;object-fit:cover;object-position:top;display:block}
+.gd-shots figcaption{padding:10px 12px;font-size:12.5px;line-height:1.55;color:#4a4d55}
+.gd-shots figcaption b{display:block;margin-bottom:2px;font-size:13px;color:var(--ink)}
+.gd-viewer{width:min(1240px,96vw);max-height:94vh;padding:0;border:0;border-radius:8px;background:#fff;overflow:hidden}
+.gd-viewer::backdrop{background:rgba(22,23,29,.6)}
+.gd-viewer[open]{display:flex;flex-direction:column}
+.gd-viewer-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);background:#fff}
+.gd-viewer-bar strong{font-size:14px;margin-right:auto}
+.gd-viewer-count{font-size:12.5px;font-weight:700;color:var(--muted)}
+.gd-viewer-stage{position:relative;display:flex;flex:1;min-height:0}
+.gd-viewer-nav{position:absolute;top:50%;z-index:1;transform:translateY(-50%);display:grid;place-items:center;width:44px;height:64px;border:0;border-radius:8px;background:rgba(22,23,29,.72);color:#fff;font-size:30px;line-height:1;cursor:pointer}
+.gd-viewer-nav.prev{left:10px}.gd-viewer-nav.next{right:10px}
+.gd-viewer-nav:hover:not(:disabled),.gd-viewer-nav:focus-visible{background:var(--blue)}
+.gd-viewer-nav:disabled{opacity:.25;cursor:default}
+.gd-viewer-nav[hidden]{display:none}
+.gd-viewer-body{flex:1;min-width:0;overflow:auto;background:var(--canvas)}
+.gd-viewer-body img{display:block;width:100%;height:auto}
+.gd-caption{margin:8px 0 0;font-size:12px;color:var(--muted)}
+.gd-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.gd-facts{margin:0;border-top:2px solid var(--ink)}
+.gd-facts>div{display:grid;grid-template-columns:180px 1fr;gap:16px;padding:14px 4px;border-bottom:1px solid var(--line)}
+.gd-facts dt{font-size:14px;font-weight:800}
+.gd-facts dd{margin:0;font-size:13px;line-height:1.6;color:#4a4d55}
+@media(max-width:780px){.gd-flow{grid-template-columns:1fr 1fr}.gd-two{grid-template-columns:1fr}.gd-facts>div{grid-template-columns:1fr;gap:4px}.gd-sec{padding:18px 16px}}
+@media(max-width:480px){.gd-flow{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.gd-jump button{transition:none}}
+
+/* 진행 순서 표시: 단계 사이에 화살표(삼각형)를 둔다. */
+.gd-flow{gap:10px}
+.gd-flow{counter-reset:gdf}
+.gd-flow li{position:relative;counter-increment:gdf}
+.gd-flow li b{display:flex;align-items:center;gap:8px}
+.gd-flow li b:before{content:counter(gdf);flex:none;display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#fff;border:1px solid var(--blue);color:var(--blue);font-size:12px;font-weight:800}
+.gd-shots{gap:26px}
+.gd-shots:has(figure:nth-child(3)){grid-template-columns:repeat(3,minmax(0,1fr))}
+.gd-shots:has(figure:nth-child(4)){grid-template-columns:repeat(4,minmax(0,1fr))}
+.gd-shots figure{position:relative;overflow:visible}
+.gd-shots figure:not(:last-child):after{content:"▶";position:absolute;top:110px;right:-20px;transform:translateY(-50%);font-size:13px;line-height:1;color:var(--blue)}
+.gd-shots figure>a{border-radius:6px 6px 0 0;overflow:hidden}
+@media(max-width:900px){
+  .gd-shots figure:not(:last-child):after{content:"▼";top:auto;right:auto;left:50%;bottom:-22px;transform:translateX(-50%)}
+  .gd-shots,.gd-shots:has(figure:nth-child(3)),.gd-shots:has(figure:nth-child(4)){grid-template-columns:1fr;gap:30px}
+}
+/* 순서가 없는 모음(개인정보 보호)에는 순서 화살표를 쓰지 않는다. */
+.gd-shots--plain figure:not(:last-child):after{display:none}
+.gd-shots--plain{gap:14px}
+@media(max-width:900px){.gd-shots--plain{gap:14px}}

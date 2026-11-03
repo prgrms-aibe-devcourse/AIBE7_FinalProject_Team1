@@ -138,7 +138,7 @@
 .lpx-safety li{padding:16px 18px 16px 52px;border-radius:6px}
 .lpx-safety li:before{left:16px;top:16px;width:24px;height:24px;border-radius:50%;font-size:13px}
 .lpx-faq details{border-radius:6px}
-.lpx-footer{display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:32px;margin-top:72px;padding:36px 0 20px;border-top:1px solid var(--line)}
+.lpx-footer{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:32px;margin-top:72px;padding:36px 0 20px;border-top:1px solid var(--line)}
 .lpx-footer h4{margin:0 0 10px;font-size:13px;color:var(--ink)}
 .lpx-footer nav{display:grid;gap:8px;align-content:start;justify-items:start}
 .lpx-footer nav button{padding:0;font-size:13px}
