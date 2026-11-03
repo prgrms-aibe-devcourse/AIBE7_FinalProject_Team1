@@ -162,6 +162,7 @@ class ProductQuestionHttpTest {
     var data = data(response);
     assertEquals(7, data.path("factsVersion").asLong());
     assertEquals("SPECS", data.at("/sources/0/type").asString());
+    assertEquals("ANSWERED", data.path("status").asString());
     assertEquals(18, data.at("/sources/0/facts/specifications/ramGb").asInt());
     assertFalse(IN_TRANSACTION.get());
     assertEquals("no-store", response.headers().firstValue("Cache-Control").orElseThrow());
@@ -351,6 +352,7 @@ class ProductQuestionHttpTest {
     var response = post(PRODUCT, "1", "보증은 유효한가요?");
     assertEquals(200, response.statusCode(), response.body());
     assertEquals(ProductQuestionService.NO_RECORD, data(response).path("answer").asString());
+    assertEquals("NO_RECORD", data(response).path("status").asString());
     var tool = JSON.readTree(INPUT.get()).get(0);
     assertFalse(tool.has("sourceKey"));
     assertFalse(tool.path("data").has("warrantyExpiresOn"));
@@ -454,8 +456,68 @@ class ProductQuestionHttpTest {
     var response = post(PRODUCT, "1", question);
     assertEquals(200, response.statusCode(), response.body());
     assertTrue(data(response).path("sources").isEmpty());
+    assertEquals("OUT_OF_SCOPE", data(response).path("status").asString());
     assertEquals(0, CALLS.get());
     verifyNoInteractions(LIMITS);
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "저녁메뉴 추천 해줘",
+        "오늘 저녁 뭐 먹지?",
+        "노트북 사양도 알려주고 저녁 메뉴 추천해줘",
+        "램 16GB인데 맛집 알려줘",
+        "제품 보증과 내일 날씨 알려줘",
+        "안녕",
+        "What should I eat for dinner?",
+        "저 녁 메 뉴 추 천",
+        "메\u200b뉴 골라줘"
+      })
+  void unrelatedQuestionsNeverUseTheModelOrItsRateLimit(String question) throws Exception {
+    CONFIGURED.set(false);
+    for (String path : List.of(PRODUCT, LISTING)) {
+      var response = post(path, "1", question);
+      assertEquals(200, response.statusCode(), response.body());
+      assertEquals("OUT_OF_SCOPE", data(response).path("status").asString());
+      assertTrue(data(response).path("sources").isEmpty());
+      assertTrue(data(response).path("answer").asString().contains("제품 사양·보증·이력과 관련 없는"));
+      assertFalse(data(response).path("answer").asString().contains("18GB"));
+    }
+    assertEquals(0, CALLS.get());
+    verifyNoInteractions(LIMITS);
+    assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM audit_logs", Integer.class));
+  }
+
+  @Test
+  void unrelatedQuestionsStillRequireAuthenticationAndCurrentAccess() throws Exception {
+    assertEquals(401, post(LISTING, null, "저녁메뉴 추천해줘").statusCode());
+    assertEquals(404, post(PRODUCT, "2", "저녁메뉴 추천해줘").statusCode());
+    jdbc.update("UPDATE listings SET status='CANCELLED',active_slot=NULL WHERE id=11");
+    assertEquals(404, post(LISTING, "2", "저녁메뉴 추천해줘").statusCode());
+    assertEquals(0, CALLS.get());
+    verifyNoInteractions(LIMITS);
+  }
+
+  @Test
+  void modelCanDeclineAmbiguousQuestionsWithoutProvidingProductEvidence() throws Exception {
+    TOOLS.set(List.of());
+    ANSWER.set(ProductQuestionGateway.Answer.outsideScope());
+    var response = post(PRODUCT, "1", "노트북으로 색다른 활동을 정해줘");
+    assertEquals(200, response.statusCode(), response.body());
+    assertEquals("OUT_OF_SCOPE", data(response).path("status").asString());
+    assertTrue(data(response).path("sources").isEmpty());
+    assertEquals(1, CALLS.get());
+    verify(LIMITS).release(any());
+    DURING.set(() -> jdbc.update("UPDATE products SET facts_version=facts_version+1 WHERE id=101"));
+    assertError(409, "AI_005", post(PRODUCT, "1", "노트북으로 색다른 활동을 정해줘"));
+  }
+
+  @Test
+  void aScopeDecisionCannotBypassTheReadSessionValidation() throws Exception {
+    ANSWER.set(ProductQuestionGateway.Answer.outsideScope());
+    assertError(502, "AI_003", post(PRODUCT, "1", "메모리 기록은?"));
+    verify(LIMITS).release(any());
   }
 
   @Test

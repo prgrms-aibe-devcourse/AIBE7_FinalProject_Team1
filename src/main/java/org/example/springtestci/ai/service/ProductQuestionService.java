@@ -14,6 +14,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.example.springtestci.ai.dto.ProductAnswerResponse;
 import org.example.springtestci.ai.dto.ProductAnswerResponse.Evidence;
+import org.example.springtestci.ai.dto.ProductAnswerResponse.Status;
 import org.example.springtestci.ai.service.ProductQuestionSource.Snapshot;
 import org.example.springtestci.ai.service.ProductQuestionSource.Target;
 import org.example.springtestci.common.error.CommonException;
@@ -30,6 +31,8 @@ public class ProductQuestionService {
       "등록된 기록으로는 질문하신 내용을 확인할 수 없어요. 기록이 없다는 사실이 수리·고장이 없었다는 뜻은 아니에요.";
   private static final String OUTSIDE =
       "이 기능은 등록된 제품 사양·보증·이력만 설명해요. 개인정보·비공개 문서 제공이나 구매·가격·품질·안전성·정품 판단은 할 수 없어요.";
+  private static final String UNRELATED =
+      "제품 사양·보증·이력과 관련 없는 질문에는 답변할 수 없어요. 등록된 메모리, 보증 만료일, 수리·교체 기록처럼 이 제품의 기록을 질문해 주세요.";
   private static final Pattern OUT_OF_SCOPE =
       Pattern.compile(
           "(?i)(시리얼|serial|증빙|영수증|보증서|OCR|계좌|전화번호|연락처|주소|구매\\s*(추천|비추천)|가성비|적정\\s*(가격|시세)|정품|안전한가|안전성|품질\\s*(평가|보장)|얼마에\\s*(사|팔)|수리비|구매금액)");
@@ -66,7 +69,11 @@ public class ProductQuestionService {
     security.validateUserInput(question);
     if (OUT_OF_SCOPE.matcher(question).find()) {
       unchanged(before, sources.capture(target, userId));
-      return response(OUTSIDE, List.of(), before);
+      return response(OUTSIDE, List.of(), before, Status.OUT_OF_SCOPE);
+    }
+    if (ProductQuestionScope.isUnrelated(question)) {
+      unchanged(before, sources.capture(target, userId));
+      return response(UNRELATED, List.of(), before, Status.OUT_OF_SCOPE);
     }
     try {
       textPolicy.validateInput(question);
@@ -78,9 +85,18 @@ public class ProductQuestionService {
     try {
       var session = new ReadSession(target, userId, before);
       var answer = gateway.ask(question.strip(), session);
+      if (answer != null && answer.scope() == ProductQuestionGateway.Scope.OUT_OF_SCOPE) {
+        if (!session.called.isEmpty()
+            || answer.sourceKeys() == null
+            || !answer.sourceKeys().isEmpty()) invalid();
+        unchanged(before, sources.capture(target, userId));
+        return response(UNRELATED, List.of(), before, Status.OUT_OF_SCOPE);
+      }
       if (session.called.isEmpty()) invalid();
-      if (answer == null || answer.sourceKeys() == null || answer.sourceKeys().size() > 20)
-        invalid();
+      if (answer == null
+          || answer.scope() != ProductQuestionGateway.Scope.PRODUCT_RECORDS
+          || answer.sourceKeys() == null
+          || answer.sourceKeys().size() > 20) invalid();
       var unique = new LinkedHashSet<>(answer.sourceKeys());
       if (unique.size() != answer.sourceKeys().size()) invalid();
       List<Evidence> evidence = new ArrayList<>();
@@ -126,13 +142,20 @@ public class ProductQuestionService {
   }
 
   private ProductAnswerResponse response(String text, List<Evidence> evidence, Snapshot source) {
+    return response(
+        text, evidence, source, evidence.isEmpty() ? Status.NO_RECORD : Status.ANSWERED);
+  }
+
+  private ProductAnswerResponse response(
+      String text, List<Evidence> evidence, Snapshot source, Status status) {
     return new ProductAnswerResponse(
         text,
         evidence,
         source.factsVersion(),
         source.contentVersion(),
         Instant.now(clock),
-        source.sample());
+        source.sample(),
+        status);
   }
 
   private static void unchanged(Snapshot before, Snapshot after) {

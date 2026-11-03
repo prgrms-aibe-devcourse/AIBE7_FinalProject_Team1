@@ -19,6 +19,28 @@ const failure = (status, retryAfter = null) => ({ response: {
   ok: false, status, headers: { get: () => retryAfter }, async json() { return {}; }
 } });
 
+test('무관한 질문은 제품 답변·근거 부족과 구분한 범위 안내로 표시한다', async () => {
+  const env = panel(() => ({answer:'제품 사양·보증·이력과 관련 없는 질문에는 답변할 수 없어요.',sources:[],status:'OUT_OF_SCOPE',sample:true}));
+  env.input.value = '저녁메뉴 추천 해줘';
+  await env.form.emit('submit');
+  assert.deepEqual(env.output.querySelectorAll('h3').map(node=>node.textContent), ['내 질문','질문 범위 안내']);
+  assert.equal(env.output.querySelector('.pq-question').textContent, '저녁메뉴 추천 해줘');
+  assert.equal(env.output.querySelector('details'), null);
+  assert.doesNotMatch(env.output.textContent, /확인 가능한 근거가 없|샘플 이력|등록된 기록에 따른 답변/);
+  assert.match(env.root.querySelector('.pq-message').textContent, /사양·보증·이력에 관한 질문/);
+  assert.equal(env.input.value, '');
+  assert.equal(env.submit.disabled, false);
+});
+
+test('정상 범위지만 기록이 없는 질문은 범위 밖으로 표시하지 않는다', async () => {
+  const env = panel(() => ({answer:'등록된 수리 기록으로는 확인할 수 없어요.',sources:[],status:'NO_RECORD'}));
+  env.input.value = '수리 기록은?';
+  await env.form.emit('submit');
+  assert.match(env.output.textContent, /등록된 기록에 따른 답변/);
+  assert.match(env.output.textContent, /확인 가능한 근거가 없어요/);
+  assert.doesNotMatch(env.output.textContent, /질문 범위 안내|범위를 벗어난/);
+});
+
 test('판매글: 전송한 질문은 입력란에서 지우고 요청·답변 영역에 같은 내용으로 유지한다', async () => {
   const pending = deferred(), env = panel(() => pending.promise);
   const question = '현재 메모리 사양과\n교체 기록을 알려줘';
