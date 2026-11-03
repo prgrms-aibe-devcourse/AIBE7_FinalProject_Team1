@@ -128,6 +128,8 @@ test('요청 제한 때 질문을 복구하고 대기 시간이 지난 뒤 수�
   assert.equal(env.input.disabled, false);
   assert.equal(env.submit.disabled, true);
   assert.equal(env.submit.textContent, '10초 후 다시 질문');
+  assert.match(env.root.querySelector('.pq-message').textContent, /질문 요청이 많아요/);
+  assert.match(env.root.textContent, /1분에 질문 10회까지/);
   env.input.value = '현재 메모리 사양을 알려줘';
   await env.form.emit('submit');
   assert.equal(env.calls.length, 1);

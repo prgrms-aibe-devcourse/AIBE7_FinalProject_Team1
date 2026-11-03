@@ -15,6 +15,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.example.springtestci.SpringTestCiApplication;
 import org.example.springtestci.ai.service.*;
 import org.example.springtestci.common.error.*;
+import org.example.springtestci.common.security.RequestRateLimiter;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -23,6 +24,8 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.*;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -37,6 +40,14 @@ class ProductQuestionHttpTest {
   private static final JsonMapper JSON = JsonMapper.builder().build();
   private static final HttpClient HTTP = HttpClient.newHttpClient();
   private static final AiSuggestionRateLimiter LIMITS = mock(AiSuggestionRateLimiter.class);
+  private static final StringRedisTemplate REQUEST_REDIS = mock(StringRedisTemplate.class);
+
+  @SuppressWarnings("unchecked")
+  private static final ValueOperations<String, String> REQUEST_COUNTERS =
+      mock(ValueOperations.class);
+
+  private static final Map<String, Long> REQUEST_COUNTS =
+      new java.util.concurrent.ConcurrentHashMap<>();
   private static final AtomicInteger CALLS = new AtomicInteger();
   private static final AtomicBoolean CONFIGURED = new AtomicBoolean(true);
   private static final AtomicBoolean IN_TRANSACTION = new AtomicBoolean();
@@ -55,6 +66,13 @@ class ProductQuestionHttpTest {
     @Primary
     AiSuggestionRateLimiter limits() {
       return LIMITS;
+    }
+
+    /** 요청 제한기와 MVC 경로는 실제 구현을 사용하고 Redis 저장소만 메모리 대역으로 교체한다. */
+    @Bean
+    @Primary
+    RequestRateLimiter questionRequestLimits() {
+      return new RequestRateLimiter(REQUEST_REDIS);
     }
 
     @Bean
@@ -133,6 +151,12 @@ class ProductQuestionHttpTest {
 
   @BeforeEach
   void reset() {
+    REQUEST_COUNTS.clear();
+    org.mockito.Mockito.reset(REQUEST_REDIS, REQUEST_COUNTERS);
+    when(REQUEST_REDIS.opsForValue()).thenReturn(REQUEST_COUNTERS);
+    when(REQUEST_COUNTERS.increment(anyString()))
+        .thenAnswer(call -> REQUEST_COUNTS.merge(call.getArgument(0), 1L, Long::sum));
+    when(REQUEST_REDIS.getExpire(anyString())).thenReturn(27L);
     jdbc.update("DELETE FROM audit_logs");
     jdbc.update("DELETE FROM product_events");
     jdbc.update("DELETE FROM listing_images");
@@ -497,6 +521,41 @@ class ProductQuestionHttpTest {
     assertEquals(404, post(LISTING, "2", "저녁메뉴 추천해줘").statusCode());
     assertEquals(0, CALLS.get());
     verifyNoInteractions(LIMITS);
+  }
+
+  @Test
+  void coinCellBatteryHistoryRemainsAValidProductQuestion() throws Exception {
+    jdbc.update(
+        "UPDATE product_events SET event_type='PART_REPLACEMENT',title='코인셀 배터리 교체',content='전원 유지 동작 점검',replaced_part='코인셀 배터리' WHERE id=501");
+    TOOLS.set(List.of("get_product_history"));
+    ANSWER.set(new ProductQuestionGateway.Answer("코인셀 배터리를 교체한 기록이 있습니다.", List.of("event:501")));
+    for (String path : List.of(PRODUCT, LISTING)) {
+      var response = post(path, "1", "코인셀 배터리 교체 기록이 있나요?");
+      assertEquals(200, response.statusCode(), response.body());
+      assertEquals("ANSWERED", data(response).path("status").asString());
+      assertEquals("코인셀 배터리", data(response).at("/sources/0/facts/replacedPart").asString());
+    }
+    assertEquals(2, CALLS.get());
+  }
+
+  @Test
+  void unrelatedQuestionsAreThrottledAcrossBothScopesBeforeSourceAndModelWork() throws Exception {
+    for (int index = 0; index < 10; index++) {
+      var response = post(index % 2 == 0 ? PRODUCT : LISTING, "1", "저녁메뉴 추천해줘");
+      assertEquals(200, response.statusCode(), response.body());
+      assertEquals("OUT_OF_SCOPE", data(response).path("status").asString());
+    }
+    // 존재하지 않는 대상도 같은 회원 한도를 공유한다. 제한 이후에는 DB 조회의 404까지 진행하지 않는다.
+    var limited = post("/api/v1/products/99999/ai/questions", "1", "저녁메뉴 추천해줘");
+    assertError(429, ErrorCode.REQUEST_RATE_LIMITED.code(), limited);
+    assertEquals("27", limited.headers().firstValue("Retry-After").orElseThrow());
+    assertError(429, ErrorCode.REQUEST_RATE_LIMITED.code(), post(LISTING, "1", "현재 메모리는?"));
+    assertEquals(0, CALLS.get());
+    verifyNoInteractions(LIMITS);
+    var otherUser = post(LISTING, "2", "현재 메모리는?");
+    assertEquals(200, otherUser.statusCode(), otherUser.body());
+    assertEquals("ANSWERED", data(otherUser).path("status").asString());
+    assertEquals(1, CALLS.get());
   }
 
   @Test

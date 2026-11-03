@@ -8,9 +8,10 @@ final class ProductQuestionScope {
   private static final Pattern PRODUCT_TOPIC =
       Pattern.compile(
           "(?iu)(제품|물건|노트북|랩톱|사양|스펙|제조사|모델|구매|구입|샀|보증|이력|기록|수리|수선|점검|검사|교체|부품|정정|무효|소유|양도|이전|배터리|밧데리|충전|메모리|램|저장|용량|디스플레이|화면|운영체제|윈도우|리퍼|사용|썼|변경|상태|무슨\\s*일|뭔\\s*일|\\b(product|laptop|notebook|specs?|specifications?|manufacturer|model|purchase|warranty|history|records?|repair|inspection|replac\\w*|battery|memory|ram|cpu|gpu|ssd|hdd|storage|display|os)\\b)");
+  // 코인셀·코인 배터리는 부품명이므로 암호화폐 주제와 구분한다.
   private static final Pattern UNRELATED =
       Pattern.compile(
-          "(?iu)(추천|메뉴|맛집|레시피|요리법|뭐먹|뭘먹|무엇을먹|(?:아침|점심|저녁)(?:식사|뭐|으로|추천)|음식추천|식사추천|날씨|미세먼지|운세|로또|주식|주가|코인|연애|농담|유머|소설|시(?:를)?써|코드작성|코딩해|dinner|lunch|breakfast|recipe|restaurant|weather|horoscope|tellmeajoke|write(?:me)?(?:apoem|astory|code))");
+          "(?iu)(추천|메뉴|맛집|레시피|요리법|뭐먹|뭘먹|무엇을먹|(?:아침|점심|저녁)(?:식사|뭐|으로|추천)|음식추천|식사추천|날씨|미세먼지|운세|로또|주식|주가|코인(?!셀|배터리)|연애|농담|유머|소설|시(?:를)?써|코드작성|코딩해|dinner|lunch|breakfast|recipe|restaurant|weather|horoscope|tellmeajoke|write(?:me)?(?:apoem|astory|code))");
 
   private ProductQuestionScope() {}
 
