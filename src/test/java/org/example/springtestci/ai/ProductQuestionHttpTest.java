@@ -558,6 +558,29 @@ class ProductQuestionHttpTest {
     assertEquals(1, CALLS.get());
   }
 
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "/api/v1/products/101/ai/%71uestions",
+        "/api/v1/listings/11/ai/%71uestions",
+        "/api/v1/%70roducts/101/ai/questions",
+        "/api/%761/listings/11/ai/questions",
+        "/api/v1/products/%31%30%31/ai/questions"
+      })
+  void encodedQuestionPathsShareTheNormalRequestLimit(String encodedPath) throws Exception {
+    for (int index = 0; index < 10; index++) {
+      var response = post(index % 2 == 0 ? encodedPath : LISTING, "1", "저녁메뉴 추천해줘");
+      assertEquals(200, response.statusCode(), response.body());
+      assertEquals("OUT_OF_SCOPE", data(response).path("status").asString());
+    }
+    var limited = post(encodedPath, "1", "저녁메뉴 추천해줘");
+    assertError(429, ErrorCode.REQUEST_RATE_LIMITED.code(), limited);
+    assertEquals("27", limited.headers().firstValue("Retry-After").orElseThrow());
+    assertError(429, ErrorCode.REQUEST_RATE_LIMITED.code(), post(PRODUCT, "1", "메모리는?"));
+    assertEquals(0, CALLS.get());
+    verifyNoInteractions(LIMITS);
+  }
+
   @Test
   void modelCanDeclineAmbiguousQuestionsWithoutProvidingProductEvidence() throws Exception {
     TOOLS.set(List.of());
@@ -590,7 +613,7 @@ class ProductQuestionHttpTest {
     when(LIMITS.acquire(1L))
         .thenThrow(new RateLimitedException(ErrorCode.AI_RATE_LIMITED, Duration.ofSeconds(27)));
     var limited = post(PRODUCT, "1", "메모리는?");
-    assertEquals(429, limited.statusCode());
+    assertError(429, ErrorCode.AI_RATE_LIMITED.code(), limited);
     assertEquals("27", limited.headers().firstValue("Retry-After").orElseThrow());
     assertEquals(0, CALLS.get());
   }

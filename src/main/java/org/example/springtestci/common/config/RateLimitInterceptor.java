@@ -6,12 +6,15 @@ import java.time.Duration;
 import java.util.List;
 import org.example.springtestci.common.security.RequestRateLimiter;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.server.PathContainer;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
-import org.springframework.util.AntPathMatcher;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.util.ServletRequestPathUtils;
+import org.springframework.web.util.pattern.PathPattern;
+import org.springframework.web.util.pattern.PathPatternParser;
 
 /** 파일 업로드, AI 호출, 소유권 이전 수락, 채팅 전송처럼 반복 호출이 부담이 되는 쓰기 요청에 사용자별 횟수 제한을 적용한다. */
 @Component
@@ -19,7 +22,16 @@ public class RateLimitInterceptor implements HandlerInterceptor {
 
   /** 제한 대상 요청과 한도. 한도는 사용자(로그인 전이면 IP) 단위로 센다. */
   record Rule(
-      String bucket, HttpMethod method, String pathPattern, int maxRequests, Duration window) {}
+      String bucket, HttpMethod method, PathPattern pathPattern, int maxRequests, Duration window) {
+    Rule(String bucket, HttpMethod method, String pathPattern, int maxRequests, Duration window) {
+      this(
+          bucket,
+          method,
+          PathPatternParser.defaultInstance.parse(pathPattern),
+          maxRequests,
+          window);
+    }
+  }
 
   static final List<Rule> RULES =
       List.of(
@@ -88,7 +100,6 @@ public class RateLimitInterceptor implements HandlerInterceptor {
               10,
               Duration.ofMinutes(1)));
 
-  private final AntPathMatcher pathMatcher = new AntPathMatcher();
   private final RequestRateLimiter rateLimiter;
 
   /** 횟수를 세는 제한기를 주입받는다. */
@@ -100,9 +111,14 @@ public class RateLimitInterceptor implements HandlerInterceptor {
   @Override
   public boolean preHandle(
       HttpServletRequest request, HttpServletResponse response, Object handler) {
+    // 인코딩·컨텍스트 경로로 제한을 우회하지 못하도록 MVC와 같은 경로 해석을 사용한다.
+    PathContainer path =
+        (ServletRequestPathUtils.hasParsedRequestPath(request)
+                ? ServletRequestPathUtils.getParsedRequestPath(request)
+                : ServletRequestPathUtils.parseAndCache(request))
+            .pathWithinApplication();
     for (Rule rule : RULES) {
-      if (rule.method().matches(request.getMethod())
-          && pathMatcher.match(rule.pathPattern(), request.getRequestURI())) {
+      if (rule.method().matches(request.getMethod()) && rule.pathPattern().matches(path)) {
         rateLimiter.check(rule.bucket(), subject(request), rule.maxRequests(), rule.window());
         break;
       }
