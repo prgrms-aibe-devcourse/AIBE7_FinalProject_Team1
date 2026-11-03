@@ -27,7 +27,11 @@ class GeminiListingSummaryGatewayTest {
                 .readTree("{\"sentences\":[\"제품 특징을 소개합니다.\",\"등록된 상태를 설명합니다.\"]}"));
     assertEquals(2, gateway.summarize("registered-source").size());
     var schema = ArgumentCaptor.forClass(Map.class);
-    verify(client).generate(anyString(), schema.capture(), eq("registered-source"));
+    var instructions = ArgumentCaptor.forClass(String.class);
+    verify(client).generate(instructions.capture(), schema.capture(), eq("registered-source"));
+    assertTrue(instructions.getValue().contains("메모리 → 저장장치"));
+    assertTrue(instructions.getValue().contains("유효한 사양 변경·부품 교체 → 수리 → 점검 → 구매·양도"));
+    assertTrue(instructions.getValue().contains("90자 한도와 사실·안전 규칙을 우선"));
     Map<?, ?> properties = (Map<?, ?>) schema.getValue().get("properties");
     Map<?, ?> sentences = (Map<?, ?>) properties.get("sentences");
     assertEquals(1, sentences.get("minItems"));

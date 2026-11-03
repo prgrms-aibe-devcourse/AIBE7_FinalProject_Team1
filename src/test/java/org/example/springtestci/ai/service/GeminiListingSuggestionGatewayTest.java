@@ -84,6 +84,12 @@ class GeminiListingSuggestionGatewayTest {
     assertFalse(json.has("tools"));
     assertFalse(json.has("cachedContent"));
     assertFalse(json.get("generationConfig").has("temperature"));
+    assertFalse(json.get("generationConfig").has("topK"));
+    assertFalse(json.get("generationConfig").has("topP"));
+    var instructions = json.at("/systemInstruction/parts/0/text").asString();
+    assertTrue(instructions.contains("{제조사} {모델명} 중고 노트북 판매"));
+    assertTrue(instructions.contains("제조사 → 모델명 → 사양 → 구매일 → 보증 만료일 → 이력"));
+    assertTrue(instructions.contains("개인정보·무효·미검토·분량 제한 규칙을 우선"));
     assertEquals(1, calls.get());
   }
 

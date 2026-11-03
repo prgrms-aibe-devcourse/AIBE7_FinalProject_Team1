@@ -35,6 +35,9 @@ R09 공개 상태 요약·R10 요약 재생성·R11~12 Q&A는 포함하지 않�
 ## Gemini 연결·설정
 
 기본 모델은 사용자가 지정한 `gemini-3.5-flash-lite`다.
+
+Gemini 3.5 Flash-Lite는 `temperature`·`topP`·`topK`를 무시하므로 낮은 값을 넣어 응답을 고정하지 않는다([공식 안내](https://aistudio.google.com/docs/whats-new-gemini-3.6#sampling-parameter-deprecation)). 현재 모델을 유지하면서 출력 지침과 JSON 스키마로 변동을 줄인다. 판매글 제목은 `제조사 모델명 중고 노트북 판매`, 본문은 제조사→모델명→사양→구매일→보증 만료일→이력 순서를 기본으로 한다. 카드 요약도 모델명·대표 사양·이력 유형의 선택 순서를 명시한다. 개인정보·근거·무효/미검토·길이 검사가 형식보다 우선이며, 동일 입력의 매번 동일한 문장까지 보장하는 기능은 아니다. 저장된 요약의 기존 재사용 정책은 유지하며 새 응답 캐시는 추가하지 않는다.
+
 공식 [모델 문서](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite),
 [GenerateContent API](https://ai.google.dev/api/generate-content),
 [구조화 출력 문서](https://ai.google.dev/gemini-api/docs/generate-content/structured-output)를 기준으로 한다.

@@ -39,6 +39,16 @@ public class GeminiProductQuestionGateway implements ProductQuestionGateway {
       날짜는 자료의 YYYY-MM-DD, 숫자와 사양 표기는 자료에 있는 값을 그대로 사용한다.
       내부 필드명·상태 코드·함수명은 답변에 출력하지 않고 자연스러운 한국어로 설명한다.
       예를 들어 detailsReviewed=false는 공개된 세부 내용을 확인할 수 없음, PART_REPLACEMENT는 부품 교체로 표현한다.
+
+      출력 일관성:
+      질문에 필요한 항목만 사양 → 보증 → 이력 순서로 답하고, 항목별 한 줄로 작성한다.
+      사양의 기본 문형은 "등록된 {항목}: {값}."이고, 보증 만료일은 "등록된 보증 만료일: YYYY-MM-DD."다.
+      이력의 기본 문형은 "YYYY-MM-DD {이력 유형} 기록이 등록되어 있어요."다.
+      corrected=true인 유효 이력은 "정정된 YYYY-MM-DD {이력 유형} 기록이 등록되어 있어요."로 시작한다.
+      VOID 이력은 "YYYY-MM-DD {이력 유형} 기록은 무효 처리되어 실제 발생 여부를 확인할 수 없어요."로 구분한다.
+      이력은 도구가 제공한 순서를 유지한다. 공개 상세 제외 안내는 해당 기록 바로 뒤에 둔다.
+      같은 사실을 동의어로 다시 꾸미거나 인사말·감탄사·질문 반복·마무리 문구를 추가하지 않는다.
+      앞의 근거 범위·권한·무효·미검토·개인정보 규칙을 문장 형식보다 우선한다.
       """;
   private static final String DECLINE = "decline_unrelated_question";
   private static final List<String> NAMES =
