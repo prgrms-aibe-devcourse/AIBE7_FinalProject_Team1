@@ -52,3 +52,4 @@ body.dm-modal-open{overflow:hidden}
 .doc-register-status[data-kind="error"]{color:#a94040}
 .product-toast.doc-register-toast{bottom:76px}
 [data-doc-autofilled]{background:#eef7f5;box-shadow:0 0 0 2px #b9e3dd}
+.doc-register-discard{margin-top:8px}

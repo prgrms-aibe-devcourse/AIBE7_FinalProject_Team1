@@ -12,6 +12,8 @@
   // 마스킹을 마친 사본. 제품 등록이 성공하면 증빙 문서로 올리고, 그 전에는 이 브라우저 메모리에만 둔다.
   let pending = null;
   let busy = false;
+  // 등록 화면의 안내 문구·버튼·동의 상태를 처음으로 되돌린다. 화면이 만들어질 때 prepare()가 채운다.
+  let resetUi = () => {};
 
   const create = (tag, text, className = '') => {
     const node = document.createElement(tag);
@@ -73,18 +75,30 @@
     const assist = document.querySelector('#register .product-document-assist');
     const form = document.querySelector('#register [data-product-form]');
     if (!assist || !form || assist.dataset.docRegister) return;
-    assist.dataset.docRegister = 'true';
 
     const input = assist.querySelector('[data-product-document]');
-    const button = assist.querySelector('.product-document-extract');
     const notice = assist.querySelector('.product-document-notice');
-    if (!input || !button) return;
+    // 문서 선택 칸이 없으면 붙일 곳이 없다. 화면이 늦게 채워질 수 있으니 표시를 남기지 않고 나중에 다시 시도한다.
+    if (!input) return;
+    assist.dataset.docRegister = 'true';
 
-    // 연동 안내 문구를 실제 동작에 맞게 바꾼다.
+    // 등록 화면은 문서를 고르면 제품 등록 뒤 마스킹 화면으로 이동하는 흐름이다. 그 흐름은 그대로 두고,
+    // 자동 입력 버튼은 여기서 직접 만들어 넣는다. 화면에 이미 같은 버튼이 있으면 그것을 쓴다.
+    let button = assist.querySelector('.product-document-extract');
+    if (!button) {
+      button = create('button', '개인정보 가리고 자동 입력', 'button product-document-extract');
+      button.type = 'button';
+      if (notice) notice.before(button);
+      else assist.append(button);
+    }
+
+    // 안내 문구를 실제 동작에 맞게 바꾼다. 자동 입력을 쓰면 원본이 아니라 가려진 사본이 AI로 전송된다.
+    const dropNote = assist.querySelector('.product-document-drop small');
+    if (dropNote) dropNote.textContent = '선택 사항 · JPG, PNG · 원본은 서버로 전송되지 않고, 가려진 사본만 사용돼요.';
     if (notice) {
-      notice.querySelector('b').textContent = '이렇게 처리돼요';
+      notice.querySelector('b').textContent = '두 가지 방법이 있어요';
       notice.querySelector('p').textContent =
-        '선택한 문서는 이 브라우저에서 개인정보를 가린 뒤, 가려진 사본으로만 정보를 읽어요. 제품을 등록하면 가려진 사본이 증빙 문서로 함께 보관돼요.';
+        '문서만 선택하면 제품 등록 뒤 마스킹 화면에서 가려 저장해요. "개인정보 가리고 자동 입력"을 쓰면 지금 가린 뒤 제품 정보를 읽어 입력하고, 제품을 등록할 때 가려진 사본을 증빙 문서로 함께 보관해요.';
     }
 
     const options = create('div', null, 'doc-register-options');
@@ -98,9 +112,13 @@
     const status = create('p', '', 'doc-register-status');
     status.setAttribute('role', 'status');
     status.setAttribute('aria-live', 'polite');
+    const discard = create('button', '가려진 사본 지우기', 'button small doc-register-discard');
+    discard.type = 'button';
+    discard.hidden = true;
     options.append(type, consent);
     button.before(options);
     button.after(status);
+    status.after(discard);
 
     const say = (message, kind = '') => {
       status.textContent = message || '';
@@ -112,7 +130,22 @@
 
     const clearPending = () => {
       pending = null;
+      discard.hidden = true;
       say('');
+    };
+    discard.addEventListener('click', clearPending);
+    resetUi = () => {
+      clearPending();
+      consentBox.checked = false;
+      sync();
+    };
+
+    // 가려진 사본은 이 스크립트가 들고 있으므로, 같은 문서가 제품 등록 뒤 마스킹 화면 이동 흐름으로 또 올라가지 않게 파일 선택을 비운다.
+    const releaseInput = () => {
+      input.value = '';
+      const selected = assist.querySelector('[data-product-document-selected]');
+      if (selected) selected.hidden = true;
+      discard.hidden = false;
     };
 
     input.addEventListener('change', () => {
@@ -145,6 +178,7 @@
           return;
         }
         pending = { blob: picked.blob };
+        releaseInput();
         say('가려진 사본에서 제품 정보를 읽는 중이에요…');
         const body = new FormData();
         body.append('maskingConfirmed', 'true');
@@ -177,6 +211,8 @@
     const upload = pending;
     pending = null;
     if (!upload) return;
+    // 사본은 이제 이 함수가 들고 있다. 등록이 끝난 화면에 이전 안내와 버튼이 남지 않게 정리한다.
+    resetUi();
     try {
       const productId = (await response.json())?.data?.productId;
       if (!productId) throw new Error('product');
@@ -213,7 +249,9 @@
   prepare();
   // 다른 화면으로 옮기면 메모리에 둔 사본을 버린다.
   document.addEventListener('pastport:page-shown', (event) => {
-    if (event.detail?.id !== 'register') pending = null;
+    if (event.detail?.id === 'register') return;
+    pending = null;
+    resetUi();
   });
   window.addEventListener('pagehide', () => {
     pending = null;
