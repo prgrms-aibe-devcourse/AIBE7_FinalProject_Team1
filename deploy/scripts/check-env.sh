@@ -22,7 +22,11 @@ for key in "${required[@]}"; do
 done
 [[ ${values[LOG_FILE]} == /var/lib/pastport/logs/app.log ]] || fail LOG_FILE
 [[ ${values[DOTENV_PATH]} == /etc/pastport/disabled.env ]] || fail DOTENV_PATH
-[[ ${values[SPRING_PROFILES_ACTIVE]} == prod,supabase && ${values[STORAGE_TYPE]} == s3 ]] || fail PROFILE_STORAGE
+case ${values[SPRING_PROFILES_ACTIVE]} in
+    prod,supabase|prod,supabase,db-convergence|prod,supabase,db-legacy-convergence) ;;
+    *) fail PROFILE_STORAGE ;;
+esac
+[[ ${values[STORAGE_TYPE]} == s3 ]] || fail PROFILE_STORAGE
 for key in SERVER_PORT REDIS_PORT; do
     value=${values[$key]}
     [[ $value =~ ^[0-9]{1,5}$ ]] && ((10#$value >= 1 && 10#$value <= 65535)) || fail "$key"
