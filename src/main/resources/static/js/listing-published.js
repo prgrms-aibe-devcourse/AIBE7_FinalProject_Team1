@@ -145,10 +145,12 @@
 
   /** 게시된 판매글 주소로 전환해 새로고침 시 같은 상세와 관리 여부를 복원한다. */
   function open(id, options = {}) {
+    if (window.PastportListingManagement?.beforeLeave?.() === false) return false;
     const url = new URL(window.location.href); url.searchParams.delete('draftProduct'); url.searchParams.delete('market'); url.searchParams.set('listingId', String(id));
     options.manage ? url.searchParams.set('listingManage', '1') : url.searchParams.delete('listingManage');
     window.history.replaceState(window.history.state, '', url);
     if (typeof show === 'function') show('detail');
+    return true;
   }
   /** 늦게 로드된 상세 HTML에 재조회·로그인·이력 페이지 버튼을 한 번만 연결한다. */
   function init() {

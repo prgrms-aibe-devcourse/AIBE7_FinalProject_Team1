@@ -1,15 +1,45 @@
 // 게시된 판매글만 수정한다. 임시저장 API와 제품·이력 수정 API는 사용하지 않는다.
 (() => {
   let initialized = false, current = null, saved = null, selected = [], busy = false, stale = false, generation = 0, request = null;
+  let baseline = null, leaveApproved = false, actionError = '';
+  const maxPhotos = 10;
   const find = selector => document.querySelector('#detail ' + selector);
   const statuses = { ACTIVE:'판매 중', RESERVED:'예약 중', SOLD:'판매 완료', CANCELLED:'판매 중지' };
   const create = (tag, text, className = '') => {
     const node = document.createElement(tag); node.className = className;
     if (text != null) node.textContent = text; return node;
   };
+  const editing = () => !!document.querySelector('#detail.active') && find('[data-listing-editor]')?.hidden === false;
+  function signature() {
+    const form = find('[data-listing-edit-form]');
+    return JSON.stringify([form.elements.title.value, form.elements.description.value, form.elements.price.value, form.elements.conditionGrade.value, selected]);
+  }
+  const dirty = () => baseline !== null && saved?.canEdit && signature() !== baseline;
+  function updateBar() {
+    const bar = find('[data-listing-edit-bar]'); if (!bar) return;
+    bar.hidden = !editing() || !saved?.canEdit;
+    const notice = find('[data-listing-edit-dirty]');
+    const text = actionError || (busy ? '변경 내용을 처리하고 있어요…' : stale ? '최신 내용을 불러온 뒤 다시 확인해 주세요.' : dirty() ? '저장하지 않은 변경 사항이 있어요.' : '저장된 내용과 같아요.');
+    if (notice.textContent !== text) notice.textContent = text;
+    notice.classList.toggle('is-error', !!actionError);
+    find('[data-listing-edit-save]').disabled = busy || stale || !saved?.canEdit || !dirty();
+    find('[data-listing-edit-save]').textContent = busy ? '저장 중…' : '수정 저장';
+    find('[data-listing-edit-back]').disabled = busy;
+  }
+  // 화면 이동 전에 한 번 확인한다. 같은 이동에서 URL 변경과 show가 연속 호출돼도 재확인하지 않는다.
+  function beforeLeave() {
+    if (!editing()) return true;
+    if (busy) { message('요청을 처리하고 있어요. 완료될 때까지 기다려 주세요.'); return false; }
+    if (!dirty() || leaveApproved) return true;
+    if (!confirm('저장하지 않은 변경 사항이 있어요. 수정 내용을 버리고 나갈까요?')) return false;
+    leaveApproved = true;
+    Promise.resolve().then(() => { leaveApproved = false; });
+    return true;
+  }
   function message(text, failed = false) {
     const node = find('[data-listing-edit-message]'); node.textContent = text;
     node.classList.toggle('is-error', failed); node.setAttribute('role', failed ? 'alert' : 'status');
+    actionError = failed ? text : ''; updateBar();
   }
   async function api(path, options = {}) {
     const fetcher = window.PastportApi?.fetch || window.fetch.bind(window);
@@ -27,32 +57,66 @@
     find('[data-listing-cancel-fields]').disabled = busy || stale || !saved?.canCancel;
     find('[data-listing-edit-reload]').disabled = busy;
     find('[data-listing-edit-close]').disabled = busy;
+    updateBar();
+  }
+  const canChangePhotos = () => editing() && saved?.canEdit && !busy && !stale;
+  function photoError(text = '') {
+    const notice = find('[data-listing-photo-error]'); notice.textContent = text; notice.hidden = !text;
+  }
+  function picture(image, label) {
+    const frame = create('div', null, 'listing-edit-photo-frame');
+    if (!image) { frame.append(create('span', '사용할 수 없는 사진')); return frame; }
+    const img = create('img'); img.src = image.url; img.alt = label; img.loading = 'lazy';
+    img.addEventListener('error', () => { if (frame.children[0] === img) frame.replaceChildren(create('span', '사진을 불러오지 못했어요.')); });
+    frame.append(img); return frame;
+  }
+  function changePhotos(next) {
+    if (!canChangePhotos()) return;
+    const key = document.activeElement?.getAttribute('data-listing-photo-key');
+    selected = next; photoError(); photos(); controls();
+    const focus = [...document.querySelectorAll('#detail [data-listing-photo-key]')].find(node => node.getAttribute('data-listing-photo-key') === key);
+    (focus || find('[data-listing-photo-open]')).focus({preventScroll:true});
   }
   function photos() {
     const root = find('[data-listing-edit-photos]'); root.replaceChildren();
     if (!saved) return;
     const images = new Map(saved.availableImages.map(image => [image.imageId, image]));
-    const order = [...selected, ...[...images.keys()].filter(id => !selected.includes(id))];
-    order.forEach(id => {
-      const index = selected.indexOf(id), item = create('div', null, 'listing-edit-photo');
-      const label = create('label'), checkbox = document.createElement('input');
-      checkbox.type = 'checkbox'; checkbox.checked = index >= 0;
-      checkbox.setAttribute('aria-label', '제품 사진 ' + id + ' 공개 선택');
-      checkbox.addEventListener('change', () => { selected = checkbox.checked ? [...selected, id] : selected.filter(value => value !== id); photos(); });
-      label.append(checkbox, create('span', index < 0 ? '미선택' : index === 0 ? '1 · 대표 사진' : (index + 1) + ' · 선택 사진'));
-      const image = images.get(id);
-      if (image) {
-        const picture = document.createElement('img'); picture.src = image.url; picture.alt = '제품 사진 ' + id; picture.loading = 'lazy';
-        picture.addEventListener('error', () => picture.replaceWith(create('span', '사진을 불러오지 못했어요.'))); label.append(picture);
-      } else label.append(create('span', '사용할 수 없는 사진 · 선택을 해제해 주세요.'));
-      item.append(label);
-      for (const [text, offset] of [['위로', -1], ['아래로', 1]]) {
-        const button = create('button', text, 'sc-btn'); button.type = 'button';
-        button.setAttribute('aria-label', '제품 사진 ' + id + ' ' + text);
-        button.disabled = index < 0 || index + offset < 0 || index + offset >= selected.length;
-        button.addEventListener('click', () => { [selected[index], selected[index + offset]] = [selected[index + offset], selected[index]]; photos(); }); item.append(button);
+    selected.forEach((id, index) => {
+      const item = create('div', null, 'listing-edit-photo');
+      item.append(picture(images.get(id), '선택한 사진 ' + (index + 1)), create('span', index === 0 ? '대표' : String(index + 1), 'listing-edit-photo-badge'));
+      const remove = create('button', '×', 'listing-edit-photo-remove'); remove.type = 'button';
+      remove.setAttribute('aria-label', '사진 ' + (index + 1) + ' 선택 해제'); remove.setAttribute('data-listing-photo-key', 'remove-' + id);
+      remove.addEventListener('click', () => changePhotos(selected.filter(value => value !== id))); item.append(remove);
+      const actions = create('div', null, 'listing-edit-photo-actions');
+      if (index > 0) {
+        const main = create('button', '대표로', 'listing-edit-photo-main'); main.type = 'button';
+        main.setAttribute('aria-label', '사진 ' + (index + 1) + ' 대표로 설정'); main.setAttribute('data-listing-photo-key', 'main-' + id);
+        main.addEventListener('click', () => changePhotos([id, ...selected.filter(value => value !== id)])); actions.append(main);
       }
-      root.append(item);
+      for (const [text, offset, direction] of [['←', -1, '왼쪽'], ['→', 1, '오른쪽']]) {
+        const button = create('button', text); button.type = 'button';
+        button.setAttribute('aria-label', '사진 ' + (index + 1) + ' ' + direction + '으로 이동'); button.setAttribute('data-listing-photo-key', direction + '-' + id);
+        button.disabled = index + offset < 0 || index + offset >= selected.length;
+        button.addEventListener('click', () => { if (index + offset < 0 || index + offset >= selected.length) return; const next = [...selected]; [next[index], next[index + offset]] = [next[index + offset], next[index]]; changePhotos(next); }); actions.append(button);
+      }
+      item.append(actions); root.append(item);
+    });
+    find('[data-listing-photo-count]').textContent = selected.length + '/' + maxPhotos;
+    find('[data-listing-photo-picker-count]').textContent = '선택한 사진 ' + selected.length + ' / ' + maxPhotos + '장';
+    find('[data-listing-photo-empty]').hidden = saved.availableImages.length > 0;
+    const choices = find('[data-listing-photo-choices]'); choices.replaceChildren();
+    saved.availableImages.forEach((image, index) => {
+      const order = selected.indexOf(image.imageId), button = create('button', null, 'listing-edit-photo-choice'); button.type = 'button';
+      button.setAttribute('aria-label', '제품 사진 ' + (index + 1) + ' 선택'); button.setAttribute('aria-pressed', String(order >= 0));
+      button.setAttribute('data-listing-photo-key', 'pick-' + image.imageId); button.disabled = !canChangePhotos();
+      button.append(picture(image, '제품 사진 ' + (index + 1)), create('span', order < 0 ? '선택' : order === 0 ? '대표' : String(order + 1), 'listing-edit-photo-badge'));
+      button.addEventListener('click', () => {
+        if (!canChangePhotos()) return;
+        if (selected.includes(image.imageId)) changePhotos(selected.filter(id => id !== image.imageId));
+        else if (selected.length < maxPhotos) changePhotos([...selected, image.imageId]);
+        else photoError('판매글 사진은 최대 10장까지 선택할 수 있어요.');
+      });
+      choices.append(button);
     });
   }
   function fill(data) {
@@ -62,6 +126,7 @@
     form.elements.price.value = data.content.price;
     form.elements.conditionGrade.value = String(data.content.conditionGrade);
     form.elements.description.value = data.content.description;
+    baseline = signature(); actionError = '';
     const cancelForm = find('[data-listing-cancel-form]'); cancelForm.reset();
     const reserved = data.status === 'RESERVED';
     find('[data-listing-trade-reason]').hidden = !reserved;
@@ -73,11 +138,12 @@
   }
   function failure(error) {
     if (error.status === 409) stale = true;
-    if (error.status === 401 || error.status === 404) { saved = null; selected = []; find('[data-listing-edit-form]').reset(); find('[data-listing-cancel-form]').reset(); find('[data-listing-edit-photos]').replaceChildren(); }
+    if (error.status === 401 || error.status === 404) { baseline = null; saved = null; selected = []; find('[data-listing-photo-dialog]').close(); find('[data-listing-photo-choices]').replaceChildren(); find('[data-listing-edit-form]').reset(); find('[data-listing-cancel-form]').reset(); find('[data-listing-edit-photos]').replaceChildren(); }
     message(error.message + (error.status === 409 ? ' 입력은 유지했어요. 최신 내용을 불러온 뒤 다시 확인해 주세요.' : ''), true);
   }
   async function open() {
     if (!current || busy) return;
+    if (!beforeLeave()) return;
     request?.abort(); const controller = new AbortController(); request = controller;
     const token = ++generation, id = current; busy = true;
     find('[data-listing-editor]').hidden = false; find('[data-listing-content]').hidden = true;
@@ -100,16 +166,21 @@
   }
   // 읽어 둔 내용 버전을 함께 보내 다른 탭의 수정 내용을 덮어쓰지 않고, 성공하면 상세를 다시 조회한다.
   async function save(event) {
-    event.preventDefault(); if (!saved?.canEdit || busy || stale) return;
+    event.preventDefault(); if (!saved?.canEdit || busy || stale || !dirty()) return;
     const form = event.currentTarget; if (!form.reportValidity()) return;
     const price = form.elements.price.value.trim();
     if (!/^(?:\d{1,12}|\d{1,3}(?:,\d{3}){1,3})$/.test(price) || Number(price.replaceAll(',', '')) < 1) { message('가격은 1원 이상, 최대 12자리 정수로 입력해 주세요.', true); return; }
-    if (!form.elements.title.value.trim() || !form.elements.description.value.trim() || selected.length === 0) { message('제목·설명과 공개할 사진을 입력해 주세요.', true); return; }
+    if (!form.elements.title.value.trim() || !form.elements.description.value.trim()) { message('제목과 설명을 입력해 주세요.', true); return; }
+    if (selected.length === 0 || selected.length > maxPhotos) {
+      message('대표 사진을 포함해 판매글 사진을 1~10장 선택해 주세요.', true);
+      const field = find('[data-listing-photo-field]'); field.focus({preventScroll:true}); field.scrollIntoView({block:'center'}); return;
+    }
     const body = { version:saved.contentVersion, title:form.elements.title.value.trim(), description:form.elements.description.value.trim(), price:Number(price.replaceAll(',', '')), conditionGrade:Number(form.elements.conditionGrade.value), selectedImageIds:[...selected] };
     const token = generation, id = current; busy = true; controls(); message('수정 내용을 저장하는 중이에요…');
     try {
       await api('/api/v1/listings/' + id, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
       if (token !== generation) return;
+      baseline = signature(); busy = false;
       window.PastportPublishedListing.open(id);
     } catch (error) { if (token === generation) failure(error); }
     finally { if (token === generation) { busy = false; controls(); } }
@@ -128,6 +199,7 @@
       await api('/api/v1/listings/' + id + '/cancel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
       if (token !== generation) return;
       saved.canEdit = false; saved.canCancel = false; saved.status = 'CANCELLED';
+      baseline = null;
       find('[data-listing-manage]').hidden = true;
       find('[data-listing-content]').replaceChildren();
       find('[data-listing-edit-state]').textContent = '판매 중지 · 기록 보존';
@@ -155,6 +227,7 @@
   }
   function reset() {
     generation++; request?.abort(); current = null; saved = null; selected = []; busy = false; stale = false;
+    baseline = null; leaveApproved = false; actionError = '';
     if (!find('[data-listing-editor]')) return;
     find('[data-listing-editor]').hidden = true; find('[data-listing-manage]').hidden = true;
     find('[data-listing-delete-button]').hidden = true;
@@ -162,6 +235,8 @@
     find('[data-listing-cancel-dialog]').close();
     find('[data-listing-edit-form]').reset(); find('[data-listing-cancel-form]').reset();
     find('[data-listing-edit-photos]').replaceChildren();
+    find('[data-listing-photo-dialog]').close(); find('[data-listing-photo-choices]').replaceChildren();
+    updateBar();
   }
   function bind(data) {
     init(); current = String(data.listingId);
@@ -173,11 +248,20 @@
     if (initialized || !find('[data-listing-editor]')) return; initialized = true;
     find('[data-listing-manage]').addEventListener('click', open);
     find('[data-listing-edit-reload]').addEventListener('click', open);
-    find('[data-listing-edit-close]').addEventListener('click', () => {
+    const closeEditor = () => {
       if (busy || !current) return;
       if (typeof show === 'function' && (new URL(window.location.href).searchParams.get('listingManage') === '1' || (saved && !saved.canCancel))) show('my-listings');
       else window.PastportPublishedListing.open(current);
+    };
+    find('[data-listing-edit-close]').addEventListener('click', closeEditor);
+    find('[data-listing-edit-back]').addEventListener('click', closeEditor);
+    for (const event of ['input', 'change']) find('[data-listing-edit-form]').addEventListener(event, () => {
+      if (actionError) message('변경 내용을 확인한 뒤 저장해 주세요.');
+      controls();
     });
+    find('[data-listing-photo-open]').addEventListener('click', () => { if (canChangePhotos()) { photoError(); photos(); find('[data-listing-photo-dialog]').showModal(); } });
+    for (const selector of ['[data-listing-photo-close]', '[data-listing-photo-done]']) find(selector).addEventListener('click', () => find('[data-listing-photo-dialog]').close());
+    find('[data-listing-photo-dialog]').addEventListener('close', () => { if (editing()) find('[data-listing-photo-open]').focus({preventScroll:true}); });
     find('[data-listing-edit-form]').addEventListener('submit', save);
     find('[data-listing-cancel-form]').addEventListener('submit', event => {
       event.preventDefault(); if (busy || stale || !saved?.canCancel) return;
@@ -190,6 +274,7 @@
   }
   document.addEventListener('pastport:page-loaded', event => { if (event.detail.id === 'detail') init(); });
   document.addEventListener('pastport:page-shown', event => { if (event.detail.id !== 'detail') reset(); });
+  window.addEventListener('beforeunload', event => { if (editing() && (dirty() || busy)) { event.preventDefault(); event.returnValue = ''; } });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
-  window.PastportListingManagement = Object.freeze({ bind, reset, open });
+  window.PastportListingManagement = Object.freeze({ bind, reset, open, beforeLeave });
 })();

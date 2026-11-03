@@ -4,13 +4,17 @@ pageNames.guide='이용 가이드';
 pageNames['my-listings']='내 거래';
 
 const pendingPages = new Set(['ai', 'trade']);
+let historyPosition = Number.isSafeInteger(window.history.state?.pastportIndex) ? window.history.state.pastportIndex : 0;
+let activeHistoryUrl = window.location.href;
+let restoringHistory = false;
 
 // mode: 'push'(기본) 새 기록 추가 / 'replace' 현재 기록 교체(새로고침 복원) / 'pop' 뒤로·앞으로 가기라 기록을 건드리지 않음.
 const show=(name,mode='push')=>{
   if (pendingPages.has(name)) {
     alert(`[${pageNames[name] || name}] 기능은 현재 준비 중입니다.\n현재 구현된 기능(내 제품, 새 제품 등록, 문서 보관함, 문서 마스킹, 중고 거래, 판매글 작성, 로그인)을 이용해 주세요.`);
-    return;
+    return false;
   }
+  if(window.PastportListingManagement?.beforeLeave?.() === false)return false;
   if(document.activeElement instanceof HTMLElement)document.activeElement.blur();
   const target=name;
   document.querySelectorAll('.page').forEach(page=>page.classList.toggle('active',page.id===target));
@@ -21,10 +25,12 @@ const show=(name,mode='push')=>{
   try{sessionStorage.setItem('pastport.page',name);}catch{}
   if(mode!=='pop'){
     // 주소(검색 조건 등)는 그대로 두고 화면 이름만 기록에 남긴다. 같은 화면을 다시 누르면 기록을 늘리지 않는다.
-    if(mode==='replace'||window.history.state?.page===name)window.history.replaceState({...window.history.state,page:name},'',window.location.href);
-    else window.history.pushState({page:name},'',window.location.href);
+    if(mode==='replace'||window.history.state?.page===name)window.history.replaceState({...window.history.state,page:name,pastportIndex:historyPosition},'',window.location.href);
+    else window.history.pushState({page:name,pastportIndex:++historyPosition},'',window.location.href);
   }
   document.dispatchEvent(new CustomEvent('pastport:page-shown',{detail:{id:target}}));
+  activeHistoryUrl=window.location.href;
+  return true;
 };
 
 // 새로고침하면 보던 화면을 그대로 복원한다. 화면 HTML이 채워진 뒤에 열어야 각 화면의 로딩 로직이 정상 동작한다.
@@ -147,8 +153,15 @@ document.addEventListener('keydown',(event)=>{
 
 document.addEventListener('click',(event)=>{const target=event.target.closest('[data-page]');if(target)show(target.dataset.page)});
 // 브라우저 뒤로가기·앞으로가기: 기록에 담긴 화면을 다시 연다. 첫 기록에도 화면 이름을 심어 둔다.
-window.history.replaceState({...window.history.state,page:window.history.state?.page||'landing'},'',window.location.href);
+window.history.replaceState({...window.history.state,page:window.history.state?.page||'landing',pastportIndex:historyPosition},'',window.location.href);
 window.addEventListener('popstate',(event)=>{
+  if(restoringHistory){restoringHistory=false;return;}
   const page=event.state?.page;
-  if(page&&pageNames[page]&&!pendingPages.has(page))show(page,'pop');
+  if(!page||!pageNames[page]||pendingPages.has(page))return;
+  const nextPosition=event.state?.pastportIndex;
+  if(show(page,'pop')===false){
+    // 이탈을 취소하면 URL과 방문 기록도 원래 위치로 되돌려, 다음 뒤로가기의 방향을 유지한다.
+    if(Number.isSafeInteger(nextPosition)&&nextPosition!==historyPosition){restoringHistory=true;window.history.go(historyPosition-nextPosition);}
+    else window.history.replaceState({...window.history.state,page:document.querySelector('.page.active')?.id,pastportIndex:historyPosition},'',activeHistoryUrl);
+  }else if(Number.isSafeInteger(nextPosition))historyPosition=nextPosition;
 });
