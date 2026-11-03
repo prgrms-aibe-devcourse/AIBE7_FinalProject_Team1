@@ -67,7 +67,7 @@
     find('[data-listing-trade-reason]').hidden = !reserved;
     cancelForm.elements.tradeReason.disabled = !reserved;
     cancelForm.elements.tradeReason.required = reserved;
-    find('[data-listing-edit-state]').textContent = statuses[data.status] + ' · 내용 버전 ' + data.contentVersion + (data.canEdit ? ' · 저장하면 즉시 공개 내용에 반영돼요.' : ' · 현재 상태에서는 판매 조건을 수정할 수 없어요.');
+    find('[data-listing-edit-state]').textContent = statuses[data.status] + (data.canEdit ? ' · 저장하면 즉시 공개 내용에 반영돼요.' : ' · 현재 상태에서는 판매 조건을 수정할 수 없어요.');
     find('[data-listing-edit-close]').textContent = new URL(window.location.href).searchParams.get('listingManage') === '1' || !data.canCancel ? '내 판매글로' : '상세로 돌아가기';
     photos(); controls();
   }
@@ -81,13 +81,22 @@
     request?.abort(); const controller = new AbortController(); request = controller;
     const token = ++generation, id = current; busy = true;
     find('[data-listing-editor]').hidden = false; find('[data-listing-content]').hidden = true;
+    const chats = find('[data-listing-chats]'); if (chats) chats.hidden = true;
     find('[data-listing-more]').hidden = true; find('[data-listing-delete-button]').hidden = true; controls(); message('편집 정보를 불러오는 중이에요…');
     try {
       const data = await api('/api/v1/listings/' + id + '/management', { signal:controller.signal });
       if (token !== generation || controller.signal.aborted) return;
       fill(data); message(data.canEdit ? '제품 정보·사양·누적 이력은 해당 관리 화면에서 변경해 주세요.' : '예약 중에는 판매 중지만 가능해요. 종료된 글은 기록으로 보존돼요.');
     } catch (error) { if (token === generation && error.name !== 'AbortError') failure(error); }
-    finally { if (token === generation) { busy = false; controls(); } }
+    finally {
+      if (token === generation) {
+        busy = false; controls();
+        const editor = find('[data-listing-editor]');
+        editor.tabIndex = -1;
+        editor.style.scrollMarginTop = ((document.querySelector('.site-header')?.getBoundingClientRect().height || 0) + 24) + 'px';
+        editor.focus({preventScroll:true}); editor.scrollIntoView({block:'start'});
+      }
+    }
   }
   // 읽어 둔 내용 버전을 함께 보내 다른 탭의 수정 내용을 덮어쓰지 않고, 성공하면 상세를 다시 조회한다.
   async function save(event) {
@@ -157,6 +166,7 @@
   function bind(data) {
     init(); current = String(data.listingId);
     find('[data-listing-manage]').hidden = !data.canManage;
+    find('[data-listing-manage]').textContent = data.status === 'RESERVED' ? '예약 판매글 관리' : '판매글 수정';
     find('[data-listing-delete-button]').hidden = !data.canManage;
   }
   function init() {

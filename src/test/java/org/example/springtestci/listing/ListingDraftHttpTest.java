@@ -408,6 +408,41 @@ class ListingDraftHttpTest {
   }
 
   @Test
+  void productOptionsShowOpenListingsBeforeCompositionAndOnlyForTheCurrentOwner() throws Exception {
+    jdbc.update(
+        "INSERT INTO listings(id,product_id,seller_id,title,price,condition_grade,description,status,published_at,source_draft_id,source_draft_version,active_slot) VALUES(8001,101,1,'mine',100000,4,'test','ACTIVE',CURRENT_TIMESTAMP,9001,0,1),(8002,201,2,'other',100000,4,'test','RESERVED',CURRENT_TIMESTAMP,9002,0,1)");
+    for (String status : List.of("ACTIVE", "RESERVED")) {
+      jdbc.update("UPDATE listings SET status=? WHERE id=8001", status);
+      var response = send("GET", "/api/v1/listing-draft-products", "1", null);
+      assertEquals(200, response.statusCode());
+      assertEquals(2, data(response).size());
+      for (var product : data(response)) {
+        long id = product.get("productId").asLong();
+        assertTrue(id == 101 || id == 102);
+        assertEquals(id == 102, product.get("canCompose").asBoolean());
+        if (id == 101) {
+          assertEquals(8001, product.get("listingId").asLong());
+          assertEquals(status, product.get("listingStatus").asString());
+        }
+      }
+      assertFalse(response.body().contains("serialNumber"));
+      assertEquals(
+          409,
+          send("GET", "/api/v1/products/101/listing-draft/composition", "1", null).statusCode());
+    }
+    var other = data(send("GET", "/api/v1/listing-draft-products", "2", null));
+    assertEquals(1, other.size());
+    assertEquals(201, other.get(0).get("productId").asLong());
+    assertEquals(8002, other.get(0).get("listingId").asLong());
+    jdbc.update("UPDATE listings SET status='CANCELLED', active_slot=NULL WHERE id=8001");
+    for (var product : data(send("GET", "/api/v1/listing-draft-products", "1", null))) {
+      assertTrue(product.get("canCompose").asBoolean());
+      assertTrue(product.get("listingId").isNull());
+      assertTrue(product.get("listingStatus").isNull());
+    }
+  }
+
+  @Test
   void photoOnlyChangesAdvanceTheDraftVersionAndPreserveTheProductPhotoOrder() throws Exception {
     save(101, "1", "{\"selectedImageIds\":[301,302]}");
     var update = save(101, "1", "{\"version\":0,\"selectedImageIds\":[302,301]}");

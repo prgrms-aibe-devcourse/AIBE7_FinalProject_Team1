@@ -109,3 +109,13 @@ test('판매자 요약 영역에는 하단과 중복되는 받은 채팅 버튼�
   assert.equal(s.$('.listing-owner-chats-link'), null);
   assert.ok(s.$('.listing-passport-link'));
 });
+
+test('핵심 이력을 질문보다 먼저 보여 주며 전체 사양은 접어서 보관한다', () => {
+  const s = screen();
+  const blocks = s.$('.listing-detail-body').children;
+  assert.equal(blocks[0].querySelector('h2').textContent, '판매자 설명');
+  assert.equal(blocks[1], s.$('[data-listing-history]'));
+  assert.equal(blocks[2], s.$('[data-listing-questions]'));
+  assert.equal(blocks[3], s.$('.listing-full-specs'));
+  assert.equal(blocks[3].open, false);
+});

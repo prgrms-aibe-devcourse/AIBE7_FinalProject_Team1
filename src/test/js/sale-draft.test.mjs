@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { environment, flush, deferred } from './dom.mjs';
 
 // 실제 작성 모듈의 버튼 이벤트와 HTTP 응답을 검사한다. 레이아웃은 실제 브라우저에서 별도로 확인한다.
-async function setup({ title = '점검한 노트북', draftValues = {}, images = [{ imageId: 1, url: '/fixture-image' }], failure, confirm = true, selection = false, saved = true, ready = true } = {}) {
+async function setup({ title = '점검한 노트북', draftValues = {}, images = [{ imageId: 1, url: '/fixture-image' }], failure, confirm = true, selection = false, saved = true, ready = true, productOptions = null, draftList = false } = {}) {
   const draft = { draftId: 7, version: 1, title, description: '충전 동작을 확인했습니다.', price: 100000,
     conditionGrade: 3, selectedImageIds: [1], updatedAt: '2026-11-02T00:00:00Z', ...draftValues };
   const product = { productId: 101, title: '테스트 노트북', manufacturer: '제조사', modelName: '모델',
@@ -13,7 +13,7 @@ async function setup({ title = '점검한 노트북', draftValues = {}, images =
   const env = environment((path, options, calls) => {
     const rejected = failure?.(path, options, calls);
     if (rejected) return rejected;
-    if (path === '/api/v1/listing-draft-products') return [{ productId: 101, title: product.title }];
+    if (path === '/api/v1/listing-draft-products') return productOptions || [{ productId: 101, title: product.title }];
     if (path.startsWith('/api/v1/listing-drafts?')) return { items: [], page };
     if (path.endsWith('/composition')) return product;
     if (path.endsWith('/ai-suggestion')) return { productId:101, title:'AI가 제안한 제목', description:'등록된 점검 이력이 있는 노트북입니다.', sample:false };
@@ -52,7 +52,7 @@ async function setup({ title = '점검한 노트북', draftValues = {}, images =
       node.close = () => { node.open = false; return node.emit('close'); };
     }
   }
-  env.window.location.href = selection ? 'http://test.invalid/' : 'http://test.invalid/?draftProduct=101';
+  env.window.location.href = draftList ? 'http://test.invalid/?drafts=1' : selection ? 'http://test.invalid/' : 'http://test.invalid/?draftProduct=101';
   env.window.history = { state: {}, replaceState(state, _, url) { env.window.location.href = String(url); } };
   env.window.PastportListingDetail = { renderTimeline() {}, render(root) { root.textContent = '판매글 미리보기'; } };
   env.window.PastportPublishedListing = { open(id) { env.openedListing = id; } };
@@ -482,4 +482,22 @@ test('최종 게시 요청 중 다시 눌러도 게시 API는 한 번만 호출�
   await env.$('[data-sale-preview-publish]').emit('click');
   pending.resolve({listingId:55}); await publishing;
   assert.equal(env.calls.filter(call => call.path.endsWith('/listings')).length, 1);
+});
+
+for (const listingStatus of ['ACTIVE', 'RESERVED']) test('제품 선택 목록의 ' + listingStatus + ' 안내는 기존 글로 연결하고 AI 작성 전에 막는다', async () => {
+  const env = await setup({selection:true, ready:false, productOptions:[{productId:101,title:'판매 중인 제품',canCompose:false,listingId:55,listingStatus}]});
+  assert.equal(env.$('[data-sale-product-blocked]').hidden, false);
+  assert.match(env.$('[data-sale-product-blocked-message]').textContent, listingStatus === 'ACTIVE' ? /판매 중/ : /예약 중/);
+  assert.equal(env.$('[data-sale-existing-listing]').href, '/?listingId=55');
+  assert.equal(env.$('[data-sale-next]').disabled, true);
+  await env.$('[data-sale-next]').emit('click');
+  assert.equal(env.calls.some(call => call.path.endsWith('/composition') || call.path.endsWith('/ai-suggestion')), false);
+});
+
+test('임시저장 바로가기는 기존 저장 목록으로 이동하고 새 초안을 만들지 않는다', async () => {
+  const env = await setup({draftList:true,ready:false});
+  assert.equal(env.document.activeElement, env.$('[data-sale-drafts-section]'));
+  assert.equal(env.$('[data-sale-drafts-section]').lastScroll.block, 'start');
+  assert.equal(env.$('[data-sale-select-panel]').hidden, false);
+  assert.equal(env.calls.some(call => call.options.method || call.path.endsWith('/ai-suggestion')), false);
 });

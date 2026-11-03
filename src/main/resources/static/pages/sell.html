@@ -13,7 +13,8 @@
     <section class="sc-card">
       <h2>판매할 제품</h2>
       <p class="sub">다음으로 넘어가면 제품 정보와 이력으로 AI가 제목·설명을 먼저 작성해 드려요. 직접 작성으로 바꿀 수도 있어요.</p>
-      <label class="sc-field"><span>보유 제품 선택</span><select data-sale-product aria-label="보유 제품 선택"><option value="">제품을 불러오는 중이에요.</option></select></label>
+      <div class="sl-section-head"><label class="sc-field sl-product-select"><span>보유 제품 선택</span><select data-sale-product aria-label="보유 제품 선택"><option value="">제품을 불러오는 중이에요.</option></select></label><button type="button" class="sc-btn" data-sale-products-refresh>목록 새로고침</button></div>
+      <div class="sl-product-blocked" data-sale-product-blocked role="status" hidden><p data-sale-product-blocked-message></p><a class="sc-btn" data-sale-existing-listing>기존 판매글 보기</a></div>
       <div class="sl-product" data-sale-product-card hidden>
         <div class="sl-product-picture" data-sale-product-picture aria-hidden="true"></div>
         <div><span>내 제품</span><h3 data-sale-product-name></h3><p data-sale-product-meta></p></div>
@@ -22,7 +23,7 @@
       <p class="sub" data-sale-product-empty hidden>판매할 수 있는 보유 제품이 없어요. 내 제품에서 먼저 제품을 등록해 주세요.</p>
     </section>
     <button type="button" class="sc-btn primary sl-next" data-sale-next disabled>다음 · 내용 작성</button>
-    <section class="sc-card sl-drafts" aria-labelledby="sale-drafts-heading">
+    <section class="sc-card sl-drafts" data-sale-drafts-section tabindex="-1" aria-labelledby="sale-drafts-heading">
       <div class="sl-section-head"><div><h2 id="sale-drafts-heading">내 임시저장</h2><p class="sub">저장한 글을 다시 열어 이어서 작성할 수 있어요. <span data-sale-drafts-count></span></p></div><button type="button" class="sc-btn" data-sale-drafts-refresh>새로고침</button></div>
       <p class="sub" data-sale-drafts-status role="status" aria-live="polite">임시저장본을 불러오는 중이에요.</p>
       <ul class="sl-draft-list" data-sale-drafts aria-label="내 임시저장 목록"></ul>
@@ -40,6 +41,7 @@
       <p class="sl-photo-caption" data-sale-photo-count>최대 10장 · 첫 번째 사진이 대표 사진이에요.</p>
       <p class="sl-field-error" id="sale-photos-error" data-sale-photos-error aria-live="polite" hidden></p>
     </section>
+      <p class="sl-ai-caption">AI가 작성한 초안도 내용을 확인한 뒤 자유롭게 수정할 수 있어요.</p>
       <label class="sc-field" data-sale-title-field><span>제목</span><input data-sale-title aria-label="판매글 제목" aria-required="true" aria-describedby="sale-title-error" placeholder="판매글 제목을 입력해 주세요" maxlength="60" disabled><small data-sale-title-count>0 / 60자</small><small class="sl-field-error" id="sale-title-error" data-sale-title-error aria-live="polite" hidden></small></label>
       <label class="sc-field" data-sale-description-field><span>상세 설명</span><textarea data-sale-description aria-label="상세 설명" aria-required="true" aria-describedby="sale-description-error" maxlength="2000" placeholder="제품의 상태와 판매 내용을 적어 주세요." disabled></textarea><small data-sale-description-count>0 / 2,000자</small><small class="sl-field-error" id="sale-description-error" data-sale-description-error aria-live="polite" hidden></small></label>
       <div class="sl-ai-writing" data-sale-ai-panel aria-busy="false">

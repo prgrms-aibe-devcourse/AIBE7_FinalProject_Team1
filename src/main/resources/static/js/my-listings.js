@@ -52,6 +52,7 @@
   async function load() {
     if (!active || !find('[data-my-items]')) return;
     request?.abort(); const controller = new AbortController(); request = controller;
+    loadDraftCount(controller);
     metadata = null;
     find('[data-my-items]').replaceChildren();
     find('[data-my-pagination]').hidden = true;
@@ -86,6 +87,18 @@
       if (!controller.signal.aborted && active) find('[data-my-message]').textContent = error instanceof TypeError ? '서버에 연결하지 못했어요. 연결 상태를 확인하고 새로고침을 눌러 주세요.' : error.message;
     } finally { if (!controller.signal.aborted) find('[data-my-items]').setAttribute('aria-busy', 'false'); }
   }
+  // 임시저장 진입은 기존 작성 화면의 목록을 재사용한다. 개수 조회 실패가 판매글 목록을 막지는 않는다.
+  async function loadDraftCount(controller) {
+    const count = find('[data-my-draft-count]');
+    if (!count) return;
+    count.textContent = '';
+    try {
+      const fetcher = window.PastportApi?.fetch || window.fetch.bind(window);
+      const response = await fetcher('/api/v1/listing-drafts?page=0&size=1', {credentials:'same-origin', cache:'no-store', signal:controller.signal});
+      const payload = response.ok ? await response.json() : null;
+      if (!controller.signal.aborted && active && Number.isSafeInteger(payload?.data?.page?.totalElements)) count.textContent = payload.data.page.totalElements.toLocaleString('ko-KR');
+    } catch { /* 개수는 다음 목록 새로고침 때 다시 읽는다. */ }
+  }
   function init() {
     if (initialized || !find('[data-my-items]')) return;
     initialized = true;
@@ -105,12 +118,13 @@
     if (active) { writeUrl(); load(); }
     else {
       request?.abort(); metadata = null; find('[data-my-items]')?.replaceChildren();
+      if (find('[data-my-draft-count]')) find('[data-my-draft-count]').textContent = '';
       if (wasActive && event.detail.id === 'auth') return;
       const url = new URL(window.location.href); ['myListings','myStatus','myPage'].forEach(key => url.searchParams.delete(key));
       window.history.replaceState(window.history.state, '', url);
     }
   });
   // 계정 전환·로그아웃 시 숨겨진 화면에도 이전 계정의 비공개 목록을 남기지 않는다.
-  document.addEventListener('pastport:auth-changed', () => { request?.abort(); find('[data-my-items]')?.replaceChildren(); metadata = null; if (active) load(); });
+  document.addEventListener('pastport:auth-changed', () => { request?.abort(); find('[data-my-items]')?.replaceChildren(); if (find('[data-my-draft-count]')) find('[data-my-draft-count]').textContent = ''; metadata = null; if (active) load(); });
   window.addEventListener('pageshow', event => { if (event.persisted && active) load(); });
 })();

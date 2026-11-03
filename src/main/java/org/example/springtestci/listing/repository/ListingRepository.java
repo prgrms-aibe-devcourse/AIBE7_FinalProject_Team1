@@ -2,6 +2,7 @@ package org.example.springtestci.listing.repository;
 
 import jakarta.persistence.LockModeType;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.example.springtestci.listing.entity.Listing;
 import org.example.springtestci.listing.entity.ListingStatus;
@@ -14,6 +15,20 @@ public interface ListingRepository extends JpaRepository<Listing, Long> {
   Optional<Listing> findBySourceDraftId(long sourceDraftId);
 
   boolean existsByProductIdAndStatusIn(long productId, Collection<ListingStatus> statuses);
+
+  /** 본인 판매글의 열린 상태를 한 번에 읽어 제품별 추가 조회를 피한다. */
+  @Query(
+      "select l.productId as productId, l.id as listingId, l.status as status from Listing l "
+          + "where l.sellerId = :sellerId and l.status in :statuses")
+  List<OpenListing> findOpenBySellerId(long sellerId, Collection<ListingStatus> statuses);
+
+  interface OpenListing {
+    long getProductId();
+
+    long getListingId();
+
+    ListingStatus getStatus();
+  }
 
   // 소유권 검사 전에 엔티티를 읽으면 1차 캐시에 변경 전 상태가 남을 수 있어 식별자만 읽는다.
   @Query("select l.productId as productId, l.sellerId as sellerId from Listing l where l.id = :id")
