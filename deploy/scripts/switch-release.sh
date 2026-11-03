@@ -20,9 +20,15 @@ candidate=$(gate_value CANDIDATE_SHA)
 [[ $candidate == "$(sed -n 's/^commit=//p' "${target%.jar}.manifest.txt")" ]] || die 'candidate approval differs from artifact'
 [[ $mode == BOOTSTRAP || $mode == UPGRADE ]] || die 'explicit BOOTSTRAP or UPGRADE required'
 previous=''
+require_inactive() {
+    local state
+    state=$(systemctl show pastport.service --property=LoadState --property=ActiveState) || die 'STATE_UNKNOWN: service query failed; preserve links and artifacts'
+    [[ $(printf '%s\n' "$state" | grep -c '^LoadState=') == 1 && $(printf '%s\n' "$state" | grep -c '^ActiveState=') == 1 ]] || die 'STATE_UNKNOWN: ambiguous service state; preserve links and artifacts'
+    [[ $(printf '%s\n' "$state" | sed -n 's/^LoadState=//p') == loaded && $(printf '%s\n' "$state" | sed -n 's/^ActiveState=//p') == inactive ]] || die 'STATE_UNKNOWN: bootstrap requires loaded inactive service; preserve links and artifacts'
+}
 if [[ $mode == BOOTSTRAP ]]; then
     [[ ! -e $root/current.jar && ! -L $root/current.jar ]] || die 'bootstrap requires no current link; preserve and review existing state'
-    if systemctl is-active --quiet pastport.service; then die 'bootstrap refuses an active service'; fi
+    require_inactive
 fi
 if [[ -e $root/current.jar || -L $root/current.jar ]]; then
     [[ -L $root/current.jar ]] || die 'current must be a symlink'
@@ -45,8 +51,11 @@ else
         activate "$previous"
         systemctl restart pastport.service && healthy || die 'rollback health failed: keep public traffic blocked'
     else
-        systemctl stop pastport.service || true
+        systemctl stop pastport.service || die 'STOP_FAILED: bootstrap service stop failed; preserve current link and artifacts; keep public traffic blocked'
+        require_inactive
+        [[ -L $root/current.jar && $(readlink -- "$root/current.jar") == "$target" ]] || die 'bootstrap link changed; preserve and review existing state'
         rm -- "$root/current.jar"
+        die 'bootstrap unhealthy; service confirmed inactive and new link removed; artifacts preserved; keep public traffic blocked'
     fi
     die 'new release unhealthy; reverted (DB changes are not reverted)'
 fi

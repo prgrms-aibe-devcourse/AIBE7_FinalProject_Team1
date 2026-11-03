@@ -124,7 +124,9 @@ authorization system). Also require exactly one `RELEASE_MODE=BOOTSTRAP` or
 artifact manifest. Reapprove this record for every target, including explicit rollback.
 
 BOOTSTRAP requires no existing current.jar (including a dangling link) and an
-inactive service. An archived artifact is not a previous healthy deployment.
+explicitly loaded, inactive service confirmed by a successful `systemctl show` query.
+Active, activating, deactivating, failed, unknown, not-found and query errors are refused.
+An archived artifact is not a previous healthy deployment.
 Existing links/services are refused without removal or stopping; the operator
 must separately review and preserve the old artifact, checksum and provenance
 before resolving bootstrap state. Never fabricate missing build timestamps or
@@ -145,8 +147,11 @@ rechecks immutable files, records previous-release.txt, switches the symlink
 atomically, restarts and polls loopback HTTP plus service state for ~150 seconds.
 There is no actuator dependency: `/` is a minimal liveness probe, **not** a
 business/DB smoke test. A failed UPGRADE restart/probe restores the explicitly
-approved compatible previous JAR. A failed BOOTSTRAP stops the service and removes
-only the newly activated current link, retaining staged artifacts/checksums/manifests.
+approved compatible previous JAR. A failed BOOTSTRAP attempts to stop the service and
+removes only the newly activated current link after stop succeeds and loaded/inactive
+state is confirmed, retaining staged artifacts/checksums/manifests. `STOP_FAILED` or
+`STATE_UNKNOWN` preserves the current link and artifacts for diagnosis and exits nonzero;
+it does not claim service shutdown or restoration of a previous release.
 Keep ingress blocked in both cases until operational acceptance is recorded.
 Rollback-health failure exits nonzero: keep public traffic blocked, inspect
 `systemctl status pastport` / `journalctl -u pastport` in the approved secure

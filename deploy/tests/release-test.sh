@@ -16,8 +16,20 @@ cat > "$temporary/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$MOCK_LOG"
 if [[ $1 == is-active ]]; then [[ -f $MOCK_LOG.active ]]; exit; fi
+if [[ $1 == show ]]; then
+    [[ ! -f $MOCK_LOG.query-error ]] || exit 1
+    if [[ -f $MOCK_LOG.state ]]; then cat "$MOCK_LOG.state"; else
+        printf 'LoadState=loaded\nActiveState=%s\n' "$([[ -f $MOCK_LOG.active ]] && printf active || printf inactive)"
+    fi
+    exit 0
+fi
 if [[ $1 == restart ]]; then touch "$MOCK_LOG.active"; fi
-if [[ $1 == stop ]]; then rm -f "$MOCK_LOG.active"; fi
+if [[ $1 == stop ]]; then
+    [[ ! -f $MOCK_LOG.stop-failure ]] || exit 1
+    rm -f "$MOCK_LOG.active"
+    if [[ -f $MOCK_LOG.after-stop ]]; then cp "$MOCK_LOG.after-stop" "$MOCK_LOG.state"; fi
+    if [[ -f $MOCK_LOG.after-stop-error ]]; then touch "$MOCK_LOG.query-error"; fi
+fi
 STUB
 cat > "$temporary/bin/curl" <<'STUB'
 #!/usr/bin/env bash
@@ -153,11 +165,33 @@ touch "$MOCK_LOG.active"
 reject bash "$scripts/switch-release.sh" aaaaaaaa "$env_file" "$go_file" "$root"
 [[ ! -e $root/current.jar && -f $MOCK_LOG.active ]]; pass 'bootstrap preserves active service and links'
 rm "$MOCK_LOG.active"
+for state in active activating deactivating failed unknown not-found query-error duplicate; do
+    case $state in
+        not-found) printf 'LoadState=not-found\nActiveState=inactive\n' > "$MOCK_LOG.state" ;;
+        query-error) touch "$MOCK_LOG.query-error" ;;
+        duplicate) printf 'LoadState=loaded\nActiveState=inactive\nActiveState=active\n' > "$MOCK_LOG.state" ;;
+        *) printf 'LoadState=loaded\nActiveState=%s\n' "$state" > "$MOCK_LOG.state" ;;
+    esac
+    : > "$MOCK_LOG"
+    reject bash "$scripts/switch-release.sh" aaaaaaaa "$env_file" "$go_file" "$root"
+    grep -q 'STATE_UNKNOWN:' "$temporary/rejected"
+    ! grep -Eq '^(restart|stop) ' "$MOCK_LOG"
+    [[ ! -e $root/current.jar && ! -L $root/current.jar && -f $root/releases/aaaaaaaa.jar ]]
+    rm -f "$MOCK_LOG.state" "$MOCK_LOG.query-error"
+    pass "bootstrap rejects $state without service mutation or activation"
+done
 bash "$scripts/switch-release.sh" aaaaaaaa "$env_file" "$go_file" "$root"
 [[ $(readlink "$root/current.jar") == "$root/releases/aaaaaaaa.jar" ]]; pass 'atomic activation with mocked service and HTTP'
 bash "$scripts/stage-release.sh" s3://release-fixture/artifacts bbbbbbbb "$root"
 reject bash "$scripts/switch-release.sh" bbbbbbbb "$env_file" "$go_file" "$root"
-[[ $(readlink "$root/current.jar") == "$root/releases/aaaaaaaa.jar" ]]; pass 'bootstrap refuses stale existing link'
+grep -q 'candidate approval differs from artifact' "$temporary/rejected"
+[[ $(readlink "$root/current.jar") == "$root/releases/aaaaaaaa.jar" ]]; pass 'candidate SHA mismatch rejected separately'
+approve_mode BOOTSTRAP bbbbbbbb
+: > "$MOCK_LOG"
+reject bash "$scripts/switch-release.sh" bbbbbbbb "$env_file" "$go_file" "$root"
+grep -q 'bootstrap requires no current link' "$temporary/rejected"
+[[ $(readlink "$root/current.jar") == "$root/releases/aaaaaaaa.jar" && -f $MOCK_LOG.active && ! -s $MOCK_LOG ]]
+pass 'bootstrap existing-link guard preserves link and makes no service calls'
 approve_mode UPGRADE bbbbbbbb cccccccc
 reject bash "$scripts/switch-release.sh" bbbbbbbb "$env_file" "$go_file" "$root"; pass 'wrong predecessor approval rejected'
 approve_mode UPGRADE bbbbbbbb aaaaaaaa
@@ -195,4 +229,26 @@ export MOCK_ROOT="$bootstrap_root"
 reject bash "$scripts/switch-release.sh" bbbbbbbb "$env_file" "$go_file" "$bootstrap_root"
 [[ ! -e $bootstrap_root/current.jar && ! -L $bootstrap_root/current.jar && ! -f $MOCK_LOG.active && -f $bootstrap_root/releases/bbbbbbbb.jar ]]
 pass 'bootstrap failure stops service, removes only new link, preserves artifacts'
+grep -q 'service confirmed inactive' "$temporary/rejected"
+! grep -q reverted "$temporary/rejected"
+for failure in stop-failure active activating unknown query-error not-found; do
+    rm -f "$MOCK_LOG.active" "$MOCK_LOG.state" "$MOCK_LOG.query-error" "$MOCK_LOG.stop-failure" "$MOCK_LOG.after-stop" "$MOCK_LOG.after-stop-error"
+    case $failure in
+        stop-failure) touch "$MOCK_LOG.stop-failure" ;;
+        query-error) touch "$MOCK_LOG.after-stop-error" ;;
+        not-found) printf 'LoadState=not-found\nActiveState=inactive\n' > "$MOCK_LOG.after-stop" ;;
+        *) printf 'LoadState=loaded\nActiveState=%s\n' "$failure" > "$MOCK_LOG.after-stop" ;;
+    esac
+    reject bash "$scripts/switch-release.sh" bbbbbbbb "$env_file" "$go_file" "$bootstrap_root"
+    [[ $(readlink "$bootstrap_root/current.jar") == "$bootstrap_root/releases/bbbbbbbb.jar" && -f $bootstrap_root/releases/bbbbbbbb.jar ]]
+    if [[ $failure == stop-failure ]]; then
+        grep -q 'STOP_FAILED:' "$temporary/rejected"
+        [[ -f $MOCK_LOG.active ]]
+    else
+        grep -q 'STATE_UNKNOWN:' "$temporary/rejected"
+    fi
+    ! grep -Eq 'reverted|service confirmed inactive' "$temporary/rejected"
+    pass "bootstrap $failure after health failure preserves diagnostic link and artifact"
+    rm -- "$bootstrap_root/current.jar"
+done
 printf 'PASS: %s deployment tests (no AWS/systemd/network)\n' "$count"
