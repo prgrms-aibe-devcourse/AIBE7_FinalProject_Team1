@@ -1,5 +1,22 @@
 <div class="product-detail-shell">
-  <button class="product-back" type="button" data-page="home">← 내 제품으로</button>
+  <div class="product-passport-toolbar">
+    <button class="product-back" type="button" data-page="home">← 내 제품으로</button>
+    <div class="product-quick-actions" data-product-quick-actions hidden>
+      <button class="button" type="button" data-product-document-upload>증빙 문서 올리기</button>
+      <button class="button" type="button" data-product-documents-show aria-expanded="false" aria-controls="product-document-section">증빙 문서 보기</button>
+    </div>
+  </div>
   <div class="product-status" data-product-detail-status role="status">제품 정보를 불러오는 중입니다.</div>
-  <div data-product-detail aria-live="polite"></div>
+  <div data-product-detail></div>
 </div>
+<dialog class="product-photos-dialog" data-product-photos-dialog aria-labelledby="product-photos-title" aria-describedby="product-photos-help">
+  <header class="product-photos-heading"><div><h2 id="product-photos-title">제품 사진 편집</h2><p id="product-photos-help">추가·순서·대표 사진 변경은 바로 반영돼요.</p></div><button type="button" data-product-photos-close aria-label="사진 편집 닫기">×</button></header>
+  <div class="product-photos-toolbar"><label class="button" for="product-photo-files"><img src="/images/icons/camera.svg" alt="" width="18" height="18">사진 추가<input class="sr-only" id="product-photo-files" type="file" accept="image/jpeg,image/png,image/webp" multiple data-product-photo-files aria-label="추가할 제품 사진 선택" aria-describedby="product-photos-limits"></label><span data-product-photos-count role="status"></span></div>
+  <p class="product-photos-limits" id="product-photos-limits">JPG, PNG, WEBP · 장당 최대 5MB · 최대 10장</p>
+  <div class="product-photos-list" data-product-photos-list aria-label="등록된 제품 사진"></div>
+  <section class="product-photos-delete" data-product-photos-delete hidden aria-labelledby="product-photo-delete-title">
+    <h3 id="product-photo-delete-title">이 사진을 삭제할까요?</h3><img class="product-photos-delete-preview" data-product-photo-delete-image alt="삭제할 제품 사진"><p>삭제한 사진은 복구할 수 없어요. 판매글에서 사용 중인 사진은 삭제할 수 없어요.</p><div><button class="button" type="button" data-product-photo-keep>돌아가기</button><button class="button danger" type="button" data-product-photo-delete-confirm>사진 삭제</button></div>
+  </section>
+  <p class="product-photos-message" role="status" aria-live="polite" data-product-photos-message></p>
+  <footer><button class="button primary" type="button" data-product-photos-close>완료</button></footer>
+</dialog>
