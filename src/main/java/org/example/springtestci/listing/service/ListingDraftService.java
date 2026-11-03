@@ -4,8 +4,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
+import org.example.springtestci.listing.dto.DraftProductOptionResponse;
 import org.example.springtestci.listing.dto.DraftProductResponse;
 import org.example.springtestci.listing.dto.ListingDraftPageResponse;
 import org.example.springtestci.listing.dto.ListingDraftResponse;
@@ -49,8 +52,14 @@ public class ListingDraftService {
 
   /** 판매 초안 선택기에서 누락되는 제품이 없도록 소유 제품의 모든 페이지를 순서대로 읽는다. */
   @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
-  public List<DraftProductResponse> products(long userId) {
-    List<DraftProductResponse> result = new ArrayList<>();
+  public List<DraftProductOptionResponse> products(long userId) {
+    var open =
+        listings
+            .findOpenBySellerId(userId, List.of(ListingStatus.ACTIVE, ListingStatus.RESERVED))
+            .stream()
+            .collect(
+                Collectors.toMap(ListingRepository.OpenListing::getProductId, Function.identity()));
+    List<DraftProductOptionResponse> result = new ArrayList<>();
     int page = 0;
     ProductPageResponse.Cursor cursor = null;
     do {
@@ -61,7 +70,9 @@ public class ListingDraftService {
               100,
               cursor == null ? null : cursor.createdAt(),
               cursor == null ? null : cursor.productId());
-      response.items().stream().map(DraftProductResponse::from).forEach(result::add);
+      response.items().stream()
+          .map(product -> DraftProductOptionResponse.from(product, open.get(product.productId())))
+          .forEach(result::add);
       cursor = response.page().nextCursor();
       page += 1;
     } while (cursor != null);

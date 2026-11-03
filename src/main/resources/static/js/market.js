@@ -23,6 +23,8 @@ document.addEventListener('click', (event) => {
   const defaults = () => ({ page: 0, size: 20, sort: 'LATEST', ...Object.fromEntries(fields.map(name => [name, ''])) });
   let state = defaults(), root = null, form = null, request = null, initialized = false, active = false, page = null;
   let summaryTimer = null, summaryPolls = 0;
+  let customManufacturer = false;
+  const customMakerValue = '__CUSTOM_MANUFACTURER__';
   // 로그인한 회원인데 서버가 비회원 응답을 준 경우(로그인 쿠키 만료 등)를 한 번만 다시 시도하기 위한 상태.
   let signedIn = false, memberRetried = false;
   const find = selector => root.querySelector(selector);
@@ -40,14 +42,14 @@ document.addEventListener('click', (event) => {
     if (/^\d+$/.test(size || '') && Number(size) >= 1 && Number(size) <= 100) state.size = Number(size);
     if (sorts.includes(params.get('sort'))) state.sort = params.get('sort');
   }
-  // 선택한 카테고리의 대표 제조사만 빠른 선택 칩과 자동완성에 보여 준다.
+  // 제조사는 클릭해서 고르되, 목록에 없는 표기는 직접 입력할 수 있게 유지한다.
   function renderMakers() {
-    const names = window.PastportCategories?.makers(state.category) || [];
-    const chip = (name, label) => {
-      const button = element('button', 'chip-btn', label); button.type = 'button'; button.dataset.marketManufacturer = name; return button;
-    };
-    find('[data-market-makers]').replaceChildren(chip('', '전체 제조사'), ...names.map(name => chip(name, name)));
-    root.querySelector('#market-manufacturers')?.replaceChildren(...names.map(name => new Option(name, name)));
+    const names = (state.category ? window.PastportCategories?.makers(state.category) : window.PastportCategories?.all()) || [];
+    const select = find('[data-market-manufacturer-select]');
+    select.replaceChildren(new Option('전체 제조사', ''), ...names.map(name => new Option(name, name)), new Option('직접 입력', customMakerValue));
+    if (state.manufacturer && !names.includes(state.manufacturer)) customManufacturer = true;
+    select.value = customManufacturer ? customMakerValue : state.manufacturer;
+    find('[data-market-manufacturer-custom]').hidden = !customManufacturer;
   }
   function fill() {
     fields.forEach(name => { form.elements[name].value = state[name]; });
@@ -56,16 +58,7 @@ document.addEventListener('click', (event) => {
     const size = find('[data-market-size]');
     if (![...size.options].some(option => option.value === String(state.size))) size.add(new Option(state.size + '개', state.size));
     size.value = String(state.size);
-    const normalize = value => value.replace(/[\s-]+/g, '').toUpperCase();
-    root.querySelectorAll('[data-market-category]').forEach(button => {
-      const selected = button.dataset.marketCategory === state.category;
-      button.classList.toggle('active', selected); button.setAttribute('aria-pressed', String(selected));
-    });
     renderMakers();
-    root.querySelectorAll('[data-market-manufacturer]').forEach(button => {
-      const selected = normalize(button.dataset.marketManufacturer) === normalize(state.manufacturer);
-      button.classList.toggle('active', selected); button.setAttribute('aria-pressed', String(selected));
-    });
   }
   function query() {
     const params = new URLSearchParams({ page: String(state.page), size: String(state.size), sort: state.sort });
@@ -97,7 +90,7 @@ document.addEventListener('click', (event) => {
       image.loading = 'lazy'; image.decoding = 'async'; image.addEventListener('error', placeholder); thumb.append(image);
     } else placeholder();
     const body = element('div', 'mk-body');
-    body.append(element('b', 'price', new Intl.NumberFormat('ko-KR').format(item.price) + '원'), element('h3', '', item.title));
+    body.append(element('h3', '', item.title), element('b', 'price', new Intl.NumberFormat('ko-KR').format(item.price) + '원'));
     const ai = item.aiSummary || { status: 'NOT_REQUESTED', text: null };
     const aiBox = element('div', 'mk-ai-summary');
     const waiting = { LOGIN_REQUIRED: signedIn ? '요약을 불러오는 중이에요.' : '로그인하면 제품·이력 요약을 확인할 수 있어요.', NOT_REQUESTED: '제품 특징 요약을 준비하고 있어요.', QUEUED: '제품 특징 요약을 준비하고 있어요.', PROCESSING: '제품 특징을 정리하고 있어요.', FAILED: 'AI 요약을 준비하지 못했어요.', STALE: '변경된 정보로 요약을 갱신하고 있어요.' };
@@ -106,13 +99,9 @@ document.addEventListener('click', (event) => {
     const aiText = element('p', 'mk-ai-text', ai.text || waiting[ai.status] || '요약 상태를 확인하고 있어요.');
     aiText.dataset.marketAiText = ''; if (ai.text) aiText.title = ai.text;
     aiBox.append(aiText); body.append(aiBox);
-    body.append(element('p', 'mk-meta', [item.manufacturer, item.modelName, '상태 ' + item.conditionGrade + '등급'].filter(Boolean).join(' · ')));
-    const specs = item.specifications || {};
-    const summary = [specs.cpu, specs.ramGb == null ? null : specs.ramGb + 'GB RAM', specs.storageGb == null ? null : specs.storageGb + 'GB ' + (specs.storageType || '')].filter(Boolean);
-    body.append(element('p', 'mk-meta', summary.join(' · ') || '제품 사양 미등록'));
-    if (specs.gpu || specs.os) body.append(element('p', 'mk-meta', [specs.gpu, specs.os].filter(Boolean).join(' · ')));
     const date = new Date(item.publishedAt);
-    if (Number.isFinite(date.getTime())) body.append(element('p', 'mk-date', new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(date) + ' 게시'));
+    const stamp = Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(date) + ' 게시' : null;
+    body.append(element('p', 'mk-meta', ['상태 ' + item.conditionGrade + '등급', stamp].filter(Boolean).join(' · ')));
     link.append(thumb, body); return link;
   }
   // 필터·정렬·페이지 조건을 실제 목록 API에 보내고 응답 카드로 마켓 화면을 갱신한다.
@@ -201,16 +190,19 @@ document.addEventListener('click', (event) => {
     root = document.querySelector('#market'); form = find('[data-market-form]'); initialized = true;
     restore(); fill();
     form.addEventListener('submit', event => { event.preventDefault(); apply(); });
-    find('[data-market-reset]').addEventListener('click', () => { state = defaults(); fill(); load(); });
+    find('[data-market-reset]').addEventListener('click', () => { customManufacturer = false; state = defaults(); fill(); load(); });
     find('[data-market-retry]').addEventListener('click', () => load());
     find('[data-market-sort]').addEventListener('change', apply); find('[data-market-size]').addEventListener('change', apply);
     find('[data-market-prev]').addEventListener('click', () => { if (page && page.number > 0) { state.page = page.number - 1; load(); } });
     find('[data-market-next]').addEventListener('click', () => { if (page?.hasNext) { state.page = page.number + 1; load(); } });
     // 카테고리를 바꾸면 이전 카테고리의 제조사 선택은 비운다.
-    root.querySelectorAll('[data-market-category]').forEach(button => button.addEventListener('click', () => { form.elements.category.value = button.dataset.marketCategory; form.elements.manufacturer.value = ''; apply(); }));
-    find('[data-market-makers]').addEventListener('click', event => {
-      const button = event.target.closest('[data-market-manufacturer]');
-      if (button) { form.elements.manufacturer.value = button.dataset.marketManufacturer; apply(); }
+    form.elements.category.addEventListener('change', () => { customManufacturer = false; form.elements.manufacturer.value = ''; apply(); });
+    find('[data-market-manufacturer-select]').addEventListener('change', event => {
+      customManufacturer = event.target.value === customMakerValue;
+      find('[data-market-manufacturer-custom]').hidden = !customManufacturer;
+      form.elements.manufacturer.value = customManufacturer ? '' : event.target.value;
+      if (customManufacturer) form.elements.manufacturer.focus();
+      else apply();
     });
     const params = new URL(window.location.href).searchParams;
     if (root.classList.contains('active')) { active = true; load(); }

@@ -10,6 +10,7 @@ import java.util.List;
 import org.example.springtestci.common.error.CommonException;
 import org.example.springtestci.common.error.ErrorCode;
 import org.example.springtestci.common.response.ApiResponse;
+import org.example.springtestci.listing.dto.DraftProductOptionResponse;
 import org.example.springtestci.listing.dto.DraftProductResponse;
 import org.example.springtestci.listing.dto.ListingDraftPageResponse;
 import org.example.springtestci.listing.dto.ListingDraftResponse;
@@ -146,7 +147,7 @@ public class ListingDraftController {
 
   /** 판매글 작성 화면의 제품 선택 목록에 사용할 현재 보유 제품들을 반환한다. */
   @GetMapping("/listing-draft-products")
-  public ResponseEntity<ApiResponse<List<DraftProductResponse>>> products(
+  public ResponseEntity<ApiResponse<List<DraftProductOptionResponse>>> products(
       Authentication authentication) {
     return ResponseEntity.ok()
         .cacheControl(CacheControl.noStore())

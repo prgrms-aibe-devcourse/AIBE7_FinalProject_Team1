@@ -118,17 +118,17 @@
     const heading = published ? 'h2' : 'h3';
     const description = section('판매자 설명', heading);
     description.append(element('p', 'listing-detail-description', data.content.description || '설명이 아직 없어요.')); main.append(description);
-    if (published) {
-      const questions = element('div', 'listing-questions-slot'); questions.dataset.listingQuestions = ''; main.append(questions);
-    }
-    const product = section('제품 정보·사양', heading); const facts = element('dl', 'sl-specs');
+    const product = element('details', 'dt-sec listing-full-specs');
+    product.append(element('summary', '', '제품 정보·전체 사양'));
+    product.open = !published;
+    const facts = element('dl', 'sl-specs');
     [['제조사', info.manufacturer], ['모델', info.modelName], ['구매일', info.purchaseDate], ['보증 만료일', info.warrantyExpiresAt],
       ['CPU', specs.cpu], ['GPU', specs.gpu], ['메모리', specs.ramGb == null ? null : specs.ramGb + 'GB'],
       ['저장장치', specs.storageGb == null ? null : specs.storageGb + 'GB ' + (specs.storageType || '')],
       ['화면', specs.display], ['운영체제', specs.os], ['배터리 상태', specs.batteryHealthPercent == null ? null : specs.batteryHealthPercent + '%']].forEach(([label, value]) => {
       const row = element('div'); row.append(element('dt', '', label), element('dd', '', value ?? '미등록')); facts.append(row);
     });
-    product.append(facts); main.append(product);
+    product.append(facts);
     const history = section('누적 핵심 이력', heading);
     history.tabIndex = -1; history.dataset.listingHistory = '';
     passport.addEventListener('click', () => focusSection(history));
@@ -141,6 +141,10 @@
       renderTimeline(timeline, data.history.items); history.append(timeline);
     }
     main.append(history);
+    if (published) {
+      const questions = element('div', 'listing-questions-slot'); questions.dataset.listingQuestions = ''; main.append(questions);
+    }
+    main.append(product);
 
     if (published && data.canManage) {
       const ownerTools = element('details', 'listing-owner-summary'); ownerTools.append(element('summary', '', 'AI 카드 요약 관리'));

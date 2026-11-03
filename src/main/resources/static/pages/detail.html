@@ -14,25 +14,25 @@
     <div class="listing-actionbar-price"><span data-listing-action-state></span><strong data-listing-action-price></strong></div>
     <div class="listing-actionbar-buttons">
       <button type="button" class="sc-btn primary" data-listing-chat hidden>판매자에게 채팅 문의하기</button>
-      <button type="button" class="sc-btn primary" data-listing-manage hidden>내 판매글 관리</button>
+      <button type="button" class="sc-btn primary" data-listing-manage hidden>판매글 수정</button>
       <button type="button" class="sc-btn" data-listing-chats-open hidden>받은 채팅 보기</button>
     </div>
   </div>
 </div>
 <section class="listing-management sc-card" data-listing-editor hidden aria-labelledby="listing-editor-heading">
-  <div class="sl-section-head"><h2 id="listing-editor-heading">내 판매글 관리</h2><button type="button" class="sc-btn" data-listing-edit-close>상세로 돌아가기</button></div>
+  <div class="sl-section-head"><h2 id="listing-editor-heading">판매글 수정</h2><button type="button" class="sc-btn" data-listing-edit-close>상세로 돌아가기</button></div>
   <p class="sub" data-listing-edit-state></p>
   <p class="sub" role="status" aria-live="polite" data-listing-edit-message></p>
   <button type="button" class="sc-btn" data-listing-edit-reload>입력 버리고 최신 내용 불러오기</button>
   <form data-listing-edit-form novalidate>
     <fieldset data-listing-edit-fields>
       <legend>판매 조건 수정</legend>
-      <label class="sc-field"><span>제목</span><input name="title" aria-label="수정할 판매글 제목" maxlength="60" required></label>
-      <label class="sc-field"><span>판매 가격</span><input name="price" aria-label="수정할 판매 가격" inputmode="numeric" maxlength="15" required></label>
-      <label class="sc-field"><span>제품 상태 등급</span><select name="conditionGrade" aria-label="수정할 상태 등급" required><option value="1">1등급 · 매우 나쁨</option><option value="2">2등급 · 나쁨</option><option value="3">3등급 · 보통</option><option value="4">4등급 · 좋음</option><option value="5">5등급 · 최상</option></select></label>
-      <label class="sc-field"><span>상세 설명</span><textarea name="description" aria-label="수정할 상세 설명" maxlength="2000" required></textarea></label>
       <p class="sub">공개할 사진을 선택하세요. 첫 번째가 대표 사진이며 위·아래 버튼으로 순서를 바꿀 수 있어요.</p>
       <div class="listing-edit-photos" data-listing-edit-photos role="group" aria-label="판매글 수정 사진 선택"></div>
+      <label class="sc-field"><span>제목</span><input name="title" aria-label="수정할 판매글 제목" maxlength="60" required></label>
+      <label class="sc-field"><span>상세 설명</span><textarea name="description" aria-label="수정할 상세 설명" maxlength="2000" required></textarea></label>
+      <label class="sc-field"><span>판매 가격</span><input name="price" aria-label="수정할 판매 가격" inputmode="numeric" maxlength="15" required></label>
+      <label class="sc-field"><span>제품 상태 등급</span><select name="conditionGrade" aria-label="수정할 상태 등급" required><option value="1">1등급 · 매우 나쁨</option><option value="2">2등급 · 나쁨</option><option value="3">3등급 · 보통</option><option value="4">4등급 · 좋음</option><option value="5">5등급 · 최상</option></select></label>
       <button type="submit" class="sc-btn primary">수정 저장</button>
     </fieldset>
   </form>
@@ -50,7 +50,6 @@
       </select></label>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button type="submit" class="sc-btn listing-cancel-button">판매 중지</button>
-        <button type="button" class="sc-btn" data-listing-delete-button style="color:var(--warn,#e53e3e);border-color:var(--warn,#e53e3e)">판매글 완전히 삭제</button>
       </div>
     </fieldset>
   </form>

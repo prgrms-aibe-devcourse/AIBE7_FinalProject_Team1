@@ -1,37 +1,44 @@
 <div class="mk-head">
   <div><h1>중고 거래 <small data-market-total>목록 조회 중</small></h1>
-    <p>판매 중인 제품을 제조사·가격·사양 조건으로 찾아보세요.</p></div>
-  <div class="mk-head-actions"><button type="button" class="button" data-page="my-listings">내 판매글 관리</button><button type="button" class="button primary" data-page="sell">판매하기</button></div>
+    <p>제품의 사양과 기록을 비교하고 거래하세요.</p></div>
+  <div class="mk-head-actions"><button type="button" class="button" data-page="my-listings">내 판매글</button><button type="button" class="button primary" data-page="sell">판매하기</button></div>
 </div>
-<div class="mk-search" role="search">
-  <input form="market-form" name="keyword" maxlength="100" placeholder="제품명·제조사·모델명으로 검색해 보세요" aria-label="검색어" autocomplete="off">
-  <button type="submit" form="market-form" aria-label="검색">⌕</button>
-</div>
-<div class="mk-cats" role="group" aria-label="카테고리 선택">
-  <button type="button" class="chip-btn active" data-market-category="" aria-pressed="true">전체 카테고리</button>
-  <button type="button" class="chip-btn" data-market-category="LAPTOP" aria-pressed="false">노트북</button>
-  <button type="button" class="chip-btn is-soon" data-market-category="MOBILE" aria-pressed="false" disabled title="준비 중입니다">스마트폰·태블릿</button>
-  <button type="button" class="chip-btn is-soon" data-market-category="DISPLAY" aria-pressed="false" disabled title="준비 중입니다">TV·모니터</button>
-  <button type="button" class="chip-btn is-soon" data-market-category="LARGE_APPLIANCE" aria-pressed="false" disabled title="준비 중입니다">냉장고·세탁기</button>
-  <button type="button" class="chip-btn is-soon" data-market-category="CLEANING_AIR" aria-pressed="false" disabled title="준비 중입니다">청소기·공기청정기</button>
-  <button type="button" class="chip-btn is-soon" data-market-category="CLIMATE" aria-pressed="false" disabled title="준비 중입니다">에어컨·난방</button>
-  <button type="button" class="chip-btn is-soon" data-market-category="KITCHEN" aria-pressed="false" disabled title="준비 중입니다">주방가전</button>
-  <button type="button" class="chip-btn is-soon" data-market-category="AUDIO_GAME" aria-pressed="false" disabled title="준비 중입니다">오디오·게임기</button>
-</div>
-<div class="mk-cats" role="group" aria-label="제조사 빠른 선택" data-market-makers></div>
 <div class="mk-layout">
   <form class="mk-filter" id="market-form" data-market-form aria-label="판매글 필터" novalidate>
-  <input type="hidden" name="category">
-    <p class="sub mk-filter-help">조건은 함께 적용돼요. 등록된 사양이 없는 제품은 해당 사양 조건에서 제외돼요.</p>
+    <div class="mk-search-row">
+      <div class="mk-select mk-category-select"><select class="mk-category" name="category" aria-label="제품 카테고리">
+        <option value="">전체 전자제품</option>
+        <option value="LAPTOP">노트북</option>
+        <option value="MOBILE" disabled>스마트폰·태블릿 (준비 중)</option>
+        <option value="DISPLAY" disabled>TV·모니터 (준비 중)</option>
+        <option value="LARGE_APPLIANCE" disabled>냉장고·세탁기 (준비 중)</option>
+        <option value="CLEANING_AIR" disabled>청소기·공기청정기 (준비 중)</option>
+        <option value="CLIMATE" disabled>에어컨·난방 (준비 중)</option>
+        <option value="KITCHEN" disabled>주방가전 (준비 중)</option>
+        <option value="AUDIO_GAME" disabled>오디오·게임기 (준비 중)</option>
+      </select><span class="mk-select-arrow" aria-hidden="true"><svg viewBox="0 0 20 20" width="18" height="18" fill="none"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+      <div class="mk-search" role="search">
+  <input name="keyword" maxlength="100" placeholder="제품명·제조사·모델명으로 검색해 보세요" aria-label="검색어" autocomplete="off">
+  <button type="submit" aria-label="검색"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="2"/><path d="m15.5 15.5 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>검색</span></button>
+</div>
+      <span class="mk-category-note">현재는 노트북 거래부터 지원해요.</span>
+</div>
+    <div class="mk-filter-row">
     <section><h3>제조사</h3>
-      <label class="mk-field"><span>제조사명</span><input name="manufacturer" maxlength="100" list="market-manufacturers" placeholder="전체 제조사"></label>
-      <datalist id="market-manufacturers"><option value="Apple"></option><option value="Samsung"></option><option value="삼성"></option><option value="LG"></option><option value="Lenovo"></option></datalist>
+      <div class="mk-select"><select data-market-manufacturer-select aria-label="제조사"><option value="">전체 제조사</option></select><span class="mk-select-arrow" aria-hidden="true"><svg viewBox="0 0 20 20" width="18" height="18" fill="none"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+      <label class="mk-field mk-maker-custom" data-market-manufacturer-custom hidden><span>제조사 직접 입력</span><input name="manufacturer" aria-label="제조사 직접 입력" maxlength="100" placeholder="제조사명을 입력해 주세요"></label>
     </section>
     <section><h3>판매 가격</h3><div class="mk-range">
       <input name="minPrice" inputmode="numeric" placeholder="최소 가격" aria-label="최소 가격" maxlength="15"><span>~</span>
       <input name="maxPrice" inputmode="numeric" placeholder="최대 가격" aria-label="최대 가격" maxlength="15">
     </div></section>
-    <details class="mk-spec-fields"><summary>노트북 사양으로 찾기</summary><div class="mk-spec-grid">
+    <section><h3>상태 등급</h3>
+      <div class="mk-select"><select name="minConditionGrade" aria-label="최소 상태 등급"><option value="">전체</option><option value="5">5등급</option><option value="4">4등급 이상</option><option value="3">3등급 이상</option><option value="2">2등급 이상</option><option value="1">1등급 이상</option></select><span class="mk-select-arrow" aria-hidden="true"><svg viewBox="0 0 20 20" width="18" height="18" fill="none"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+    </section>
+    <button type="submit" class="sc-btn primary mk-apply">조건 적용</button>
+    <button type="button" class="mk-reset" data-market-reset>초기화</button>
+    </div>
+    <details class="mk-spec-fields"><summary>사양 상세 검색</summary><p class="mk-filter-help">입력한 조건을 모두 만족하는 제품을 찾아요. 해당 사양이 미등록된 제품은 검색에서 제외돼요.</p><div class="mk-spec-grid">
       <label class="mk-field"><span>CPU 포함 문구</span><input name="cpu" maxlength="100" placeholder="예: M3, Core Ultra"></label>
       <label class="mk-field"><span>GPU 포함 문구</span><input name="gpu" maxlength="100" placeholder="예: RTX"></label>
       <label class="mk-field"><span>최소 메모리 (GB)</span><input name="minRamGb" type="number" min="1" step="1" placeholder="제한 없음"></label>
@@ -39,17 +46,12 @@
       <label class="mk-field"><span>저장장치 종류</span><select name="storageType"><option value="">전체</option><option value="SSD">SSD</option><option value="HDD">HDD</option><option value="MIXED">혼합</option></select></label>
       <label class="mk-field"><span>운영체제 포함 문구</span><input name="os" maxlength="50" placeholder="예: Windows, macOS"></label>
     </div></details>
-    <section><h3>상태 등급</h3>
-      <label class="mk-field"><span>최소 등급</span><select name="minConditionGrade"><option value="">전체</option><option value="5">5등급</option><option value="4">4등급 이상</option><option value="3">3등급 이상</option><option value="2">2등급 이상</option><option value="1">1등급 이상</option></select></label>
-    </section>
-    <button type="submit" class="sc-btn primary mk-apply">필터 적용</button>
-    <button type="button" class="mk-reset" data-market-reset>필터 초기화</button>
   </form>
   <div class="mk-main">
-    <div class="mk-bar">
+    <div class="mk-bar"><span class="mk-availability">판매 중인 글</span><div class="mk-result-controls">
       <label class="mk-control">정렬 <select data-market-sort aria-label="판매글 정렬"><option value="LATEST">최신순</option><option value="PRICE_ASC">낮은 가격순</option><option value="PRICE_DESC">높은 가격순</option></select></label>
       <label class="mk-control">페이지당 <select data-market-size aria-label="페이지당 판매글 수"><option value="10">10개</option><option value="20" selected>20개</option><option value="40">40개</option><option value="100">100개</option></select></label>
-      <span class="sc-badge">판매 중인 글만 표시</span>
+    </div>
     </div>
     <p class="sub" data-market-message role="status" aria-live="polite">판매글을 불러오는 중이에요.</p>
     <button type="button" class="sc-btn" data-market-retry hidden>다시 불러오기</button>

@@ -3,6 +3,10 @@
 #my-listings [hidden]{display:none!important}
 .ml-head h1{margin:0;font-size:26px;letter-spacing:-.8px}
 .ml-head p{margin:8px 0 0;font-size:14px;color:#5f6368;line-height:1.6}
+.ml-head-actions{display:flex;align-items:center;gap:12px}
+.ml-drafts-link{display:inline-flex;align-items:center;gap:8px;text-decoration:none;white-space:nowrap;color:var(--ink)}
+.ml-drafts-link [data-my-draft-count]{font-weight:700;font-variant-numeric:tabular-nums;color:var(--blue)}
+.ml-toolbar>[data-my-retry]{flex:none;white-space:nowrap}
 .ml-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line)}
 .ml-filters{display:flex;gap:20px;overflow-x:auto;min-width:0}
 .ml-filters button{min-height:48px;flex:none;border:0;border-bottom:2px solid transparent;background:transparent;color:#5f6368;font:inherit;font-size:14px;white-space:nowrap;padding:10px 0}
