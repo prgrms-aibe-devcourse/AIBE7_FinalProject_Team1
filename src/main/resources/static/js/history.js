@@ -56,7 +56,7 @@
 
   const shell = () => `
     <div class="history-heading">
-      <div><span class="eyebrow">PRODUCT HISTORY</span><h2>누적 타임라인</h2><p>소유자가 바뀌어도 이 제품의 핵심 이력은 계속 이어집니다.</p></div>
+      <div><h2>제품 이력</h2><p>소유자가 바뀌어도 이어지는 기록이에요.</p></div>
       <button class="button primary" type="button" data-history-create>＋ 이력 등록</button>
     </div>
     <div class="history-summary" aria-label="이력 요약">

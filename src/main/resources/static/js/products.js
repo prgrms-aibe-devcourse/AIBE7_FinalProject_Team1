@@ -16,7 +16,8 @@
   const dateTime = (value) => value ? new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(new Date(value)) : '–';
   const numberOrNull = (value) => value === '' ? null : Number(value);
   const valueOrNull = (value) => value.trim() || null;
-  const navigate = (page) => document.querySelector(`[data-page="${page}"]`)?.click();
+  // 상단의 data-page 버튼은 메뉴 펼침용일 수 있으므로, 프로그램 이동은 화면 전환 함수를 직접 호출한다.
+  const navigate = (page) => { if (typeof show === 'function') show(page); };
 
   const toast = (message, kind = '') => {
     document.querySelector('.product-toast')?.remove();
@@ -190,10 +191,19 @@
     }));
   };
 
-  const specItem = (label, value, suffix = '') => `<div class="product-spec-item"><span>${label}</span><b>${text(value)}${value == null || value === '' ? '' : escapeHtml(suffix)}</b></div>`;
+  const specItem = (label, value, suffix = '') => `<div class="product-spec-item"><dt>${label}</dt><dd>${text(value)}${value == null || value === '' ? '' : escapeHtml(suffix)}</dd></div>`;
   const galleryImage = (image, product, index) => image
     ? `<img data-product-gallery-main data-protected-image="${escapeHtml(image.url)}" data-image-id="${image.imageId}" data-image-index="${index}" alt="${escapeHtml(product.title)} 제품 이미지 ${index + 1}">`
     : '<div class="product-gallery-empty"><div class="laptop" aria-hidden="true"></div><p>등록된 제품 이미지가 없습니다.</p></div>';
+  const galleryContent = (product) => {
+    const images = product.images || [];
+    const firstImage = images.find(image => image.primary) || images[0];
+    const firstImageIndex = Math.max(0, images.indexOf(firstImage));
+    return `<div class="product-gallery">${galleryImage(firstImage, product, firstImageIndex)}
+          <button class="product-gallery-edit" type="button" data-product-images-edit title="사진 편집" aria-label="제품 사진 편집"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1 12-12a2.8 2.8 0 0 0-4-4L4 15z"/></svg></button>
+        </div>
+          ${images.length > 1 ? `<div class="product-thumbnails" aria-label="제품 이미지 선택">${images.map((image, index) => `<button type="button" data-product-thumbnail data-image-index="${index}" aria-label="${index + 1}번째 이미지" aria-pressed="${image.imageId === firstImage.imageId}"><img data-protected-image="${escapeHtml(image.url)}" alt=""></button>`).join('')}</div>` : ''}`;
+  };
   const documentSize = (bytes) => bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)}MB` : `${Math.max(1, Math.round(bytes / 1024))}KB`;
   const documentKind = (contentType) => contentType === 'application/pdf' ? 'PDF' : contentType?.startsWith('image/') ? '이미지' : '파일';
 
@@ -259,48 +269,42 @@
     const status = document.querySelector('#passport [data-product-detail-status]');
     if (!container || !status) return;
     state.current = product;
+    state.documentToken += 1;
     status.hidden = true;
+    const actions = document.querySelector('[data-product-quick-actions]');
+    if (actions) actions.hidden = false;
+    document.querySelector('[data-product-documents-show]')?.setAttribute('aria-expanded', 'false');
     const specs = product.specifications || {};
     const images = product.images || [];
-    const firstImage = images.find((image) => image.primary) || images[0];
-    const firstImageIndex = Math.max(0, images.indexOf(firstImage));
     const warrantyLabel = { ACTIVE: '보증 중', EXPIRED: '보증 만료', UNKNOWN: '미확인' }[product.warrantyStatus] || '미확인';
     container.innerHTML = `
       <div class="product-detail-hero">
-        <div class="product-gallery-wrap"><div class="product-gallery">${galleryImage(firstImage, product, firstImageIndex)}
-          <div class="product-gallery-actions" aria-label="제품 이미지 관리">
-            ${images.length < 10 ? '<label class="product-icon-button" for="product-detail-images" title="이미지 추가" aria-label="이미지 추가">✎</label>' : ''}
-            ${firstImage ? `<button class="product-icon-button" type="button" data-image-primary data-image-id="${firstImage.imageId}" title="대표 이미지로 지정" aria-label="대표 이미지로 지정" ${firstImage.primary ? 'disabled' : ''}>★</button><button class="product-icon-button danger" type="button" data-image-delete data-image-id="${firstImage.imageId}" title="이미지 삭제" aria-label="이미지 삭제">⌫</button>` : ''}
-          </div>
-          ${images.length < 10 ? '<input id="product-detail-images" class="sr-only" type="file" accept="image/jpeg,image/png,image/webp" multiple data-product-detail-images>' : ''}
-        </div>
-          ${images.length > 1 ? `<div class="product-thumbnails" aria-label="제품 이미지 선택">${images.map((image, index) => `<button type="button" data-product-thumbnail data-image-index="${index}" aria-label="${index + 1}번째 이미지" aria-pressed="${image.imageId === firstImage.imageId}"><img data-protected-image="${escapeHtml(image.url)}" alt=""></button>`).join('')}</div>` : ''}</div>
+        <div class="product-gallery-wrap">${galleryContent(product)}</div>
         <section class="product-detail-card">
-          <div class="product-detail-top"><span class="eyebrow">PRODUCT PASSPORT · 내 제품</span><span><button class="button" type="button" data-product-edit-open>정보 수정</button> <button class="button" type="button" data-product-delete style="color:#e53e3e;border-color:#e53e3e">제품 삭제</button></span></div>
           <h1>${escapeHtml(product.title)}</h1><p class="product-model">${escapeHtml(product.manufacturer)} · ${escapeHtml(product.modelName)}</p>
           <div class="product-passport-summary">
             <span class="product-warranty-badge" data-status="${escapeHtml(product.warrantyStatus || 'UNKNOWN')}">${escapeHtml(warrantyLabel)}</span>
             <p>제품 정보 v${escapeHtml(product.factsVersion)} · 이미지 ${images.length}장</p>
           </div>
+          <dl class="product-purchase-facts" aria-label="구매·보증 정보">
+            <div><dt>구매일</dt><dd>${date(product.purchaseDate)}</dd></div>
+            <div><dt>보증 만료일</dt><dd>${date(product.warrantyExpiresAt)}</dd></div>
+            <div><dt>보증 조건</dt><dd>${text(product.warrantyTerms)}</dd></div>
+            <div><dt>등록일</dt><dd>${dateTime(product.createdAt)}</dd></div>
+          </dl>
+          <div class="product-detail-actions"><button type="button" data-product-edit-open>정보 수정</button><button type="button" data-product-delete>제품 삭제</button></div>
         </section>
       </div>
-      <section class="product-overview-card">
-        <div class="product-section-heading"><div><span>PRODUCT INFO</span><h2>구매·보증 정보</h2></div><p>제품의 주요 일정을 한눈에 확인하세요.</p></div>
-        <div class="product-overview-grid">
-          <div class="product-overview-item"><span>구매일</span><b>${date(product.purchaseDate)}</b></div>
-          <div class="product-overview-item"><span>보증 만료일</span><b>${date(product.warrantyExpiresAt)}</b></div>
-          <div class="product-overview-item"><span>보증 상태</span><b>${escapeHtml(warrantyLabel)}</b></div>
-          <div class="product-overview-item"><span>보증 조건</span><b>${text(product.warrantyTerms)}</b></div>
-          <div class="product-overview-item"><span>등록일</span><b>${dateTime(product.createdAt)}</b></div>
-        </div>
-      </section>
-      <section class="product-spec-card"><div class="product-section-heading"><div><span>SPECIFICATIONS</span><h2>노트북 상세 사양</h2></div><p>현재 등록된 하드웨어와 시스템 정보입니다.</p></div><div class="product-spec-list">
+      <section class="product-spec-card"><div class="product-section-heading"><h2>상세 사양</h2></div><dl class="product-spec-list">
         ${specItem('CPU', specs.cpu)}${specItem('GPU', specs.gpu)}${specItem('RAM', specs.ramGb, 'GB')}${specItem('저장 용량', specs.storageGb, `GB ${specs.storageType || ''}`)}
         ${specItem('디스플레이', specs.display)}${specItem('배터리 상태', specs.batteryHealthPercent, '%')}${specItem('운영체제', specs.os)}${specItem('저장 방식', specs.storageType)}
-      </div></section>
+      </dl></section>
       ${editForm(product)}
       <section class="history-mount" data-history-root data-product-id="${product.productId}" aria-label="제품 이력"></section>
-      <section class="ph" data-product-history data-product-id="${escapeHtml(product.productId)}"></section>
+      <section class="product-document-card" id="product-document-section" data-product-documents hidden aria-labelledby="product-document-title">
+        <div class="product-document-heading"><div><h2 id="product-document-title" tabindex="-1">이 제품의 증빙 문서</h2><p>개인정보를 가린 사본을 확인할 수 있어요.</p></div><button class="button" type="button" data-product-documents-hide>접기</button></div>
+        <p class="product-document-status" data-product-document-status role="status"></p><div data-product-document-list></div>
+      </section>
       <section class="product-transfer-action" data-ownership-root aria-label="외부 소유권 이전"></section>`;
     hydrateImages(container);
     document.dispatchEvent(new CustomEvent('pastport:product-detail-rendered', { detail: { product } }));
@@ -313,12 +317,14 @@
     status.hidden = false;
     status.textContent = '제품 정보를 불러오는 중입니다.';
     container.replaceChildren();
+    const actions = document.querySelector('[data-product-quick-actions]');
+    if (actions) actions.hidden = true;
     try {
       if (!state.selectedId) {
         if (!(await loadProducts())) return;
         if (state.products.length > 1) {
           status.hidden = true;
-          document.querySelector('[data-page="home"]')?.click();
+          navigate('home');
           return;
         }
         state.selectedId = state.products[0]?.productId || null;
@@ -394,11 +400,17 @@
 
   /** 이미지·증빙 형식을 먼저 검증한 뒤 제품을 만들고, 성공한 문서만 마스킹 화면에 인계한다. */
   const submitProduct = async (form) => {
+    const submit = form.querySelector('[data-product-submit]');
+    if (submit.disabled) return;
     showFormMessage(form, '');
-    if (!form.checkValidity()) { form.reportValidity(); return; }
-    if (form.elements.purchaseDate.value && form.elements.warrantyExpiresAt.value && form.elements.warrantyExpiresAt.value < form.elements.purchaseDate.value) {
-      showFormMessage(form, '보증 만료일은 구매일보다 빠를 수 없습니다.'); return;
+    const panels = [...form.querySelectorAll('[data-register-step]')];
+    const current = Number(form.dataset.currentStep || 1);
+    // 첫 단계에서 Enter를 눌러도 사양·문서 확인 단계를 건너뛰어 제품을 생성하지 않는다.
+    if (current < panels.length) {
+      if (validateRegisterStep(form, current)) setRegisterStep(form, current + 1);
+      return;
     }
+    for (const panel of panels) if (!validateRegisterStep(form, Number(panel.dataset.registerStep))) return;
     const files = [...form.elements.images.files];
     // 등록 전 원본은 서버로 보내지 않고 보관했다가, 제품 ID가 생긴 뒤 마스킹 화면에만 넘긴다.
     const documentFile = form.querySelector('[data-product-document]')?.files?.[0] || null;
@@ -407,7 +419,6 @@
     if (documentFile && !['image/jpeg', 'image/png'].includes(documentFile.type)) {
       showFormMessage(form, '증빙 문서는 JPG 또는 PNG 이미지만 선택할 수 있습니다.'); return;
     }
-    const submit = form.querySelector('[data-product-submit]');
     submit.disabled = true;
     submit.textContent = '등록 중…';
     try {
@@ -426,6 +437,8 @@
         window.PastportDocMask.prepare(product.productId, documentFile);
         navigate('docmask');
       } else {
+        const search = document.querySelector('#home [data-product-search]');
+        if (search) search.value = '';
         navigate('home');
       }
     } catch (error) {
@@ -459,13 +472,16 @@
     }
   };
 
-  const updateImageArrangement = async (imageIds, primaryImageId) => {
-    const product = await api(`${API}/${state.selectedId}/images`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageIds, primaryImageId }),
-    });
-    renderDetail(product);
-  };
+  document.addEventListener('pastport:product-images-updated', (event) => {
+    const product = event.detail.product;
+    if (product.productId !== state.selectedId) return;
+    state.current = product;
+    const gallery = document.querySelector('#passport .product-gallery-wrap');
+    if (gallery) { gallery.innerHTML = galleryContent(product); hydrateImages(gallery); }
+    const summary = document.querySelector('#passport .product-passport-summary p');
+    if (summary) summary.textContent = `제품 정보 v${product.factsVersion} · 이미지 ${product.images?.length || 0}장`;
+    // 사진 변경으로 이력 작성 폼이나 펼쳐 둔 증빙 목록이 초기화되지 않게 갤러리만 갱신한다.
+  });
 
   document.addEventListener('pastport:page-loaded', (event) => {
     const id = event.detail?.id;
@@ -488,7 +504,26 @@
     if (productMore) { await loadMoreProducts(productMore); return; }
     if (event.target.closest?.('[data-product-detail-retry]')) openDetail();
     if (event.target.closest?.('[data-product-documents-show]')) {
-      document.querySelector('[data-product-documents]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const section = document.querySelector('[data-product-documents]');
+      if (!section || !state.current) return;
+      section.hidden = false;
+      document.querySelector('[data-product-documents-show]')?.setAttribute('aria-expanded', 'true');
+      hydrateDocuments(state.current.productId);
+      section.querySelector('h2')?.focus({preventScroll:true});
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    if (event.target.closest?.('[data-product-documents-hide]')) {
+      const section = document.querySelector('[data-product-documents]');
+      if (section) section.hidden = true;
+      const button = document.querySelector('[data-product-documents-show]');
+      button?.setAttribute('aria-expanded', 'false'); button?.focus();
+      return;
+    }
+    if (event.target.closest?.('[data-product-document-upload]')) {
+      if (!state.current) return;
+      window.PastportDocMask?.prepare(state.current.productId, null);
+      navigate('docmask');
       return;
     }
     const documentOpen = event.target.closest?.('[data-product-document-open]');
@@ -518,33 +553,6 @@
       const form = document.querySelector('[data-product-edit-form]');
       if (form) { form.hidden = true; showFormMessage(form, ''); }
     }
-    const primary = event.target.closest?.('[data-image-primary]');
-    if (primary) {
-      const ids = state.current.images.map((image) => image.imageId);
-      try { await updateImageArrangement(ids, Number(primary.dataset.imageId)); toast('대표 이미지를 변경했습니다.'); }
-      catch (error) { toast(error.message, 'error'); }
-      return;
-    }
-    const move = event.target.closest?.('[data-image-move]');
-    if (move) {
-      const ids = state.current.images.map((image) => image.imageId);
-      const index = ids.indexOf(Number(move.dataset.imageId));
-      const next = move.dataset.imageMove === 'up' ? index - 1 : index + 1;
-      if (index >= 0 && next >= 0 && next < ids.length) [ids[index], ids[next]] = [ids[next], ids[index]];
-      const primaryId = state.current.images.find((image) => image.primary)?.imageId || ids[0];
-      try { await updateImageArrangement(ids, primaryId); toast('이미지 순서를 변경했습니다.'); }
-      catch (error) { toast(error.message, 'error'); }
-      return;
-    }
-    const deleteImage = event.target.closest?.('[data-image-delete]');
-    if (deleteImage) {
-      if (!window.confirm('이 제품 이미지를 삭제할까요?')) return;
-      try {
-        const product = await api(`${API}/${state.selectedId}/images/${deleteImage.dataset.imageId}`, { method: 'DELETE' });
-        renderDetail(product); toast('이미지를 삭제했습니다.');
-      } catch (error) { toast(error.message, 'error'); }
-      return;
-    }
     const thumbnail = event.target.closest?.('[data-product-thumbnail]');
     if (thumbnail) {
       const imageIndex = Number(thumbnail.dataset.imageIndex);
@@ -555,10 +563,7 @@
         main.src = source;
         main.dataset.imageId = selectedImage.imageId;
         main.dataset.imageIndex = imageIndex;
-        const primary = document.querySelector('.product-gallery-actions [data-image-primary]');
-        const remove = document.querySelector('.product-gallery-actions [data-image-delete]');
-        if (primary) { primary.dataset.imageId = selectedImage.imageId; primary.disabled = Boolean(selectedImage.primary); }
-        if (remove) remove.dataset.imageId = selectedImage.imageId;
+
       }
       document.querySelectorAll('[data-product-thumbnail]').forEach((item) => item.setAttribute('aria-pressed', String(item === thumbnail)));
     }
@@ -613,7 +618,9 @@
     form.elements.warrantyTerms.value = warrantyTerms(form) || '';
   };
   const setRegisterStep = (form, step) => {
-    form.querySelectorAll('[data-register-step]').forEach((panel) => {
+    const panels = [...form.querySelectorAll('[data-register-step]')];
+    step = Math.max(1, Math.min(panels.length, step));
+    panels.forEach((panel) => {
       const active = Number(panel.dataset.registerStep) === step;
       panel.hidden = !active;
       panel.classList.toggle('active', active);
@@ -623,9 +630,11 @@
       const number = Number(indicator.dataset.registerStepIndicator);
       indicator.classList.toggle('active', number === step);
       indicator.classList.toggle('done', number < step);
+      if (number === step) indicator.setAttribute('aria-current', 'step');
+      else indicator.removeAttribute('aria-current');
     });
     const progress = register?.querySelector('[data-product-register-progress]');
-    if (progress) progress.textContent = `${step} / 3`;
+    if (progress) progress.textContent = `${step} / ${panels.length}`;
     form.dataset.currentStep = String(step);
     form.querySelector(`[data-register-step="${step}"] h2`)?.focus?.({ preventScroll: true });
     register?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -640,6 +649,8 @@
     }
     const invalid = form.querySelector(`[data-register-step="${step}"] :invalid`);
     if (!invalid) return true;
+    // 뒤로 숨겨진 기본 정보에 오류가 있으면 해당 단계를 연 뒤 필드 오류를 보여 준다.
+    if (Number(form.dataset.currentStep) !== step) setRegisterStep(form, step);
     invalid.reportValidity();
     invalid.focus();
     return false;
@@ -697,7 +708,7 @@
     if (!form) return;
     if (event.target.closest?.('[data-register-next]')) {
       const current = Number(form.dataset.currentStep || 1);
-      if (validateRegisterStep(form, current)) setRegisterStep(form, Math.min(3, current + 1));
+      if (validateRegisterStep(form, current)) setRegisterStep(form, current + 1);
       return;
     }
     if (event.target.closest?.('[data-register-prev]')) {
@@ -737,8 +748,13 @@
       const files = [...event.target.files];
       const form = event.target.closest('form');
       const error = validateImages(files);
-      if (error) { toast(error, 'error'); event.target.value = ''; renderRegisterImagePreviews(form, []); return; }
       const summary = form?.querySelector('[data-product-file-summary]');
+      if (error) {
+        showFormMessage(form, error); event.target.value = '';
+        if (summary) summary.textContent = '선택된 이미지 없음';
+        renderRegisterImagePreviews(form, []); return;
+      }
+      showFormMessage(form, '');
       if (summary) summary.textContent = files.length ? `${files.length}장 선택됨` : '선택된 이미지 없음';
       renderRegisterImagePreviews(form, files);
       return;
@@ -753,14 +769,7 @@
       if (name) name.textContent = file?.name || '';
       return;
     }
-    if (!event.target.matches?.('[data-product-detail-images]')) return;
-    const files = [...event.target.files];
-    const current = state.current?.productId === state.selectedId ? state.current.images?.length || 0 : 0;
-    const error = validateImages(files, current);
-    if (error) { toast(error, 'error'); event.target.value = ''; return; }
-    try { await uploadImages(state.selectedId, files); toast('이미지를 추가했습니다.'); await openDetail(); }
-    catch (uploadError) { toast(uploadError.message, 'error'); }
-    finally { event.target.value = ''; }
+
   });
   document.addEventListener('submit', (event) => {
     const editFormTarget = event.target.closest?.('[data-product-edit-form]');
