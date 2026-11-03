@@ -13,7 +13,7 @@
 | `V4__align_product_schema_with_erd.sql` | `a58f12c` | 1859459753 | 예 |
 
 - 체크섬은 Flyway가 파일에서 계산한 값(테스트의 `MigrationInfo.getChecksum()`)이다.
-- 공유 DB 쪽 값은 DB 담당자 요청서에 적힌 값을 사용했다. 공유 DB의 `flyway_schema_history`를 직접 조회해 대조하지는 않았다.
+- 초기 복구 시 DB 담당자 요청서의 값을 사용했으며, 2026-11-03 실제 공유 Supabase의 `flyway_schema_history` 읽기 전용 조회에서 V2~V5의 version, script, checksum, success가 동일함을 재확인했다. V2~V5는 모두 `success=true`다.
 - `V5__create_users.sql`은 이미 `db/migration`에 있고 체크섬(-2031539899)이 요청서 값과 같다.
 
 ## 왜 `db/migration`이 아니라 `db/legacy`인가
@@ -33,8 +33,10 @@ PostgreSQL 17(임시 컨테이너, 격리 스키마)에서 실행했다.
 - `LegacyProductMigrationChecksumTest`
   - V2~V5의 체크섬이 위 표와 같다.
   - `db/migration`에는 V2~V4가 없다.
-  - (PostgreSQL) `db/migration` + `db/legacy`로 전체 이력을 만든 DB는 무시 패턴 없이 `validate`가 통과하고, `db/legacy` 없이 `db/migration`만 읽으면 `FlywayValidateException`이 난다. 원본이 없을 때 공유 DB가 겪는 상태와 같다.
+  - (PostgreSQL) V2~V5 레거시 원본과 현재 canonical migration 체인을 함께 적용한 격리 DB는 `db/migration` + `db/legacy`를 읽을 때 무시 패턴 없이 strict `validate`가 통과하고, `db/legacy` 없이 `db/migration`만 읽으면 applied-but-unresolved 오류로 `FlywayValidateException`이 난다.
 - 기존 P5 게이트(`DirectTransfer`, `InternalTradeOwnership`, `H40MigrationCompatibility`, `DeployMigration`, `NormalizeOwnershipVersion`, `ListingDraftOwnershipHttp`)도 함께 실행했다. 결과는 PR 설명에 적었다.
+
+이 시험은 V2~V5 원본 누락 문제를 검증한다. 공유 DB의 2701/2706 및 2702/2707 특수 이력 정규화, 최신 0201~0202·0301~0305 적용, 테스트 데이터 초기화와 FK/CHECK 보강은 별도 DB remediation 범위다. PR #105는 공유 DB 수렴이나 DB GO를 제공하지 않는다.
 
 ## 아직 하지 않은 것 (팀 결정 필요)
 
