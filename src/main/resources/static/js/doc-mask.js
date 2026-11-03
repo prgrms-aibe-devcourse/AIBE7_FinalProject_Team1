@@ -28,6 +28,8 @@
   let replaceId = null;
   // cleanup()마다 올라가서, 그 전에 시작한 이미지 열기·미리보기가 늦게 끝나도 결과를 버릴 수 있게 한다.
   let generation = 0;
+  // 값이 있으면 팝업으로 열린 "사본 반환 모드"다. 서버에 올리지 않고, 확인을 마친 사본을 이 함수로 돌려준다.
+  let pickResolve = null;
 
   const find = (selector) => root.querySelector(selector);
   const all = (selector) => Array.from(root.querySelectorAll(selector));
@@ -89,10 +91,49 @@
     if (root) setStep('pick');
   }
 
-  // 화면을 벗어나거나 "다른 문서 가리기"를 누르면 교체 모드도 함께 끝낸다.
+  // 화면을 벗어나거나 "다른 문서 가리기"를 누르면 교체 모드도 함께 끝낸다. 팝업으로 열려 있었다면 취소로 닫는다.
   function reset() {
+    finishPick(null);
     restart();
     applyMode(null);
+  }
+
+  // 사본 반환 모드를 끝내고 팝업을 닫는다. result가 null이면 사용자가 취소한 것이다.
+  function finishPick(result) {
+    const resolve = pickResolve;
+    pickResolve = null;
+    if (root) {
+      root.classList.toggle('dm-modal', false);
+      root.removeAttribute('role');
+      root.removeAttribute('aria-modal');
+      const saveButton = find('[data-dm-save]');
+      if (saveButton) saveButton.textContent = '확인하고 사본 저장';
+    }
+    document.body.classList.remove('dm-modal-open');
+    if (resolve) resolve(result);
+  }
+
+  // 등록 폼 같은 다른 화면에서 호출한다. 화면을 옮기지 않고 팝업으로 마스킹을 마친 뒤, 확인한 사본(Blob)만 돌려준다.
+  // 서버 업로드는 하지 않으며, 취소하면 null이다. 원본은 이 브라우저 안에서만 열린다.
+  function pick(file) {
+    return new Promise((resolve) => {
+      init();
+      if (!root) {
+        resolve(null);
+        return;
+      }
+      finishPick(null);
+      restart();
+      applyMode(null);
+      pickResolve = resolve;
+      root.classList.add('dm-modal');
+      root.setAttribute('role', 'dialog');
+      root.setAttribute('aria-modal', 'true');
+      document.body.classList.add('dm-modal-open');
+      find('[data-dm-save]').textContent = '확인하고 이 사본 사용';
+      find('[data-dm-close]').focus();
+      open(file);
+    });
   }
 
   // 교체 모드에서는 제품을 고정하고, 화면 문구와 완료 후 이동 버튼을 교체용으로 바꾼다.
@@ -132,7 +173,7 @@
     fail('');
     if (!file) return;
     // 제품을 고르기 전에는 마스킹 화면으로 넘어가지 않는다. 같은 파일을 다시 고를 수 있도록 선택값은 비운다.
-    if (!replaceId && !find('[data-dm-product]').value) {
+    if (!replaceId && !pickResolve && !find('[data-dm-product]').value) {
       find('[data-dm-file]').value = '';
       fail('먼저 증빙을 연결할 제품을 선택해 주세요.');
       return;
@@ -430,6 +471,13 @@
   async function save() {
     if (saving || !blob) return;
     fail('');
+    // 사본 반환 모드: 업로드하지 않고 확인한 사본을 호출한 쪽에 넘긴다. 정리는 넘긴 뒤에 한다.
+    if (pickResolve) {
+      const picked = blob;
+      finishPick({ blob: picked });
+      restart();
+      return;
+    }
     const productId = Number(find('[data-dm-product]').value);
     if (!replaceId && (!Number.isInteger(productId) || productId < 1)) {
       fail('증빙을 연결할 제품을 선택해 주세요.');
@@ -504,6 +552,10 @@
     });
     find('[data-dm-save]').addEventListener('click', save);
     find('[data-dm-again]').addEventListener('click', reset);
+    find('[data-dm-close]').addEventListener('click', reset);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && pickResolve) reset();
+    });
     updateCount();
   }
 
@@ -631,5 +683,6 @@
     setProduct(id) {
       if (root) find('[data-dm-product]').value = id;
     },
+    pick,
   };
 })();

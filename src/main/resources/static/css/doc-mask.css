@@ -35,3 +35,20 @@
   #docmask .dm-actions .sc-btn{flex:1 1 auto}
   #docmask .dm-count{margin-left:0;width:100%}
 }
+/* 제품 등록 화면 위에 열리는 팝업 모드: 화면을 옮기지 않아 등록 폼 입력값이 그대로 남는다. */
+#docmask .dm-close{display:none}
+body.dm-modal-open{overflow:hidden}
+#docmask.page.dm-modal{display:block;position:fixed;inset:0;z-index:2000;max-width:none;margin:0;padding:24px;overflow:auto;background:#fff}
+#docmask.dm-modal .sc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+#docmask.dm-modal .dm-close{display:inline-flex}
+#docmask.dm-modal .dm-field{display:none}
+/* 제품 등록 2단계 "문서로 자동 입력" 보조 요소 */
+.doc-register-options{display:grid;gap:10px;margin-top:12px}
+.doc-register-options select{height:36px;padding:0 10px;border:1px solid var(--line);border-radius:4px;font-size:13px;background:#fff}
+.doc-register-consent{display:flex;gap:8px;align-items:flex-start;font-size:11px;line-height:1.6;color:#44464a}
+.doc-register-consent input{margin-top:3px;width:15px;height:15px;accent-color:var(--blue)}
+.doc-register-status{margin:10px 0 0;font-size:11px;line-height:1.6;color:#44464a}
+.doc-register-status:empty{display:none}
+.doc-register-status[data-kind="error"]{color:#a94040}
+.product-toast.doc-register-toast{bottom:76px}
+[data-doc-autofilled]{background:#eef7f5;box-shadow:0 0 0 2px #b9e3dd}
