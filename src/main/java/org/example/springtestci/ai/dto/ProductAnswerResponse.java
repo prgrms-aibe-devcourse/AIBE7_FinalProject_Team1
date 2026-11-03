@@ -11,9 +11,16 @@ public record ProductAnswerResponse(
     long factsVersion,
     Long contentVersion,
     Instant generatedAt,
-    boolean sample) {
+    boolean sample,
+    Status status) {
   public ProductAnswerResponse {
     sources = List.copyOf(sources);
+  }
+
+  public enum Status {
+    ANSWERED,
+    NO_RECORD,
+    OUT_OF_SCOPE
   }
 
   public record Evidence(String key, String type, String label, Map<String, Object> facts) {

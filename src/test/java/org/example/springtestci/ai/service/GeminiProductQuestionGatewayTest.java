@@ -109,7 +109,7 @@ class GeminiProductQuestionGatewayTest {
     assertEquals(
         18, finalRequest.at("/contents/2/parts/0/functionResponse/response/data/ramGb").asInt());
     assertEquals("NONE", finalRequest.at("/toolConfig/functionCallingConfig/mode").asString());
-    assertEquals(3, finalRequest.at("/tools/0/functionDeclarations").size());
+    assertEquals(4, finalRequest.at("/tools/0/functionDeclarations").size());
     assertFalse(finalRequest.toString().contains("fixture-not-a-real-key"));
   }
 
@@ -159,7 +159,53 @@ class GeminiProductQuestionGatewayTest {
                 Map.of("functionCall", Map.of("name", "get_product_specs", "args", Map.of())),
                 Map.of("functionCall", Map.of("name", "get_product_specs", "args", Map.of()))));
     assertCode(ErrorCode.AI_INVALID_RESULT);
-    assertEquals(List.of("get_product_specs"), invoked);
+    assertTrue(invoked.isEmpty());
+    assertEquals(1, calls.get());
+  }
+
+  @Test
+  void unrelatedChoiceStopsBeforeReadingDataOrMakingASecondProviderRequest() {
+    first =
+        envelope(
+            List.of(
+                Map.of(
+                    "functionCall",
+                    Map.of("name", "decline_unrelated_question", "args", Map.of()))));
+    var answer = gateway(5).ask("노트북으로 색다른 활동을 정해줘", this::read);
+    assertEquals(ProductQuestionGateway.Scope.OUT_OF_SCOPE, answer.scope());
+    assertTrue(answer.sourceKeys().isEmpty());
+    assertTrue(invoked.isEmpty());
+    assertEquals(1, calls.get());
+    assertFalse(requests.get(0).toString().contains("ramGb"));
+  }
+
+  @Test
+  void unrelatedChoiceTakesPrecedenceEvenIfTheModelAlsoSelectsProductTools() {
+    first =
+        envelope(
+            List.of(
+                Map.of("functionCall", Map.of("name", "get_product_specs", "args", Map.of())),
+                Map.of(
+                    "functionCall",
+                    Map.of("name", "decline_unrelated_question", "args", Map.of()))));
+    assertEquals(
+        ProductQuestionGateway.Scope.OUT_OF_SCOPE,
+        gateway(5).ask("메모리와 다른 주제", this::read).scope());
+    assertTrue(invoked.isEmpty());
+    assertEquals(1, calls.get());
+  }
+
+  @Test
+  void unrelatedChoiceCannotCarryArgumentsOrModelWrittenAnswers() {
+    first =
+        envelope(
+            List.of(
+                Map.of(
+                    "functionCall",
+                    Map.of(
+                        "name", "decline_unrelated_question", "args", Map.of("answer", "임의 답변")))));
+    assertCode(ErrorCode.AI_INVALID_RESULT);
+    assertTrue(invoked.isEmpty());
     assertEquals(1, calls.get());
   }
 

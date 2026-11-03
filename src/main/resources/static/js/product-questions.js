@@ -41,7 +41,7 @@
     if (!container || !/^[1-9]\d*$/.test(String(context.id)) || context.scope !== 'listings') return;
     clear(context.scope);
     const root = create('section', null, 'product-questions'); root.setAttribute('aria-label', '제품 이력 Q&A');
-    root.append(create('h2', '제품 이력에 질문하기'), create('p', '등록된 사양·보증·이력을 근거로 답해요. 답변 아래에서 사용한 기록을 함께 확인해 주세요.', 'pq-help'));
+    root.append(create('h2', '제품 이력에 질문하기'), create('p', '이 제품의 등록된 사양·보증·이력만 답해요. 메뉴 추천·날씨 등 관련 없는 질문에는 답변하지 않아요.', 'pq-help'));
     const examples = create('div', null, 'pq-examples'); examples.setAttribute('aria-label', '질문 예시');
     const form = create('form'), label = create('label', '궁금한 내용'), input = create('textarea');
     input.name = 'question'; input.maxLength = 1000; input.required = true; input.rows = 3;
@@ -93,13 +93,14 @@
         }
         const answer = payload?.data;
         if (typeof answer?.answer !== 'string' || !Array.isArray(answer.sources)) throw new Error('답변을 확인할 수 없어요. 다시 질문해 주세요.');
-        output.append(create('h3', '등록된 기록에 따른 답변'), create('p', answer.answer, 'pq-answer'));
-        if (answer.sources.length) {
+        const outside = answer.status === 'OUT_OF_SCOPE';
+        output.append(create('h3', outside ? '질문 범위 안내' : '등록된 기록에 따른 답변'), create('p', answer.answer, 'pq-answer'));
+        if (!outside && answer.sources.length) {
           const details = create('details'), summary = create('summary', '답변에 사용한 근거 ' + answer.sources.length + '개'), list = create('ul');
           list.append(...answer.sources.map(evidence)); details.append(summary, list); output.append(details);
-        } else output.append(create('p', '확인 가능한 근거가 없거나 답변 범위를 벗어난 질문이에요.', 'pq-help'));
-        if (answer.sample) output.append(create('p', '샘플 이력으로 확인하는 답변이에요.', 'pq-help'));
-        output.hidden = false; message.textContent = '등록된 기록만으로 설명한 답변이에요. 전체 이력도 함께 확인해 주세요.';
+        } else if (!outside) output.append(create('p', '등록된 기록에서 확인 가능한 근거가 없어요.', 'pq-help'));
+        if (!outside && answer.sample) output.append(create('p', '샘플 이력으로 확인하는 답변이에요.', 'pq-help'));
+        output.hidden = false; message.textContent = outside ? '이 제품의 사양·보증·이력에 관한 질문을 입력해 주세요.' : '등록된 기록만으로 설명한 답변이에요. 전체 이력도 함께 확인해 주세요.';
       } catch (error) {
         if (!controller.signal.aborted && root.isConnected) {
           input.value = restoreQuestion ? draft : '';
