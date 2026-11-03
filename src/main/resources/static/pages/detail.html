@@ -24,16 +24,18 @@
   <p class="sub" data-listing-edit-state></p>
   <p class="sub" role="status" aria-live="polite" data-listing-edit-message></p>
   <button type="button" class="sc-btn" data-listing-edit-reload>입력 버리고 최신 내용 불러오기</button>
-  <form data-listing-edit-form novalidate>
+  <form id="listing-edit-form" data-listing-edit-form novalidate>
     <fieldset data-listing-edit-fields>
       <legend>판매 조건 수정</legend>
-      <p class="sub">공개할 사진을 선택하세요. 첫 번째가 대표 사진이며 위·아래 버튼으로 순서를 바꿀 수 있어요.</p>
-      <div class="listing-edit-photos" data-listing-edit-photos role="group" aria-label="판매글 수정 사진 선택"></div>
+      <section class="listing-edit-photo-section" data-listing-photo-field tabindex="-1" aria-labelledby="listing-edit-photos-heading">
+        <h3 id="listing-edit-photos-heading">판매글 사진</h3>
+        <p class="sub">첫 번째가 대표 사진이에요. 대표 지정과 좌우 버튼으로 순서를 바꿀 수 있어요.</p>
+        <div class="listing-edit-photo-strip"><button type="button" class="listing-edit-camera" data-listing-photo-open aria-label="판매글 사진 선택"><img src="/images/icons/camera.svg" alt="" width="30" height="30"><span data-listing-photo-count>0/10</span></button><div class="listing-edit-photos" data-listing-edit-photos role="group" aria-label="선택한 판매글 사진"></div></div>
+      </section>
       <label class="sc-field"><span>제목</span><input name="title" aria-label="수정할 판매글 제목" maxlength="60" required></label>
       <label class="sc-field"><span>상세 설명</span><textarea name="description" aria-label="수정할 상세 설명" maxlength="2000" required></textarea></label>
       <label class="sc-field"><span>판매 가격</span><input name="price" aria-label="수정할 판매 가격" inputmode="numeric" maxlength="15" required></label>
       <label class="sc-field"><span>제품 상태 등급</span><select name="conditionGrade" aria-label="수정할 상태 등급" required><option value="1">1등급 · 매우 나쁨</option><option value="2">2등급 · 나쁨</option><option value="3">3등급 · 보통</option><option value="4">4등급 · 좋음</option><option value="5">5등급 · 최상</option></select></label>
-      <button type="submit" class="sc-btn primary">수정 저장</button>
     </fieldset>
   </form>
   <form data-listing-cancel-form novalidate>
@@ -54,6 +56,16 @@
     </fieldset>
   </form>
 </section>
+<div class="listing-editor-actionbar" data-listing-edit-bar hidden>
+  <div class="listing-editor-actionbar-inner"><p data-listing-edit-dirty role="status" aria-live="polite">저장된 내용과 같아요.</p><div><button type="button" class="sc-btn" data-listing-edit-back>수정 취소</button><button type="submit" form="listing-edit-form" class="sc-btn primary" data-listing-edit-save disabled>수정 저장</button></div></div>
+</div>
+<dialog class="listing-edit-photo-picker" data-listing-photo-dialog aria-labelledby="listing-photo-picker-heading">
+  <div class="listing-edit-photo-head"><div><h2 id="listing-photo-picker-heading">판매글에 쓸 사진</h2><p>내 제품에 등록된 사진 중에서 골라 주세요. 최대 10장까지 선택할 수 있어요.</p></div><button type="button" class="listing-edit-photo-close" data-listing-photo-close aria-label="사진 선택 닫기">×</button></div>
+  <p class="sub" data-listing-photo-empty hidden>등록된 사진이 없어요. 내 제품에서 사진을 등록한 뒤 최신 내용을 불러와 주세요.</p>
+  <div class="listing-edit-photo-choices" data-listing-photo-choices role="group" aria-label="등록된 제품 사진 선택"></div>
+  <p class="listing-edit-photo-error" data-listing-photo-error role="alert" hidden></p>
+  <div class="listing-edit-photo-footer"><span data-listing-photo-picker-count role="status" aria-live="polite"></span><button type="button" class="sc-btn primary" data-listing-photo-done>선택 완료</button></div>
+</dialog>
 <dialog class="sl-confirm" data-listing-cancel-dialog aria-labelledby="listing-cancel-heading" aria-describedby="listing-cancel-description">
   <h2 id="listing-cancel-heading">판매를 중지할까요?</h2>
   <p id="listing-cancel-description">공개를 종료하고 연결된 구매 요청·예약 거래·이전 요청도 함께 취소해요. 중지한 글은 다시 공개할 수 없어요.</p>
