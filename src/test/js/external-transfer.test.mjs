@@ -8,7 +8,12 @@ const issued = id => ({ transferId: id, productId: id, rawToken: 'test-token-' +
 
 /** 실제 보내기·발급 모듈에만 모의 API를 연결한다. 실제 계정이나 소유권은 변경하지 않는다. */
 function screen(handler) {
-  const env = environment(handler);
+  // 제품 목록은 실제 API처럼 커서 페이지 응답으로 감싼다. 배열 응답을 그대로 쓰는 기존 사례는 한 페이지로 취급한다.
+  const env = environment(async (path, options, calls) => {
+    if (!path.startsWith('/api/v1/products?')) return handler(path, options, calls);
+    const value = await handler('/api/v1/products', options, calls, new URL(path, 'http://test.invalid').searchParams);
+    return Array.isArray(value) ? { items: value, page: { number: 0, size: 100, hasNext: false, nextCursor: null } } : value;
+  });
   env.window.PastportApi = { fetch: env.window.fetch.bind(env.window) };
   env.window.location.origin = 'http://test.invalid';
   const trade = env.add('section', { id: 'trade', className: 'page active' });
@@ -22,7 +27,8 @@ function screen(handler) {
   nodes.search.value = '';
   nodes.title = env.add('h2', { 'data-external-product-title': '' }, nodes.selected);
   nodes.panel = env.add('div', { 'data-ownership-root': '' }, nodes.selected);
-  env.run('ownership.js', { qrcode: () => ({ addData() {}, make() {}, createDataURL: () => 'data:image/png;base64,test' }) });
+  const auth = { user: { id: 1 } };
+  env.run('ownership.js', { auth, qrcode: () => ({ addData() {}, make() {}, createDataURL: () => 'data:image/png;base64,test' }) });
   env.run('trade.js');
   const goto = async id => {
     env.document.querySelectorAll('.page').forEach(page => page.classList.toggle('active', page.id === id));
@@ -30,7 +36,7 @@ function screen(handler) {
   };
   const click = node => env.document.emit('click', null, { target: node });
   const button = text => nodes.panel.querySelectorAll('button').find(node => node.textContent === text);
-  return { ...env, ...nodes, trade, passport, passportPanel, goto, click, button };
+  return { ...env, ...nodes, auth, trade, passport, passportPanel, goto, click, button };
 }
 
 test('소유 제품을 선택하면 상태만 조회하며 발급 버튼을 눌러야 해당 제품의 링크·QR을 만든다', async () => {
@@ -104,6 +110,7 @@ test('계정이 바뀌면 이전 제품 목록·선택을 지우고 늦은 목�
   const previous = deferred(); let reads = 0;
   const s = screen(path => path === '/api/v1/products' ? ++reads === 1 ? previous.promise : [product(6, '새 계정 제품')] : denied(404));
   assert.equal(s.calls.length, 1);
+  s.auth.user = { id: 2 };
   await s.document.emit('pastport:auth-changed', { signedIn: true, userId: 2 }); await flush();
   assert.equal(s.calls[0].options.signal.aborted, true);
   previous.resolve([product(5, '이전 계정 제품')]); await flush();
@@ -158,4 +165,21 @@ test('판매 중인 제품의 발급 거절은 선택을 유지하고 내부 거
   assert.match(s.panel.textContent, /판매 중이거나 내부 예약/);
   assert.equal(s.panel.querySelector('input'), null); assert.equal(s.selected.hidden, false);
   assert.equal(s.button('새 링크 · QR 발급').disabled, false);
+});
+
+test('제품이 여러 페이지면 커서를 따라 모두 불러와 검색·선택할 수 있다', async () => {
+  const cursor = { createdAt: '2026-11-01T00:00:00Z', productId: 7 };
+  const s = screen((path, options, calls, params) => {
+    if (path !== '/api/v1/products') return denied(404);
+    return params.get('page') === '0'
+      ? { items: [product(8, '첫 페이지 제품')], page: { number: 0, size: 100, hasNext: true, nextCursor: cursor } }
+      : { items: [product(7, '다음 페이지 제품')], page: { number: 1, size: 100, hasNext: false, nextCursor: null } };
+  });
+  await flush();
+  const listCalls = s.calls.filter(call => call.path.startsWith('/api/v1/products?'));
+  assert.equal(listCalls.length, 2);
+  const second = new URL(listCalls[1].path, 'http://test.invalid').searchParams;
+  assert.equal(second.get('cursorProductId'), '7'); assert.equal(second.get('cursorCreatedAt'), cursor.createdAt);
+  assert.equal(s.products.children.length, 2);
+  assert.match(s.products.textContent, /다음 페이지 제품/);
 });

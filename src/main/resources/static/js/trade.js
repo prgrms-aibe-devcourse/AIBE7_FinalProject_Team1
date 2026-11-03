@@ -58,6 +58,9 @@
     find('[data-external-register]').hidden = products.length > 0;
   }
 
+  const PRODUCT_PAGE_SIZE = 100;
+  const MAX_PRODUCT_PAGES = 20;
+
   /** 로그인한 사용자의 제품을 조회한다. 지연 응답은 현재 화면·요청과 일치할 때만 반영한다. */
   async function loadProducts() {
     if (!active() || !find('[data-external-products]')) return;
@@ -72,17 +75,29 @@
     find('[data-external-search]').disabled = true;
     find('[data-external-products]').setAttribute('aria-busy', 'true');
     try {
-      const response = await window.PastportApi.fetch('/api/v1/products', { cache: 'no-store', signal: controller.signal });
-      const payload = await response.json().catch(() => null);
-      if (!current()) return;
-      if (!response.ok) {
-        status.textContent = response.status === 401 ? '로그인 후 외부 이전을 보낼 제품을 선택해 주세요.' : '내 제품을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
-        find('[data-external-login]').hidden = response.status !== 401;
-        find('[data-external-retry]').hidden = response.status === 401;
-        return;
+      // 제품 목록 API는 커서 페이지로 응답한다. 보낼 제품을 고르고 검색할 수 있도록 남은 페이지까지 순서대로 모은다.
+      const collected = [];
+      let cursor = null;
+      for (let page = 0; page < MAX_PRODUCT_PAGES; page += 1) {
+        const params = new URLSearchParams({ page: String(page), size: String(PRODUCT_PAGE_SIZE) });
+        if (cursor) { params.set('cursorCreatedAt', cursor.createdAt); params.set('cursorProductId', String(cursor.productId)); }
+        const response = await window.PastportApi.fetch(`/api/v1/products?${params}`, { cache: 'no-store', signal: controller.signal });
+        const payload = await response.json().catch(() => null);
+        if (!current()) return;
+        if (!response.ok) {
+          status.textContent = response.status === 401 ? '로그인 후 외부 이전을 보낼 제품을 선택해 주세요.' : '내 제품을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+          find('[data-external-login]').hidden = response.status !== 401;
+          find('[data-external-retry]').hidden = response.status === 401;
+          return;
+        }
+        const items = payload?.data?.items;
+        if (!Array.isArray(items)) throw new Error('Invalid product list');
+        collected.push(...items);
+        const next = payload.data.page;
+        if (!next?.hasNext || !next.nextCursor) break;
+        cursor = next.nextCursor;
       }
-      if (!Array.isArray(payload?.data)) throw new Error('Invalid product list');
-      products = payload.data.filter(product => /^[1-9]\d*$/.test(String(product.productId)));
+      products = collected.filter(product => /^[1-9]\d*$/.test(String(product.productId)));
       find('[data-external-count]').textContent = products.length + '개'; renderProducts();
     } catch {
       if (current()) { status.textContent = '내 제품을 불러오지 못했습니다. 연결 상태를 확인하고 다시 시도해 주세요.'; find('[data-external-retry]').hidden = false; }
