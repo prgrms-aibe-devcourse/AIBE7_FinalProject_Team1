@@ -1,12 +1,12 @@
 # 배포용 Flyway 복구 마이그레이션 (`db/deploy`)
 
-AWS 최초 배포 전 점검에서 공유 Supabase DB와 `main`의 Flyway 이력이 맞지 않는 문제가 확인됐다. 이 문서는 **코드 저장소 쪽에서 막을 수 있는 부분**과 **아직 사람이 확인해야 하는 부분**을 나눠 적는다. 공유 DB는 이 변경으로 초기화하거나 수정하지 않는다. 서버가 뜰 때 새 마이그레이션 4개가 추가로 적용될 뿐이다.
+이 문서는 기존 배포 보완 경로의 기록이다. 2026-11-03 이후 전체 DB 수렴은 [DB_CONVERGENCE_RUNBOOK.md](DB_CONVERGENCE_RUNBOOK.md)의 명시적 계통 선택·정규화·승인 plan·strict runner를 따른다. `db/deploy`만 추가하거나 앱을 기동하는 것으로 공유 DB 수렴이 끝나지 않는다. 공유 DB 적용은 사람이 별도로 수행한다.
 
 ## 확인된 원인 (코드 기준)
 
-1. `application.yaml`의 `ignore-migration-patterns: "*:*"` 때문에 Flyway가 이력 불일치로 멈추지 않는다. 대신 DB가 어떤 번호를 이미 적용한 것으로 기록하고 있으면 그 번호의 새 SQL은 **실행되지 않고 조용히 건너뛴다**. 같은 번호가 다른 SQL을 가리키는 경우가 이렇게 드러난다.
+1. 기존 `application.yaml`은 `ignore-migration-patterns: "*:*"`를 사용한다. Flyway 12.4.0 격리 PostgreSQL 실험에서는 checksum/type/description 불일치가 이 패턴에서 모두 validate 성공으로 나타났고, 빈 패턴에서는 각각 실패했다. 모든 버전에 일반화하지 않으며, 새 수렴 프로필은 유효 ignore 목록을 비우고 정상화를 먼저 수행한다. 같은 version을 이미 적용했다고 기록하면 새 SQL이 자동 재실행되는 것은 아니다.
 2. `purchase_requests`(P2)와 `transaction_change_reviews`(P3) DDL은 자동 적용되지 않는 `db/pending`에만 있다. `db/migration`만으로 만든 DB에는 두 테이블이 없다. 코드는 두 테이블을 쓴다(`JdbcPurchaseRequestRepository`, `JdbcReservationChangeReviewRepository`, 게시 조건 확인 등).
-3. 정식 `V2026103002__add_history_publication_state.sql`이 만드는 컬럼 3개(`product_events.visibility`, `product_events.public_text_reviewed`, `audit_logs.public_reason_reviewed`)가 그 번호를 이미 적용한 DB에는 없다.
+3. 정식 `V2026103002__add_history_publication_state.sql`의 컬럼 누락 보완도 포함한다. 다만 제공된 2026-11-03 실제 history에는 3002 적용 기록이 없다. '3002 성공이나 컬럼 없음'은 별도 합성 반례이며 그 실제 DB의 관측 사실로 취급하지 않는다.
 
 ## 이 변경이 하는 일
 
@@ -52,7 +52,7 @@ psql -d 실제DB명 -U 실제사용자 -v expected_database=실제DB명 -v expec
 
 - 비밀번호는 채팅·코드·명령 인자에 넣지 않는다. 서버를 멈추고 **전체 백업을 만든 뒤** 대상 DB 담당자가 실행한다.
 - **실행 순서:** 요약 정규화 스크립트(`normalize-summary-version`)는 구버전 소유권이 기록돼 있으면 "수동 검토 필요"로 일부러 중단한다. 따라서 **소유권 정규화를 먼저, 요약 정규화를 그다음**에 실행한다.
-- 정규화 뒤에는 `./gradlew`로 올린 서버가 `V2026102803`을 건너뛰고(이미 적용됨) 이후 마이그레이션과 `db/deploy`를 적용한다. 정규화한 DB는 무시 패턴 없이도 `flyway validate`를 통과한다.
+- 소유권만 충돌하는 합성 DB는 이 정규화 뒤 migrate/validate를 검증했다. V2~V5와 purchase/summary 충돌까지 함께 가진 실제 계통 전체의 성공을 뜻하지 않는다. 해당 계통은 새 실행서의 원자적 전체 정규화와 legacy compatibility locations가 필요하다.
 - 검증: `NormalizeOwnershipVersionPostgresTest` 9개(변환·이후 migrate/validate 성공, 정규화 전 실패 재현, 재실행 동일, 이미 정상·이력 없음, 잘못된 스키마·체크섬·누락 이력·구조 불일치 거부).
 
 ## 이 변경이 해결하지 못하는 것 (사람이 확인)
@@ -60,7 +60,7 @@ psql -d 실제DB명 -U 실제사용자 -v expected_database=실제DB명 -v expec
 공유 DB의 `flyway_schema_history`를 직접 보지 못했다. 아래는 이력을 확인해야 정할 수 있다.
 
 - **어떤 경우에 해당하는지:** 위 정규화는 공유 DB에 `2702`/`2707`이 실제로 기록돼 있을 때만 필요하다. 아래 읽기 전용 조회로 먼저 확인한다. `2702`/`2707`이 없으면 이 스크립트는 변경 없이 끝난다.
-- **그 밖에 같은 번호가 다른 SQL로 적용된 정식 마이그레이션:** 이번에 보완한 것은 확인된 3종(P2·P3·이력 공개 컬럼)뿐이다. 다른 번호가 같은 방식으로 건너뛰어졌다면(체크섬 불일치는 `"*:*"` 때문에 오류 없이 통과하고 새 SQL만 실행되지 않는다) 같은 방식의 보완이 필요하다. 아래 조회 결과를 이 저장소의 마이그레이션 파일과 비교한다.
+- **그 밖에 같은 번호가 다른 SQL로 적용된 정식 마이그레이션:** 상태 무시와 checksum 검증을 혼동하지 말고, 아래 조회 결과를 실제 Flyway가 해석한 원본 migration 목록과 비교한다. 알 수 없는 이력은 임의 repair나 checksum 변경으로 통과시키지 않는다.
   ```sql
   SELECT installed_rank, version, description, script, checksum, success
     FROM flyway_schema_history ORDER BY installed_rank;
