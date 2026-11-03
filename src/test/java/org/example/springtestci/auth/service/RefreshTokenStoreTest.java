@@ -121,6 +121,51 @@ class RefreshTokenStoreTest {
   }
 
   @Test
+  void resumeSessionAcceptsTheCurrentTokenOfTheSameBrowserOnce() {
+    when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+    String tokenKey = keyOf("cookie-token");
+    when(valueOperations.get("auth:session-token:7")).thenReturn(tokenKey);
+    when(redisTemplate.delete(tokenKey)).thenReturn(true);
+
+    assertTrue(store.resumeSession(7L, "cookie-token"));
+
+    verify(valueOperations).set("auth:session:7", "1", RefreshTokenStore.SESSION_LEASE);
+  }
+
+  @Test
+  void resumeSessionRefusesATokenThatIsNotTheCurrentOne() {
+    when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+    when(valueOperations.get("auth:session-token:7")).thenReturn("auth:refresh:someoneelse");
+
+    assertFalse(store.resumeSession(7L, "cookie-token"));
+    assertFalse(store.resumeSession(7L, null));
+    assertFalse(store.resumeSession(7L, " "));
+
+    verify(redisTemplate, org.mockito.Mockito.never()).delete(anyString());
+  }
+
+  @Test
+  void resumeSessionRefusesATokenAlreadyConsumedByAConcurrentRequest() {
+    when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+    String tokenKey = keyOf("cookie-token");
+    when(valueOperations.get("auth:session-token:7")).thenReturn(tokenKey);
+    when(redisTemplate.delete(tokenKey)).thenReturn(false);
+
+    assertFalse(store.resumeSession(7L, "cookie-token"));
+  }
+
+  private static String keyOf(String token) {
+    try {
+      byte[] digest =
+          java.security.MessageDigest.getInstance("SHA-256")
+              .digest(token.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+      return "auth:refresh:" + java.util.HexFormat.of().formatHex(digest);
+    } catch (java.security.NoSuchAlgorithmException exception) {
+      throw new IllegalStateException(exception);
+    }
+  }
+
+  @Test
   void endSessionRemovesTheLeaseAndTheCurrentToken() {
     when(redisTemplate.opsForValue()).thenReturn(valueOperations);
     when(valueOperations.getAndDelete("auth:session-token:7")).thenReturn("auth:refresh:cur");
