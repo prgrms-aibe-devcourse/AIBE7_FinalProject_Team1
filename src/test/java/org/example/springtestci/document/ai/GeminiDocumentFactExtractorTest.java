@@ -1,13 +1,16 @@
 package org.example.springtestci.document.ai;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.example.springtestci.document.entity.DocumentType;
@@ -76,6 +79,28 @@ class GeminiDocumentFactExtractorTest {
     assertTrue(requestBody.get().contains("\"inlineData\""));
     assertTrue(requestBody.get().contains("\"responseSchema\""));
     assertTrue(!requestBody.get().contains("test-key"));
+    var mapper = new ObjectMapper();
+    var request = mapper.readTree(requestBody.get());
+    var config = request.get("generationConfig");
+    var fields =
+        List.of(
+            "productName",
+            "modelName",
+            "purchaseDate",
+            "vendor",
+            "price",
+            "warrantyMonths",
+            "repairDate",
+            "repairDescription");
+    assertEquals(mapper.valueToTree(fields), config.at("/responseSchema/required"));
+    assertEquals(fields.size(), config.at("/responseSchema/properties").size());
+    for (String field : fields)
+      assertTrue(config.at("/responseSchema/properties/" + field + "/nullable").asBoolean());
+    for (String option : List.of("temperature", "topK", "topP")) assertFalse(config.has(option));
+    var instructions = request.at("/systemInstruction/parts/0/text").asText();
+    assertTrue(instructions.contains("확정할 수 없으면 빈 문자열·임의 값 대신 null"));
+    assertTrue(instructions.contains("원래 순서대로"));
+    assertTrue(instructions.contains("개인정보는 어떤 항목에도 포함하지 마세요"));
   }
 
   @Test

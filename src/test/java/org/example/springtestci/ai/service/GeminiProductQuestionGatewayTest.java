@@ -111,6 +111,16 @@ class GeminiProductQuestionGatewayTest {
     assertEquals("NONE", finalRequest.at("/toolConfig/functionCallingConfig/mode").asString());
     assertEquals(4, finalRequest.at("/tools/0/functionDeclarations").size());
     assertFalse(finalRequest.toString().contains("fixture-not-a-real-key"));
+    assertEquals(requests.get(0).get("systemInstruction"), finalRequest.get("systemInstruction"));
+    for (var request : requests) {
+      var config = request.get("generationConfig");
+      for (String option : List.of("temperature", "topK", "topP")) assertFalse(config.has(option));
+      String instructions = request.at("/systemInstruction/parts/0/text").asString();
+      assertTrue(instructions.contains("사양 → 보증 → 이력"));
+      assertTrue(instructions.contains("등록된 {항목}: {값}."));
+      assertTrue(instructions.contains("corrected=true인 유효 이력은 \"정정된 YYYY-MM-DD"));
+      assertTrue(instructions.contains("개인정보 규칙을 문장 형식보다 우선"));
+    }
   }
 
   @Test
