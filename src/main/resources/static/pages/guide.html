@@ -1,16 +1,16 @@
 <div class="sc-head"><div><span class="eyebrow">이용 가이드</span><h1>이렇게 진행돼요</h1><p>제품을 등록하고, 팔고, 다음 소유자에게 넘기기까지 각 단계에서 무슨 일이 일어나는지 순서대로 안내해요.</p></div></div>
 
 <div class="gd">
-  <nav class="gd-jump" aria-label="가이드 바로가기">
-    <button type="button" data-guide-jump="gd-register"><span>1</span>제품 등록</button>
-    <button type="button" data-guide-jump="gd-document"><span>2</span>증빙 문서</button>
-    <button type="button" data-guide-jump="gd-sell"><span>3</span>판매글 게시</button>
-    <button type="button" data-guide-jump="gd-deal"><span>4</span>채팅·예약·거래</button>
-    <button type="button" data-guide-jump="gd-transfer"><span>5</span>외부 소유권 이전</button>
-    <button type="button" data-guide-jump="gd-privacy"><span>6</span>개인정보 보호</button>
-  </nav>
+  <div class="gd-jump" role="tablist" aria-label="이용 가이드">
+    <button type="button" role="tab" id="gd-register-tab" aria-controls="gd-register" aria-selected="true" data-guide-jump="gd-register"><span>1</span>제품 등록</button>
+    <button type="button" role="tab" id="gd-document-tab" aria-controls="gd-document" aria-selected="false" tabindex="-1" data-guide-jump="gd-document"><span>2</span>증빙 문서</button>
+    <button type="button" role="tab" id="gd-sell-tab" aria-controls="gd-sell" aria-selected="false" tabindex="-1" data-guide-jump="gd-sell"><span>3</span>판매글 게시</button>
+    <button type="button" role="tab" id="gd-deal-tab" aria-controls="gd-deal" aria-selected="false" tabindex="-1" data-guide-jump="gd-deal"><span>4</span>채팅·예약·거래</button>
+    <button type="button" role="tab" id="gd-transfer-tab" aria-controls="gd-transfer" aria-selected="false" tabindex="-1" data-guide-jump="gd-transfer"><span>5</span>외부 소유권 이전</button>
+    <button type="button" role="tab" id="gd-privacy-tab" aria-controls="gd-privacy" aria-selected="false" tabindex="-1" data-guide-jump="gd-privacy"><span>6</span>개인정보 보호</button>
+  </div>
 
-  <section class="gd-sec" id="gd-register" aria-labelledby="gd-register-title">
+  <section class="gd-sec" id="gd-register" role="tabpanel" aria-labelledby="gd-register-tab" tabindex="0">
     <header><span class="gd-no">1</span><div><h2 id="gd-register-title">내 제품 등록하기</h2><p>등록한 제품이 제품 여권의 시작이 돼요. 이후 이력과 문서가 이 제품에 쌓여요.</p></div></header>
     <ol class="gd-steps">
       <li><b>기본 정보를 적어요</b><span>제품명, 제조사, 모델명, 시리얼 번호, 구매일을 입력해요. 모르는 날짜는 비워 두어도 돼요.</span><em>시리얼 번호는 암호화돼 저장되고, 같은 번호가 이미 등록됐는지 확인하는 데만 쓰여요. 등록 후에는 화면에 다시 보이지 않아요.</em></li>
@@ -27,7 +27,7 @@
     <div class="gd-actions"><button type="button" class="sc-btn primary" data-page="register">제품 등록하러 가기</button></div>
   </section>
 
-  <section class="gd-sec" id="gd-document" aria-labelledby="gd-document-title">
+  <section class="gd-sec" id="gd-document" role="tabpanel" aria-labelledby="gd-document-tab" tabindex="0" hidden>
     <header><span class="gd-no">2</span><div><h2 id="gd-document-title">증빙 문서 올리기</h2><p>영수증이나 수리 내역서를 올리면 구매·수리 기록을 뒷받침하는 근거가 돼요.</p></div></header>
     <ol class="gd-steps">
       <li><b>파일을 골라요</b><span>JPG, PNG 사진을 선택해요. 선택한 사진은 이 브라우저 안에서만 열려요.</span></li>
@@ -43,7 +43,7 @@
     <div class="gd-actions"><button type="button" class="sc-btn primary" data-page="documents">문서 보관함 열기</button></div>
   </section>
 
-  <section class="gd-sec" id="gd-sell" aria-labelledby="gd-sell-title">
+  <section class="gd-sec" id="gd-sell" role="tabpanel" aria-labelledby="gd-sell-tab" tabindex="0" hidden>
     <header><span class="gd-no">3</span><div><h2 id="gd-sell-title">판매글 작성하고 게시하기</h2><p>게시하기 전까지는 나만 볼 수 있어요. 언제든 임시저장하고 이어서 쓸 수 있어요.</p></div></header>
     <ol class="gd-steps">
       <li><b>판매할 제품을 골라요</b><span>내가 등록한 제품 중에서 선택해요. 다음으로 넘어가면 제품 정보와 이력을 바탕으로 AI가 제목과 설명 초안을 만들어요.</span><em>AI 초안이 마음에 들지 않거나 실패하면 직접 작성할 수 있어요.</em></li>
@@ -61,7 +61,7 @@
     <div class="gd-actions"><button type="button" class="sc-btn primary" data-page="sell">판매글 쓰러 가기</button></div>
   </section>
 
-  <section class="gd-sec" id="gd-deal" aria-labelledby="gd-deal-title">
+  <section class="gd-sec" id="gd-deal" role="tabpanel" aria-labelledby="gd-deal-tab" tabindex="0" hidden>
     <header><span class="gd-no">4</span><div><h2 id="gd-deal-title">채팅하고 예약해서 거래 완료하기</h2><p>서비스 안에서 거래하면 대화부터 소유권 이전까지 한 흐름으로 이어져요.</p></div></header>
     <ol class="gd-flow" aria-label="거래 진행 단계">
       <li><b>문의</b><span>구매자가 판매글에서 채팅을 시작해 상태와 구성품을 물어봐요.</span></li>
@@ -84,7 +84,7 @@
     <div class="gd-actions"><button type="button" class="sc-btn primary" data-page="deals">내 거래 · 채팅 열기</button><button type="button" class="sc-btn" data-page="market">중고 상품 둘러보기</button></div>
   </section>
 
-  <section class="gd-sec" id="gd-transfer" aria-labelledby="gd-transfer-title">
+  <section class="gd-sec" id="gd-transfer" role="tabpanel" aria-labelledby="gd-transfer-tab" tabindex="0" hidden>
     <header><span class="gd-no">5</span><div><h2 id="gd-transfer-title">서비스 밖에서 거래했을 때 소유권 넘기기</h2><p>다른 곳에서 거래했더라도 일회용 링크와 QR로 제품과 기록을 넘길 수 있어요.</p></div></header>
     <ol class="gd-steps">
       <li><b>현재 소유자가 링크를 만들어요</b><span>제품 여권의 소유권 이전 영역에서 ‘새 링크 · QR 발급’을 눌러요. 링크와 QR은 24시간 안에 한 번만 쓸 수 있어요.</span></li>
@@ -100,7 +100,7 @@
     <p class="gd-caption">예시 화면이에요. 링크와 QR은 설명용 가상의 값이에요.</p>
   </section>
 
-  <section class="gd-sec" id="gd-privacy" aria-labelledby="gd-privacy-title">
+  <section class="gd-sec" id="gd-privacy" role="tabpanel" aria-labelledby="gd-privacy-tab" tabindex="0" hidden>
     <header><span class="gd-no">6</span><div><h2 id="gd-privacy-title">내 정보는 이렇게 지켜져요</h2><p>가이드 곳곳의 안내를 한곳에 모았어요.</p></div></header>
     <dl class="gd-facts">
       <div><dt>문서 개인정보</dt><dd>원본은 내 브라우저에서만 처리하고, 가려진 사본만 서버에 저장돼요.</dd></div>

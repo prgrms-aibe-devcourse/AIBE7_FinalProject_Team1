@@ -1,12 +1,34 @@
-// 이용 가이드: 바로가기 버튼 이동, 예시 화면 크게 보기(이전·다음 이동).
-document.addEventListener('click', (event) => {
-  const button = event.target.closest?.('[data-guide-jump]');
-  if (!button) return;
-  const target = document.getElementById(button.dataset.guideJump);
-  if (!target) return;
-  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-});
+// 이용 가이드는 처음에 1번만 보여 주고, 번호를 선택하면 해당 내용으로 전환한다.
+(() => {
+  function select(button) {
+    const guide = button.closest('.gd');
+    const target = document.getElementById(button.dataset.guideJump);
+    if (!guide || !target || !guide.contains(target)) return;
+    guide.querySelectorAll('.gd-sec').forEach((section) => { section.hidden = section !== target; });
+    guide.querySelectorAll('[data-guide-jump]').forEach((tab) => {
+      const selected = tab === button;
+      tab.setAttribute('aria-selected', String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+    });
+  }
+
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest?.('[data-guide-jump]');
+    if (button) select(button);
+  });
+
+  document.addEventListener('keydown', (event) => {
+    const button = event.target.closest?.('[data-guide-jump]');
+    if (!button || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const tabs = [...button.closest('.gd-jump').querySelectorAll('[data-guide-jump]')];
+    const index = tabs.indexOf(button);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+      : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    event.preventDefault();
+    select(tabs[next]);
+    tabs[next].focus();
+  });
+})();
 
 // 예시 화면을 누르면 새 탭 대신 같은 화면의 보기 창으로 크게 보여 준다.
 // 같은 구역의 화면끼리 ‹ › 버튼, 방향키(← →)로 넘기고, 닫기 버튼·바깥 영역 클릭·Esc로 닫는다.
