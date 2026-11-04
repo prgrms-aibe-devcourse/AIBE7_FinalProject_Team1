@@ -22,7 +22,7 @@
   const editableTypes = ['PURCHASE', 'INSPECTION', 'REPAIR', 'PART_REPLACEMENT', 'SPEC_CHANGE'];
   const state = {
     productId: null, events: [], filter: 'ALL', editingId: null, requestVersion: 0,
-    documents: null, documentRequestVersion: 0,
+    documents: null, documentRequestVersion: 0, documentPreviews: new Map(),
   };
 
   const escapeHtml = (value) => String(value ?? '')
@@ -271,9 +271,9 @@
     const kind = document.contentType === 'application/pdf' ? 'PDF'
       : document.contentType?.startsWith('image/') ? '이미지' : '파일';
     const date = document.maskConfirmedAt
-      ? new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(new Date(document.maskConfirmedAt))
+      ? new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(document.maskConfirmedAt))
       : '확인일 없음';
-    return `문서 #${document.id} · ${kind} · ${date}`;
+    return `${document.name || kind + ' 문서'} · ${date}`;
   };
 
   const renderDocumentOptions = (form) => {
@@ -289,8 +289,52 @@
     options.innerHTML = documents.map((document) => `
       <label class="history-document-option">
         <input type="checkbox" value="${document.id}" data-history-document-option>
+        <span class="history-document-thumb" data-history-document-thumb="${document.id}" aria-hidden="true">불러오는 중</span>
         <span>${escapeHtml(documentLabel(document))}</span>
+        <button type="button" class="history-document-view" data-history-document-view="${document.id}" data-document-name="${escapeHtml(document.name || (document.contentType === 'application/pdf' ? 'PDF 문서' : '이미지 문서'))}" aria-haspopup="dialog" hidden>크게 보기</button>
       </label>`).join('');
+    hydrateDocumentPreviews(options);
+  };
+
+  /** 연결할 문서를 알아볼 수 있게 마스킹된 사본을 내려받아 미리보기 주소를 만든다. 같은 문서는 한 번만 받는다. */
+  const documentPreview = (documentId) => {
+    if (!state.documentPreviews.has(documentId)) {
+      const loading = (async () => {
+        const file = await api(`/api/v1/documents/${documentId}/file-url`);
+        const response = await window.PastportApi.fetch(file.url);
+        if (!response.ok) throw new Error('미리보기를 불러오지 못했습니다.');
+        const blob = await response.blob();
+        return { url: URL.createObjectURL(blob), type: blob.type };
+      })();
+      loading.catch(() => state.documentPreviews.delete(documentId));
+      state.documentPreviews.set(documentId, loading);
+    }
+    return state.documentPreviews.get(documentId);
+  };
+  /** 다른 제품으로 바뀌면 이전 제품 문서의 미리보기 주소를 해제한다. */
+  const releaseDocumentPreviews = () => {
+    state.documentPreviews.forEach((loading) => loading.then(({ url }) => URL.revokeObjectURL(url), () => {}));
+    state.documentPreviews = new Map();
+  };
+  const hydrateDocumentPreviews = (container) => {
+    container.querySelectorAll('[data-history-document-thumb]').forEach(async (thumb) => {
+      const id = Number(thumb.dataset.historyDocumentThumb);
+      try {
+        const preview = await documentPreview(id);
+        if (!thumb.isConnected) return;
+        if (preview.type.startsWith('image/')) {
+          const image = document.createElement('img');
+          image.src = preview.url;
+          image.alt = '';
+          thumb.replaceChildren(image);
+        } else {
+          thumb.textContent = preview.type === 'application/pdf' ? 'PDF' : '파일';
+        }
+        container.querySelector(`[data-history-document-view="${id}"]`)?.removeAttribute('hidden');
+      } catch {
+        if (thumb.isConnected) thumb.textContent = '미리보기 없음';
+      }
+    });
   };
 
   const toggleDocuments = async (button) => {
@@ -329,6 +373,7 @@
     state.editingId = null;
     state.documents = null;
     state.documentRequestVersion += 1;
+    releaseDocumentPreviews();
     container.innerHTML = shell();
     try {
       const events = await api(endpoint());
@@ -395,6 +440,18 @@
     if (event.target.closest?.('[data-history-retry]')) { load(state.productId); return; }
     const documentSelect = event.target.closest?.('[data-history-document-select]');
     if (documentSelect) { toggleDocuments(documentSelect); return; }
+    const documentView = event.target.closest?.('[data-history-document-view]');
+    if (documentView) {
+      event.preventDefault();
+      documentPreview(Number(documentView.dataset.historyDocumentView))
+        .then(({ url, type }) => window.PastportDocPreview?.open({
+          url,
+          title: documentView.dataset.documentName || '증빙 문서',
+          contentType: type,
+        }))
+        .catch((error) => window.alert(error.message));
+      return;
+    }
     const filter = event.target.closest?.('[data-history-filter]');
     if (filter) {
       state.filter = filter.dataset.historyFilter;

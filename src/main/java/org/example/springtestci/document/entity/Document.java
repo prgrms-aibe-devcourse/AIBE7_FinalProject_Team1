@@ -14,7 +14,7 @@ import lombok.NoArgsConstructor;
 /**
  * 마스킹 확인이 끝난 제품 증빙 사본. 개인정보가 포함된 원본은 서버로 전달되지 않는다.
  *
- * <p>ERD의 documents 컬럼만 가진다. 문서 유형·표시명은 저장하지 않는다.
+ * <p>문서 유형과 업로드 파일명은 저장하지 않는다. 표시 이름은 사용자가 저장할 때 직접 입력한 값만 둔다.
  */
 @Entity
 @Table(name = "documents")
@@ -61,13 +61,19 @@ public class Document {
 
   private Instant lastReplacedAt;
 
+  /** 사용자가 붙인 문서 이름. 없으면 null이며 화면은 문서 종류와 날짜로 대신 표시한다. */
+  @Column(length = 50)
+  private String displayName;
+
   private Document(
       Long productId,
       Long uploaderId,
       String objectKey,
       String contentType,
       long byteSize,
-      Instant maskConfirmedAt) {
+      Instant maskConfirmedAt,
+      String displayName) {
+    this.displayName = displayName;
     this.productId = productId;
     this.uploaderId = uploaderId;
     this.objectKey = objectKey;
@@ -84,7 +90,24 @@ public class Document {
       String contentType,
       long byteSize,
       Instant maskConfirmedAt) {
-    return new Document(productId, uploaderId, objectKey, contentType, byteSize, maskConfirmedAt);
+    return register(productId, uploaderId, objectKey, contentType, byteSize, maskConfirmedAt, null);
+  }
+
+  public static Document register(
+      Long productId,
+      Long uploaderId,
+      String objectKey,
+      String contentType,
+      long byteSize,
+      Instant maskConfirmedAt,
+      String displayName) {
+    return new Document(
+        productId, uploaderId, objectKey, contentType, byteSize, maskConfirmedAt, displayName);
+  }
+
+  /** 서비스에서 현재 소유권을 확인한 뒤 표시 이름만 바꾼다. 사본 버전·마스킹 상태·이력 연결은 유지한다. */
+  public void rename(String displayName) {
+    this.displayName = displayName;
   }
 
   public boolean isUploadedBy(Long userId) {

@@ -11,6 +11,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
@@ -226,6 +227,36 @@ class DocumentServiceTest {
     Document saved = service.upload(PRODUCT, OWNER, true, "홍길동_영수증.pdf", "application/pdf", PDF);
 
     assertFalse(saved.getObjectKey().contains("홍길동"));
+    assertEquals(null, saved.getDisplayName());
+  }
+
+  @Test
+  void 입력한_문서_이름은_앞뒤_공백을_지워_저장하고_빈_이름은_저장하지_않는다() throws IOException {
+    ownerIs(OWNER);
+    when(fileStorage.store(anyString(), anyString(), any(InputStream.class)))
+        .thenReturn("documents/100/k.pdf");
+    when(documentRepository.save(any(Document.class))).thenAnswer(i -> i.getArgument(0));
+
+    Document named =
+        service.upload(PRODUCT, OWNER, true, "masked.pdf", "application/pdf", PDF, "  수리 영수증  ");
+    Document blank =
+        service.upload(PRODUCT, OWNER, true, "masked.pdf", "application/pdf", PDF, "   ");
+
+    assertEquals("수리 영수증", named.getDisplayName());
+    assertEquals(null, blank.getDisplayName());
+  }
+
+  @Test
+  void 문서_이름이_50자를_넘으면_파일을_저장하지_않고_거부한다() {
+    CommonException exception =
+        assertThrows(
+            CommonException.class,
+            () ->
+                service.upload(
+                    PRODUCT, OWNER, true, "masked.pdf", "application/pdf", PDF, "가".repeat(51)));
+
+    assertEquals(ErrorCode.INVALID_INPUT, exception.errorCode());
+    verifyNoInteractions(fileStorage);
   }
 
   @Test
@@ -238,6 +269,66 @@ class DocumentServiceTest {
     assertEquals(
         ErrorCode.RESOURCE_NOT_FOUND,
         errorOf(() -> service.requireCurrentOwnerOfFile("documents/100/k.pdf", OTHER)));
+  }
+
+  @Test
+  void 현재_소유자는_이전받은_보호_문서도_이름만_변경할_수_있다() {
+    ownerIs(OWNER);
+    Document document = document(OTHER);
+    document.protect(NOW);
+    document.requireRedaction(NOW);
+    when(documentRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(document));
+
+    Document renamed = service.rename(5L, OWNER, "  구매 보증서  ");
+
+    assertEquals("구매 보증서", renamed.getDisplayName());
+    assertEquals("documents/100/k.pdf", renamed.getObjectKey());
+    assertEquals(1, renamed.getVersion());
+    assertEquals(0, renamed.getReplacementCount());
+    assertEquals(NOW, renamed.getMaskConfirmedAt());
+    assertTrue(renamed.isProtected());
+    assertTrue(renamed.isRedactionRequired());
+    assertEquals(OTHER, renamed.getUploaderId());
+    InOrder locks = inOrder(productOwnerReader, documentRepository);
+    locks.verify(documentRepository).findProductIdById(5L);
+    locks.verify(productOwnerReader).lockOwnerId(PRODUCT);
+    locks.verify(documentRepository).findByIdForUpdate(5L);
+    verifyNoInteractions(fileStorage, extractionRepository, replacementRepository);
+  }
+
+  @Test
+  void 이름을_비우거나_null을_보내면_기본_문서명으로_되돌린다() {
+    ownerIs(OWNER);
+    Document document = document(OWNER);
+    document.rename("보증서");
+    when(documentRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(document));
+
+    assertNull(service.rename(5L, OWNER, "   ").getDisplayName());
+    document.rename("영수증");
+    assertNull(service.rename(5L, OWNER, null).getDisplayName());
+    assertEquals("가".repeat(50), service.rename(5L, OWNER, "가".repeat(50)).getDisplayName());
+  }
+
+  @Test
+  void 다른_소유자의_문서는_이름을_변경하거나_존재를_확인할_수_없다() {
+    ownerIs(OTHER);
+
+    assertEquals(ErrorCode.RESOURCE_NOT_FOUND, errorOf(() -> service.rename(5L, OWNER, "바꾼 이름")));
+
+    verify(documentRepository, never()).findByIdForUpdate(any());
+    verifyNoInteractions(fileStorage);
+  }
+
+  @Test
+  void 없는_문서의_이름은_변경할_수_없다() {
+    assertEquals(ErrorCode.RESOURCE_NOT_FOUND, errorOf(() -> service.rename(999L, OWNER, "보증서")));
+    verifyNoInteractions(productOwnerReader, fileStorage);
+  }
+
+  @Test
+  void 변경할_이름이_50자를_넘으면_기존_이름을_유지한다() {
+    assertEquals(ErrorCode.INVALID_INPUT, errorOf(() -> service.rename(5L, OWNER, "가".repeat(51))));
+    verifyNoInteractions(documentRepository, productOwnerReader, fileStorage);
   }
 
   @Test

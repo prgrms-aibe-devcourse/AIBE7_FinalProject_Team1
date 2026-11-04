@@ -17,7 +17,7 @@
   function evidence(item) {
     const row = create('li'), facts = item.facts || {};
     let title = item.label;
-    if (item.type === 'EVENT') title = (eventNames[facts.type] || '제품 기록') + ' · ' + facts.occurredOn + ' · 이력 #' + facts.eventId;
+    if (item.type === 'EVENT') title = (eventNames[facts.type] || '제품 기록') + ' · ' + facts.occurredOn;
     row.append(create('strong', title));
     const parts = [];
     if (item.type === 'EVENT') {

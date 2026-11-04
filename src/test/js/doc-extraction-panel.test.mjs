@@ -61,7 +61,7 @@ test('동의 안내에 처리 목적과 동의하지 않아도 쓸 수 있다는
   assert.match(text, /동의하지 않아도/);
 });
 
-test('검토 화면에서 문서 보기가 파일 주소를 받아 새 창으로 연다', async () => {
+test('검토 화면에서 문서 보기가 파일 주소를 받아 모달 팝업으로 연다', async () => {
   const s = panelWith(path => {
     if (path.endsWith('/latest')) return { id: 3, status: 'EXTRACTED', extractedFacts: FACTS };
     if (path.endsWith('/file-url')) return { url: 'https://files.invalid/doc-7?sig=abc' };
@@ -74,8 +74,10 @@ test('검토 화면에서 문서 보기가 파일 주소를 받아 새 창으로
   await view.emit('click'); await flush();
 
   assert.ok(s.calls.some(call => call.path === '/api/v1/documents/7/file-url'));
-  assert.equal(s.state.opened[0], 'https://files.invalid/doc-7?sig=abc');
-  assert.equal(s.state.opened[2], 'noopener');
+  const dialog = s.document.querySelector('[data-doc-preview-dialog]');
+  assert.ok(dialog);
+  assert.equal(dialog.open, true);
+  assert.equal(dialog.querySelector('[data-doc-preview-img]').getAttribute('src'), 'https://files.invalid/doc-7?sig=abc');
 });
 
 test('확정에 성공하면 보관함이 삭제 버튼을 거두도록 알린다', async () => {
@@ -91,7 +93,8 @@ test('확정에 성공하면 보관함이 삭제 버튼을 거두도록 알린�
   await form.emit('submit'); await flush();
 
   assert.equal(changed, 1);
-  assert.match(s.panel.element.textContent, /이력 #900/);
+  assert.match(s.panel.element.textContent, /제품 이력에 반영됐어요/);
+  assert.doesNotMatch(s.panel.element.textContent, /#900/);
 });
 
 test('추출 요청이 409면 기존 추출 상태를 다시 불러온다', async () => {

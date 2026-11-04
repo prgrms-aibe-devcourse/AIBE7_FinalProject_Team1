@@ -207,6 +207,98 @@
   const documentSize = (bytes) => bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)}MB` : `${Math.max(1, Math.round(bytes / 1024))}KB`;
   const documentKind = (contentType) => contentType === 'application/pdf' ? 'PDF' : contentType?.startsWith('image/') ? '이미지' : '파일';
 
+  /** 증빙 문서를 프로필 사진 팝업과 같은 형식의 모달 대화상자로 띄운다. */
+  window.PastportDocPreview ??= (() => {
+    let parts = null;
+    const make = (tag, className = '', text = null) => {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text != null) node.textContent = text;
+      return node;
+    };
+    const clear = () => {
+      if (!parts) return;
+      parts.img.hidden = true; parts.img.removeAttribute('src'); delete parts.img.src;
+      parts.frame.hidden = true; parts.frame.removeAttribute('src'); delete parts.frame.src;
+      parts.msg.hidden = true; parts.msg.textContent = '';
+    };
+    const close = () => {
+      if (!parts) return;
+      if (typeof parts.dialog.close === 'function') {
+        if (parts.dialog.open !== false) parts.dialog.close();
+      } else {
+        parts.dialog.open = false;
+        parts.dialog.hidden = true;
+      }
+      clear();
+    };
+    const ensure = () => {
+      if (parts?.dialog?.isConnected) return parts;
+      const dialog = make('dialog', 'mp-dialog doc-preview-dialog');
+      dialog.dataset.docPreviewDialog = ''; dialog.setAttribute('data-doc-preview-dialog', '');
+      dialog.setAttribute('aria-labelledby', 'doc-preview-title');
+      const title = make('h2', '', '증빙 문서');
+      title.id = 'doc-preview-title'; title.dataset.docPreviewTitle = ''; title.setAttribute('data-doc-preview-title', '');
+      const body = make('div', 'mp-dialog-body doc-preview-body');
+      body.dataset.docPreviewBody = ''; body.setAttribute('data-doc-preview-body', '');
+      const stage = make('div', 'doc-preview-stage');
+      stage.dataset.docPreviewStage = ''; stage.setAttribute('data-doc-preview-stage', '');
+      const img = make('img');
+      img.dataset.docPreviewImg = ''; img.setAttribute('data-doc-preview-img', ''); img.alt = '증빙 문서 미리보기'; img.hidden = true;
+      const frame = make('iframe');
+      frame.dataset.docPreviewFrame = ''; frame.setAttribute('data-doc-preview-frame', ''); frame.title = '증빙 문서 미리보기'; frame.hidden = true;
+      stage.append(img, frame);
+      const caption = make('small', '', '개인정보가 가려진 증빙 사본이에요.');
+      caption.dataset.docPreviewCaption = ''; caption.setAttribute('data-doc-preview-caption', '');
+      body.append(stage, caption);
+      const msg = make('small', 'mp-photo-msg');
+      msg.dataset.docPreviewMsg = ''; msg.setAttribute('data-doc-preview-msg', ''); msg.setAttribute('role', 'status'); msg.hidden = true;
+      const actions = make('div', 'mp-dialog-actions doc-preview-actions');
+      const closeBtn = make('button', 'sc-btn primary', '닫기');
+      closeBtn.type = 'button'; closeBtn.dataset.docPreviewClose = ''; closeBtn.setAttribute('data-doc-preview-close', '');
+      actions.append(closeBtn);
+      dialog.append(title, body, msg, actions);
+      img.addEventListener('error', () => {
+        if (!img.getAttribute('src') && !img.src) return;
+        img.hidden = true;
+        msg.textContent = '문서를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.';
+        msg.hidden = false;
+      });
+      closeBtn.addEventListener('click', close);
+      dialog.addEventListener('click', (event) => { if (event.target === dialog) close(); });
+      dialog.addEventListener('close', clear);
+      (document.body || document.documentElement || document.root)?.append(dialog);
+      parts = { dialog, title, body, stage, img, frame, caption, msg, closeBtn };
+      return parts;
+    };
+    const open = ({ url, title = '증빙 문서', contentType = '' } = {}) => {
+      if (!url) return;
+      const p = ensure();
+      clear();
+      p.title.textContent = title || '증빙 문서';
+      const isPdf = contentType === 'application/pdf' || /\.pdf(?:$|\?)/i.test(url);
+      if (isPdf) {
+        p.frame.src = url; p.frame.setAttribute('src', url); p.frame.hidden = false;
+      } else {
+        p.img.alt = `${p.title.textContent} 미리보기`;
+        p.img.src = url; p.img.setAttribute('src', url); p.img.hidden = false;
+      }
+      p.dialog.hidden = false;
+      if (typeof p.dialog.showModal === 'function') {
+        if (!p.dialog.open) p.dialog.showModal();
+      } else {
+        p.dialog.open = true;
+      }
+    };
+    document.addEventListener?.('click', (event) => {
+      if (!parts) return;
+      if (event.target?.closest?.('[data-doc-preview-close]') || event.target === parts.dialog) close();
+    });
+    document.addEventListener?.('pastport:auth-changed', close);
+    document.addEventListener?.('pastport:page-shown', close);
+    return Object.freeze({ open, close });
+  })();
+
   const hydrateDocuments = async (productId) => {
     const section = document.querySelector('[data-product-documents]');
     const list = section?.querySelector('[data-product-document-list]');
@@ -227,10 +319,10 @@
         row.className = 'product-document-row';
         const info = document.createElement('div');
         const title = document.createElement('b');
-        title.textContent = `${documentKind(item.contentType)} 문서 #${item.id}`;
+        const docTitle = item.name || `${documentKind(item.contentType)} 문서`;
+        title.textContent = docTitle;
         const meta = document.createElement('small');
         meta.textContent = `${documentSize(item.byteSize)} · v${item.version}`;
-        info.append(title, meta);
         const privacy = document.createElement('span');
         privacy.className = item.redactionRequired ? 'product-document-private' : 'product-document-safe';
         privacy.textContent = item.redactionRequired ? '재마스킹 필요' : '마스킹 확인 완료';
@@ -238,8 +330,123 @@
         open.className = 'button small';
         open.type = 'button';
         open.dataset.productDocumentOpen = item.id;
+        open.dataset.documentName = docTitle;
+        open.dataset.documentType = item.contentType || '';
+        open.setAttribute('aria-haspopup', 'dialog');
         open.disabled = item.redactionRequired;
         open.textContent = '보기';
+        const heading = document.createElement('div');
+        heading.className = 'product-document-name-heading';
+        const rename = document.createElement('button');
+        rename.type = 'button';
+        rename.className = 'product-document-rename';
+        rename.dataset.productDocumentRename = item.id;
+        rename.textContent = '이름 변경';
+        rename.setAttribute('aria-expanded', 'false');
+        const form = document.createElement('form');
+        form.className = 'product-document-name-form';
+        form.dataset.productDocumentNameForm = item.id;
+        form.hidden = true;
+        form.noValidate = true;
+        form.id = `product-document-name-form-${item.id}`;
+        rename.setAttribute('aria-controls', form.id);
+        const label = document.createElement('label');
+        label.htmlFor = `product-document-name-${item.id}`;
+        label.textContent = '문서 이름';
+        const input = document.createElement('input');
+        input.id = label.htmlFor;
+        input.name = 'name';
+        input.type = 'text';
+        input.maxLength = 50;
+        input.dataset.productDocumentName = '';
+        input.placeholder = '예: 구매 영수증';
+        const controls = document.createElement('div');
+        controls.className = 'product-document-name-controls';
+        const save = document.createElement('button');
+        save.type = 'submit';
+        save.className = 'button small';
+        save.textContent = '저장';
+        const cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'button small';
+        cancel.textContent = '취소';
+        cancel.dataset.productDocumentNameCancel = '';
+        const hint = document.createElement('small');
+        hint.id = `product-document-name-hint-${item.id}`;
+        hint.textContent = '최대 50자 · 비우면 기본 문서명으로 표시해요.';
+        input.setAttribute('aria-describedby', hint.id);
+        const message = document.createElement('p');
+        message.className = 'product-document-name-error';
+        message.dataset.productDocumentNameError = '';
+        message.setAttribute('role', 'alert');
+        message.hidden = true;
+        controls.append(input, save, cancel);
+        form.append(label, controls, hint, message);
+        heading.append(title, rename);
+        info.replaceChildren(heading, form, meta);
+        let savingName = false;
+        const closeNameForm = () => {
+          if (savingName) return;
+          form.hidden = true;
+          heading.hidden = false;
+          rename.setAttribute('aria-expanded', 'false');
+          rename.focus();
+        };
+        rename.addEventListener('click', () => {
+          input.value = item.name || '';
+          message.hidden = true;
+          input.removeAttribute('aria-invalid');
+          heading.hidden = true;
+          form.hidden = false;
+          rename.setAttribute('aria-expanded', 'true');
+          input.focus();
+        });
+        cancel.addEventListener('click', closeNameForm);
+        form.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') { event.preventDefault(); closeNameForm(); }
+        });
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (savingName) return;
+          const name = input.value.trim();
+          if (name.length > 50) {
+            message.textContent = '문서 이름은 50자 이내로 입력해 주세요.';
+            message.hidden = false;
+            input.setAttribute('aria-invalid', 'true');
+            input.focus();
+            return;
+          }
+          savingName = true;
+          input.disabled = save.disabled = cancel.disabled = true;
+          save.textContent = '저장 중…';
+          message.hidden = true;
+          input.removeAttribute('aria-invalid');
+          form.setAttribute('aria-busy', 'true');
+          try {
+            const updated = await api(`/api/v1/documents/${item.id}/name`, {
+              method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name || null }),
+            });
+            // 제품을 바꾼 사이 끝난 저장 응답은 새 제품의 문서 목록과 안내를 덮어쓰지 않는다.
+            if (token !== state.documentToken || productId !== state.selectedId) return;
+            item.name = updated.name;
+            title.textContent = item.name || `${documentKind(item.contentType)} 문서`;
+            open.dataset.documentName = title.textContent;
+            savingName = false;
+            closeNameForm();
+            status.textContent = '문서 이름을 변경했습니다.';
+            status.hidden = false;
+            status.classList.remove('is-error');
+          } catch (error) {
+            if (token !== state.documentToken || productId !== state.selectedId) return;
+            message.textContent = error.message;
+            message.hidden = false;
+          } finally {
+            savingName = false;
+            input.disabled = save.disabled = cancel.disabled = false;
+            save.textContent = '저장';
+            form.removeAttribute('aria-busy');
+          }
+        });
         row.append(info, privacy, open);
         list.append(row);
       });
@@ -530,7 +737,11 @@
     if (documentOpen) {
       try {
         const file = await api(`/api/v1/documents/${documentOpen.dataset.productDocumentOpen}/file-url`);
-        window.open(file.url, '_blank', 'noopener');
+        window.PastportDocPreview?.open({
+          url: file.url,
+          title: documentOpen.dataset.documentName || '증빙 문서',
+          contentType: documentOpen.dataset.documentType,
+        });
       } catch (error) { toast(error.message, 'error'); }
       return;
     }

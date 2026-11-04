@@ -163,7 +163,7 @@
     const eyebrow = root.querySelector('.sc-head .eyebrow');
     const back = find('[data-dm-to-passport]');
     if (title) title.textContent = id ? '개인정보 다시 가리기' : '개인정보 가리기 · 확인';
-    if (eyebrow) eyebrow.textContent = id ? '문서 #' + id + ' 사본 교체' : '문서 업로드';
+    if (eyebrow) eyebrow.textContent = id ? '문서 사본 교체' : '문서 업로드';
     back.textContent = id ? '문서 보관함으로 돌아가기' : '제품 여권으로 돌아가기';
     back.dataset.page = id ? 'documents' : 'passport';
   }
@@ -486,13 +486,43 @@
     return body?.message || '저장하지 못했어요. 잠시 후 다시 시도해 주세요.';
   }
 
+  /** 저장할 문서 이름을 팝업으로 묻는다. 비워 두면 빈 문자열, 취소하면 null을 돌려준다. */
+  function askDocumentName(initial = '') {
+    return new Promise((resolve) => {
+      const dialog = document.createElement('dialog');
+      dialog.className = 'dm-name-dialog';
+      dialog.innerHTML = '<form method="dialog">'
+        + '<h2>문서 이름</h2>'
+        + '<p>나중에 증빙을 고를 때 알아보기 쉬운 이름을 붙여 주세요. 이름·연락처 같은 개인정보는 넣지 마세요.</p>'
+        + '<input name="name" maxlength="50" placeholder="예: 키보드 수리 영수증 (2026.06)" autocomplete="off">'
+        + '<div class="dm-name-actions"><button type="button" class="button" data-dm-name-cancel>취소</button>'
+        + '<button type="submit" class="button primary">저장</button></div></form>';
+      document.body.append(dialog);
+      const input = dialog.querySelector('input');
+      input.value = initial;
+      let result = null;
+      dialog.querySelector('[data-dm-name-cancel]').addEventListener('click', () => dialog.close());
+      dialog.querySelector('form').addEventListener('submit', () => { result = input.value.trim(); });
+      // Esc는 이름 팝업만 닫는다. 문서로 올라가면 마스킹 모달 전체가 취소된다.
+      dialog.addEventListener('keydown', (event) => { if (event.key === 'Escape') event.stopPropagation(); });
+      dialog.addEventListener('close', () => { dialog.remove(); resolve(result); });
+      dialog.showModal();
+      input.focus();
+    });
+  }
+
   async function save() {
     if (saving || !blob) return;
     fail('');
     // 사본 반환 모드: 업로드하지 않고 확인한 사본을 호출한 쪽에 넘긴다. 정리는 넘긴 뒤에 한다.
     if (pickResolve) {
+      // 제품 등록 화면처럼 호출한 쪽이 나중에 올리는 경우에도 여기서 이름을 받아 함께 넘긴다.
+      saving = true;
+      const name = await askDocumentName();
+      saving = false;
+      if (name === null || !pickResolve) return;
       const picked = blob;
-      finishPick({ blob: picked });
+      finishPick({ blob: picked, name });
       restart();
       return;
     }
@@ -501,7 +531,10 @@
       fail('증빙을 연결할 제품을 선택해 주세요.');
       return;
     }
+    // 새 문서만 이름을 묻는다. 사본 교체는 기존 문서의 이름을 그대로 둔다.
     saving = true;
+    const name = replaceId ? '' : await askDocumentName();
+    if (name === null) { saving = false; return; }
     const button = find('[data-dm-save]');
     button.disabled = true;
     button.textContent = '저장 중…';
@@ -509,6 +542,7 @@
       const extension = blob.type === 'image/jpeg' ? 'jpg' : 'png';
       const form = new FormData();
       form.append('maskingConfirmed', 'true');
+      if (name) form.append('name', name);
       // 원본 파일명은 보내지 않는다.
       form.append('file', blob, 'masked.' + extension);
       // 교체 모드면 같은 문서 번호의 파일만 바꾸고, 이력 연결은 그대로 둔다.
@@ -523,8 +557,8 @@
       const result = await response.json();
       cleanup();
       find('[data-dm-done-text]').textContent =
-        (replaceId ? '개인정보를 다시 가린 사본으로 교체했어요. (문서 번호 ' : '개인정보를 가린 사본을 저장했어요. (문서 번호 ') +
-        (result?.data?.id ?? '-') + ') 원본은 이 화면에서 지워졌어요.';
+        (replaceId ? '개인정보를 다시 가린 사본으로 교체했어요.' : '개인정보를 가린 사본을 저장했어요.')
+        + (result?.data?.name ? ' (' + result.data.name + ')' : '') + ' 원본은 이 화면에서 지워졌어요.';
       setStep('done');
     } catch (ignored) {
       fail('네트워크 오류로 저장하지 못했어요. 같은 사본으로 다시 저장할 수 있어요.');
@@ -596,7 +630,7 @@
       select.replaceChildren(new Option(placeholder, ''));
       for (const product of products) {
         const label = [product.title, product.modelName].filter(Boolean).join(' · ');
-        select.add(new Option(`#${product.productId} ${label}`, String(product.productId)));
+        select.add(new Option(label || '이름 없는 제품', String(product.productId)));
       }
     };
     retry.hidden = true;
@@ -692,6 +726,8 @@
   window.addEventListener('pagehide', reset);
 
   window.PastportDocMask = {
+    /** 문서 보관함의 이름 변경도 같은 이름 입력 팝업을 쓴다. 취소하면 null. */
+    askName: askDocumentName,
     /** 등록 성공 전에는 업로드하지 않은 원본과 새 제품 ID를 다음 마스킹 화면에 인계한다. */
     prepare(productId, file) {
       pendingProductId = String(productId);
