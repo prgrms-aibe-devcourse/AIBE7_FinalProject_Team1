@@ -54,3 +54,12 @@ body.dm-modal-open{overflow:hidden}
 [data-doc-autofilled]{background:#eef7f5;box-shadow:0 0 0 2px #b9e3dd}
 .doc-register-discard{margin-top:8px}
 .doc-register-toast-action{margin-left:8px;padding:3px 10px;border:1px solid #fff;border-radius:4px;background:transparent;color:#fff;font-size:12px;cursor:pointer}
+
+/* 사본 저장 전 문서 이름 입력 팝업 */
+.dm-name-dialog{width:min(420px,calc(100vw - 32px));padding:0;border:0;border-radius:12px;box-shadow:0 12px 40px rgba(20,24,30,.25)}
+.dm-name-dialog::backdrop{background:rgba(20,24,30,.45)}
+.dm-name-dialog form{display:grid;gap:12px;padding:22px}
+.dm-name-dialog h2{margin:0;font-size:18px}
+.dm-name-dialog p{margin:0;color:#666b72;font-size:13px;line-height:1.6}
+.dm-name-dialog input{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid #d5dbe1;border-radius:8px;font:inherit;font-size:14px}
+.dm-name-actions{display:flex;justify-content:flex-end;gap:8px}

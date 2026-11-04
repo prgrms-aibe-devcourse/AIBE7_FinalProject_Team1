@@ -234,7 +234,7 @@
           say('마스킹을 마치지 않아서 자동 입력하지 않았어요.');
           return;
         }
-        pending = { blob: picked.blob };
+        pending = { blob: picked.blob, name: picked.name || '' };
         releaseInput();
         token = generation;
         say('가려진 사본에서 제품 정보를 읽는 중이에요…');
@@ -284,11 +284,11 @@
       toast('제품은 등록됐지만 증빙 문서를 올리지 못했어요. 제품 상세의 "문서 올리기"에서 다시 올려 주세요.', 'error');
       return;
     }
-    await uploadWithRetry(productId, upload.blob);
+    await uploadWithRetry(productId, upload.blob, false, upload.name);
   }
 
   // 사본을 증빙 문서로 올린다. 실패해도 사본은 이 함수의 클로저에 남겨 두고 "다시 올리기" 버튼을 보여 줘서, 원본을 다시 가리지 않고 재시도할 수 있게 한다.
-  async function uploadWithRetry(productId, blob, retrying = false) {
+  async function uploadWithRetry(productId, blob, retrying = false, name = '') {
     try {
       // 응답만 유실되고 서버에는 이미 저장됐을 수 있다. 다시 올리기 전에 같은 사본이 있는지 보고, 있으면 또 올리지 않는다(문서는 제품당 20개 한도).
       if (retrying && (await alreadySaved(productId, blob))) {
@@ -297,6 +297,7 @@
       }
       const body = new FormData();
       body.append('maskingConfirmed', 'true');
+      if (name) body.append('name', name);
       body.append('file', blob, fileName(blob));
       const saved = await request(`${PRODUCTS_URL}/${productId}/documents`, { method: 'POST', body });
       if (!saved.ok) throw new Error('upload');
@@ -304,7 +305,7 @@
     } catch (ignored) {
       toast('제품은 등록됐지만 증빙 문서를 올리지 못했어요.', 'error', {
         label: '다시 올리기',
-        run: () => uploadWithRetry(productId, blob, true),
+        run: () => uploadWithRetry(productId, blob, true, name),
       });
     }
   }

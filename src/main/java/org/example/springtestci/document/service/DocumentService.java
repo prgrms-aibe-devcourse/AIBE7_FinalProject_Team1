@@ -36,6 +36,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 public class DocumentService {
 
   static final int MAX_DOCUMENTS_PER_PRODUCT = 20;
+  static final int MAX_DISPLAY_NAME_LENGTH = 50;
   static final Duration FILE_URL_TTL = Duration.ofMinutes(5);
 
   private final DocumentRepository documentRepository;
@@ -47,7 +48,7 @@ public class DocumentService {
   private final Clock clock;
   private final DocumentUrlSigner urlSigner;
 
-  /** 현재 소유자가 마스킹을 확인한 사본을 올린다. 업로드 파일명은 확장자 판별에만 쓰고 저장하지 않는다. */
+  /** 이름 없이 사본을 올린다. */
   @Transactional
   public Document upload(
       Long productId,
@@ -56,6 +57,24 @@ public class DocumentService {
       String uploadedFilename,
       String contentType,
       byte[] content) {
+    return upload(
+        productId, userId, maskingConfirmed, uploadedFilename, contentType, content, null);
+  }
+
+  /**
+   * 현재 소유자가 마스킹을 확인한 사본을 올린다. 업로드 파일명은 확장자 판별에만 쓰고 저장하지 않는다. 표시 이름은 앞뒤 공백을 지우고, 비어 있으면 저장하지 않으며,
+   * 50자를 넘으면 거부한다.
+   */
+  @Transactional
+  public Document upload(
+      Long productId,
+      Long userId,
+      boolean maskingConfirmed,
+      String uploadedFilename,
+      String contentType,
+      byte[] content,
+      String displayName) {
+    String name = normalizeDisplayName(displayName);
     if (!maskingConfirmed) {
       throw new CommonException(ErrorCode.MASKING_NOT_CONFIRMED);
     }
@@ -77,7 +96,13 @@ public class DocumentService {
     try {
       return documentRepository.save(
           Document.register(
-              productId, userId, objectKey, kind.contentType(), content.length, clock.instant()));
+              productId,
+              userId,
+              objectKey,
+              kind.contentType(),
+              content.length,
+              clock.instant(),
+              name));
     } catch (RuntimeException exception) {
       deleteStoredFile(objectKey);
       throw exception;
@@ -145,6 +170,29 @@ public class DocumentService {
     }
     deleteStoredFileAfterCommit(oldObjectKey);
     return document;
+  }
+
+  /** 현재 소유자가 문서 ID로 지정한 표시 이름을 한 트랜잭션에서 변경한다. 보호된 문서도 이름은 바꿀 수 있으며, 빈 이름은 기본 표시로 되돌린다. */
+  @Transactional
+  public Document rename(Long documentId, Long userId, String displayName) {
+    String name = normalizeDisplayName(displayName);
+    // 소유권 이전·사본 교체와 같은 제품→문서 순서로 잠가 권한 확인 뒤 소유자가 바뀌는 경합을 막는다.
+    lockDocumentProduct(documentId, userId);
+    Document document =
+        documentRepository
+            .findByIdForUpdate(documentId)
+            .orElseThrow(() -> new CommonException(ErrorCode.RESOURCE_NOT_FOUND));
+    // 표시 이름은 파일 내용이 아니므로 서명 URL과 AI 추출의 기준인 사본 버전은 증가시키지 않는다.
+    document.rename(name);
+    return document;
+  }
+
+  private String normalizeDisplayName(String displayName) {
+    String name = displayName == null || displayName.isBlank() ? null : displayName.strip();
+    if (name != null && name.length() > MAX_DISPLAY_NAME_LENGTH) {
+      throw new CommonException(ErrorCode.INVALID_INPUT);
+    }
+    return name;
   }
 
   private static String sha256(byte[] content) {

@@ -1,5 +1,6 @@
 package org.example.springtestci.document.controller;
 
+import jakarta.validation.Valid;
 import java.io.IOException;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -8,6 +9,7 @@ import org.example.springtestci.common.error.ErrorCode;
 import org.example.springtestci.common.response.ApiResponse;
 import org.example.springtestci.document.dto.DocumentResponse;
 import org.example.springtestci.document.dto.FileUrlResponse;
+import org.example.springtestci.document.dto.UpdateDocumentNameRequest;
 import org.example.springtestci.document.service.DocumentService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -16,9 +18,11 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
@@ -39,6 +43,7 @@ public class DocumentController {
       @AuthenticationPrincipal Jwt jwt,
       @PathVariable Long productId,
       @RequestParam boolean maskingConfirmed,
+      @RequestParam(required = false) String name,
       @RequestPart("file") MultipartFile file) {
     byte[] content;
     try {
@@ -54,7 +59,8 @@ public class DocumentController {
             maskingConfirmed,
             file.getOriginalFilename(),
             file.getContentType(),
-            content);
+            content,
+            name);
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(ApiResponse.success(DocumentResponse.from(document, userId)));
   }
@@ -82,6 +88,17 @@ public class DocumentController {
             file.getContentType(),
             content);
     return ApiResponse.success(DocumentResponse.from(document, userId));
+  }
+
+  /** 현재 소유자가 문서 ID로 지정한 사본의 표시 이름을 변경한다. */
+  @PatchMapping("/documents/{documentId}/name")
+  ApiResponse<DocumentResponse> rename(
+      @AuthenticationPrincipal Jwt jwt,
+      @PathVariable Long documentId,
+      @Valid @RequestBody UpdateDocumentNameRequest request) {
+    Long userId = userId(jwt);
+    return ApiResponse.success(
+        DocumentResponse.from(documentService.rename(documentId, userId, request.name()), userId));
   }
 
   @GetMapping("/products/{productId}/documents")

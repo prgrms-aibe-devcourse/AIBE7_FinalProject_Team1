@@ -24,6 +24,92 @@
     if (text != null) node.textContent = text; return node;
   };
 
+  /** 증빙 문서를 프로필 사진 팝업과 같은 형식의 모달 대화상자로 띄운다. */
+  window.PastportDocPreview ??= (() => {
+    let parts = null;
+    const clear = () => {
+      if (!parts) return;
+      parts.img.hidden = true; parts.img.removeAttribute('src'); delete parts.img.src;
+      parts.frame.hidden = true; parts.frame.removeAttribute('src'); delete parts.frame.src;
+      parts.msg.hidden = true; parts.msg.textContent = '';
+    };
+    const close = () => {
+      if (!parts) return;
+      if (typeof parts.dialog.close === 'function') {
+        if (parts.dialog.open !== false) parts.dialog.close();
+      } else {
+        parts.dialog.open = false;
+        parts.dialog.hidden = true;
+      }
+      clear();
+    };
+    const ensure = () => {
+      if (parts?.dialog?.isConnected) return parts;
+      const dialog = create('dialog', null, 'mp-dialog doc-preview-dialog');
+      dialog.dataset.docPreviewDialog = ''; dialog.setAttribute('data-doc-preview-dialog', '');
+      dialog.setAttribute('aria-labelledby', 'doc-preview-title');
+      const title = create('h2', '증빙 문서');
+      title.id = 'doc-preview-title'; title.dataset.docPreviewTitle = ''; title.setAttribute('data-doc-preview-title', '');
+      const body = create('div', null, 'mp-dialog-body doc-preview-body');
+      body.dataset.docPreviewBody = ''; body.setAttribute('data-doc-preview-body', '');
+      const stage = create('div', null, 'doc-preview-stage');
+      stage.dataset.docPreviewStage = ''; stage.setAttribute('data-doc-preview-stage', '');
+      const img = create('img');
+      img.dataset.docPreviewImg = ''; img.setAttribute('data-doc-preview-img', ''); img.alt = '증빙 문서 미리보기'; img.hidden = true;
+      const frame = create('iframe');
+      frame.dataset.docPreviewFrame = ''; frame.setAttribute('data-doc-preview-frame', ''); frame.title = '증빙 문서 미리보기'; frame.hidden = true;
+      stage.append(img, frame);
+      const caption = create('small', '개인정보가 가려진 증빙 사본이에요.');
+      caption.dataset.docPreviewCaption = ''; caption.setAttribute('data-doc-preview-caption', '');
+      body.append(stage, caption);
+      const msg = create('small', '', 'mp-photo-msg');
+      msg.dataset.docPreviewMsg = ''; msg.setAttribute('data-doc-preview-msg', ''); msg.setAttribute('role', 'status'); msg.hidden = true;
+      const actions = create('div', null, 'mp-dialog-actions doc-preview-actions');
+      const closeBtn = create('button', '닫기', 'sc-btn primary');
+      closeBtn.type = 'button'; closeBtn.dataset.docPreviewClose = ''; closeBtn.setAttribute('data-doc-preview-close', '');
+      actions.append(closeBtn);
+      dialog.append(title, body, msg, actions);
+      img.addEventListener('error', () => {
+        if (!img.getAttribute('src') && !img.src) return;
+        img.hidden = true;
+        msg.textContent = '문서를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.';
+        msg.hidden = false;
+      });
+      closeBtn.addEventListener('click', close);
+      dialog.addEventListener('click', (event) => { if (event.target === dialog) close(); });
+      dialog.addEventListener('close', clear);
+      (document.body || document.documentElement || document.root)?.append(dialog);
+      parts = { dialog, title, body, stage, img, frame, caption, msg, closeBtn };
+      return parts;
+    };
+    const open = ({ url, title = '증빙 문서', contentType = '' } = {}) => {
+      if (!url) return;
+      const p = ensure();
+      clear();
+      p.title.textContent = title || '증빙 문서';
+      const isPdf = contentType === 'application/pdf' || /\.pdf(?:$|\?)/i.test(url);
+      if (isPdf) {
+        p.frame.src = url; p.frame.setAttribute('src', url); p.frame.hidden = false;
+      } else {
+        p.img.alt = `${p.title.textContent} 미리보기`;
+        p.img.src = url; p.img.setAttribute('src', url); p.img.hidden = false;
+      }
+      p.dialog.hidden = false;
+      if (typeof p.dialog.showModal === 'function') {
+        if (!p.dialog.open) p.dialog.showModal();
+      } else {
+        p.dialog.open = true;
+      }
+    };
+    document.addEventListener?.('click', (event) => {
+      if (!parts) return;
+      if (event.target?.closest?.('[data-doc-preview-close]') || event.target === parts.dialog) close();
+    });
+    document.addEventListener?.('pastport:auth-changed', close);
+    document.addEventListener?.('pastport:page-shown', close);
+    return Object.freeze({ open, close });
+  })();
+
   async function api(path, options = {}) {
     const response = await window.PastportApi.fetch(path, options);
     const payload = await response.json().catch(() => null);
@@ -51,7 +137,7 @@
       const box = create('div', null, 'doc-extract-manual');
       const button = create('button', '이력 등록에서 직접 입력', 'button small'); button.type = 'button';
       button.dataset.page = 'passport'; button.dataset.productId = item.productId;
-      box.append(create('span', 'AI 없이 직접 입력하려면 제품 여권의 이력 등록에서 증빙 문서 #' + item.id + '를 선택해 연결하세요.'), button);
+      box.append(create('span', 'AI 없이 직접 입력하려면 제품 여권의 이력 등록에서 방금 올린 문서를 증빙으로 선택해 연결하세요.'), button);
       return box;
     }
 
@@ -96,11 +182,14 @@
       const form = create('form', null, 'doc-extract-review'); form.noValidate = true;
       form.append(message('AI가 문서에서 읽은 값이에요. 원본과 비교해 틀린 곳은 고치고, 읽지 못한 칸은 비워 두세요.'));
       // 값을 사본과 대조해 확인할 수 있도록 같은 화면에서 문서를 열 수 있게 한다.
-      const view = create('button', '문서 보기', 'button small'); view.type = 'button';
+      const view = create('button', '문서 보기', 'button small'); view.type = 'button'; view.setAttribute('aria-haspopup', 'dialog');
       const viewFeedback = create('div');
       view.addEventListener('click', async () => {
-        try { const file = await api('/api/v1/documents/' + item.id + '/file-url'); window.open(file.url, '_blank', 'noopener'); }
-        catch (error) { viewFeedback.replaceChildren(message(error.message, 'is-error')); }
+        try {
+          const file = await api('/api/v1/documents/' + item.id + '/file-url');
+          const docTitle = item.name || (item.contentType === 'application/pdf' ? 'PDF' : '이미지') + ' 문서';
+          window.PastportDocPreview?.open({ url: file.url, title: docTitle, contentType: item.contentType });
+        } catch (error) { viewFeedback.replaceChildren(message(error.message, 'is-error')); }
       });
       form.append(view, viewFeedback);
       const grid = create('div', null, 'doc-extract-grid');
@@ -171,7 +260,7 @@
       if (status === 'QUEUED' || status === 'PROCESSING') { waiting(extraction); return; }
       if (status === 'EXTRACTED') { reviewForm(extraction); return; }
       // CONFIRMED
-      show(message(extraction.resultEventId ? '확정했어요. 확정한 내용은 제품 이력에 반영됐어요. (이력 #' + extraction.resultEventId + ')' : '확정했어요.'));
+      show(message(extraction.resultEventId ? '확정했어요. 확정한 내용은 제품 이력에 반영됐어요.' : '확정했어요.'));
     }
 
     // 진행 중인 추출은 상태가 바뀔 때까지 주기적으로 확인한다. 패널이 화면에서 사라지면 멈춘다.

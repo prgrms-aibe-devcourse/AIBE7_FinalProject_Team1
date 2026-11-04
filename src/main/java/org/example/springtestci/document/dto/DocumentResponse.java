@@ -7,6 +7,7 @@ import org.example.springtestci.document.entity.Document;
 public record DocumentResponse(
     Long id,
     Long productId,
+    String name,
     String contentType,
     long byteSize,
     int version,
@@ -21,6 +22,7 @@ public record DocumentResponse(
     return new DocumentResponse(
         document.getId(),
         document.getProductId(),
+        document.getDisplayName(),
         document.getContentType(),
         document.getByteSize(),
         document.getVersion(),

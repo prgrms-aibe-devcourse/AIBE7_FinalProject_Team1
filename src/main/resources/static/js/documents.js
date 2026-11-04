@@ -38,11 +38,14 @@
     const line = create('div', null, 'doc-row');
     // 재마스킹으로 사본을 바꾼 문서는 횟수와 마지막 교체일을 보여 준다. 이력에 연결된 뒤 바뀐 증빙을 알아볼 수 있게 한다.
     const replaced = item.replacementCount > 0 ? ' · 사본 교체 ' + item.replacementCount + '회(' + day(item.lastReplacedAt) + ')' : '';
-    const info = create('div'); info.append(create('b', '문서 #' + item.id), create('small', day(item.maskConfirmedAt) + ' · ' + size(item.byteSize) + ' · v' + item.version + replaced));
-    const open = create('button', '보기', 'button small'); open.type = 'button';
+    const docTitle = item.name || (item.contentType === 'application/pdf' ? 'PDF' : '이미지') + ' 문서';
+    const info = create('div'); info.append(create('b', docTitle), create('small', day(item.maskConfirmedAt) + ' · ' + size(item.byteSize) + ' · v' + item.version + replaced));
+    const open = create('button', '보기', 'button small'); open.type = 'button'; open.setAttribute('aria-haspopup', 'dialog');
     open.addEventListener('click', async () => {
-      try { const file = await api('/api/v1/documents/' + item.id + '/file-url'); window.open(file.url, '_blank', 'noopener'); }
-      catch (error) { status(error.message, true); }
+      try {
+        const file = await api('/api/v1/documents/' + item.id + '/file-url');
+        window.PastportDocPreview?.open({ url: file.url, title: docTitle, contentType: item.contentType });
+      } catch (error) { status(error.message, true); }
     });
     line.append(create('span', kind(item.contentType), 'pdf'), info,
       create('span', item.redactionRequired ? '재마스킹 필요' : '마스킹 확인 완료', item.redactionRequired ? 'private' : 'open'), open);
@@ -50,6 +53,19 @@
     const remask = create('button', '다시 마스킹', 'button small'); remask.type = 'button';
     remask.dataset.page = 'docmask'; remask.dataset.docmaskProductId = item.productId; remask.dataset.docmaskReplaceId = item.id;
     line.append(remask);
+    // 이름만 바꾸므로 사본 버전과 이력 연결은 그대로다. 비워 저장하면 기본 표시(이미지 문서/PDF 문서)로 돌아간다.
+    const rename = create('button', '이름 변경', 'button small'); rename.type = 'button'; rename.setAttribute('aria-haspopup', 'dialog');
+    rename.addEventListener('click', async () => {
+      const name = await window.PastportDocMask?.askName(item.name || '');
+      if (name == null) return;
+      try {
+        await api('/api/v1/documents/' + item.id + '/name', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+        });
+        await loadDocuments();
+      } catch (error) { status(error.message, true); }
+    });
+    line.append(rename);
     // 확정하면 이력에 연결돼 문서가 보호되므로 삭제 버튼만 거둔다. 목록을 다시 그리면 확정 안내가 사라진다.
     let removeButton = null;
     const panel = window.PastportDocExtraction?.panel(item, { onChanged: () => removeButton?.remove() });

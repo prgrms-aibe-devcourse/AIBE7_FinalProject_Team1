@@ -71,6 +71,20 @@
 #passport .product-document-row small,#passport .product-document-safe,#passport .product-document-private{font-size:12px;color:#626870}
 #passport .product-document-private,#passport .product-document-status.is-error{color:#a43b37}
 #passport .product-document-row .button{font-size:13px}
+#passport .product-document-row>div{min-width:0}
+#passport .product-document-name-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px 12px}
+#passport .product-document-name-heading b{min-width:0;overflow-wrap:anywhere}
+#passport .product-document-rename{flex-shrink:0;padding:3px 0;background:transparent;color:#626870;font-size:12px;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+#passport .product-document-rename:hover{color:var(--blue)}
+#passport .product-document-name-form{max-width:480px}
+#passport .product-document-name-form label{display:block;margin-bottom:7px;font-size:12px;color:#525a65}
+#passport .product-document-name-controls{display:flex;align-items:center;gap:6px}
+#passport .product-document-name-controls input{min-width:0;flex:1;width:100%;min-height:36px;padding:7px 10px;border:1px solid #d4d9df;border-radius:4px;background:#fff;color:var(--ink);font:inherit;font-size:14px}
+#passport .product-document-name-controls .button{flex-shrink:0;min-height:36px;padding:6px 10px}
+#passport .product-document-name-form small{line-height:1.6}
+#passport .product-document-name-error{margin:6px 0 0;font-size:12px;color:#a43b37;line-height:1.6}
+#passport :is(.product-document-rename,.product-document-name-controls input):focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+@media(max-width:780px){#passport .product-document-row{grid-template-columns:minmax(0,1fr) auto}#passport .product-document-name-controls{flex-wrap:wrap}#passport .product-document-name-controls input{flex-basis:100%}#passport .product-document-name-controls .button{grid-column:auto;width:auto;flex:1}}
 #passport .product-document-card{scroll-margin-top:calc(var(--hh,136px) + 24px)}
 #passport #product-document-title:focus{outline:none}
 #passport [hidden]{display:none!important}

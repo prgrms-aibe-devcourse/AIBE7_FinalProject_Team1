@@ -63,6 +63,13 @@
 .mp-dialog .mp-photo-msg{display:block;margin-top:10px;text-align:center}
 .mp-dialog .mp-photo-msg[hidden]{display:none}
 .mp-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+/* 증빙 문서 미리보기 팝업: 프로필 사진 팝업과 같은 카드 형태에서 문서 이미지를 선명하게 보여 준다. */
+.mp-dialog.doc-preview-dialog{width:min(560px,calc(100vw - 32px));max-height:calc(100dvh - 48px);overflow-y:auto}
+.doc-preview-body{padding:18px 16px;gap:12px}
+.doc-preview-stage{display:grid;place-items:center;width:100%;min-height:200px;max-height:min(64dvh,540px);padding:12px;overflow:auto;border:1px solid #dfe3e8;border-radius:8px;background:#fff}
+.doc-preview-stage img{display:block;max-width:100%;max-height:min(60dvh,500px);width:auto;height:auto;object-fit:contain;border-radius:4px}
+.doc-preview-stage iframe{width:100%;height:min(60dvh,500px);border:0;border-radius:4px;background:#fff}
+.doc-preview-stage [hidden]{display:none!important}
 /* 행 어디에 올려도 눌러서 이동할 수 있다는 것을 손가락 모양 커서와 배경색으로 알려 준다. */
 .mp-table tbody tr[data-page],.mp-table tbody tr[data-page] td{cursor:pointer}
 .mp-table tbody tr[data-page]:hover{background:#f4f9f9}
