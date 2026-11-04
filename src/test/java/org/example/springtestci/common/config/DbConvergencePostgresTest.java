@@ -163,6 +163,7 @@ class DbConvergencePostgresTest {
         .dataSource(database.url(), USER, PASSWORD)
         .locations("classpath:db/migration", "classpath:db/deploy")
         .configuration(java.util.Map.of("flyway.postgresql.transactional.lock", "false"))
+        .target("2026110401")
         .load()
         .migrate();
     user(database);
@@ -186,6 +187,37 @@ class DbConvergencePostgresTest {
             .queryForObject(
                 "select count(*) from flyway_schema_history where version in ('2','3','4','2026102103')",
                 Integer.class));
+  }
+
+  @Test
+  void documentDisplayNameMigratesAfterAppliedConvergence() {
+    Database database = database();
+    ConvergenceTool.configuration(database.url(), USER, PASSWORD, database.schema(), "dated")
+        .target("2026110402")
+        .load()
+        .migrate();
+    var history =
+        database.jdbc().queryForList("select * from flyway_schema_history order by installed_rank");
+    Flyway flyway = database.flyway("dated");
+    assertFalse(flyway.getConfiguration().isOutOfOrder());
+    assertEquals(0, flyway.getConfiguration().getIgnoreMigrationPatterns().length);
+    assertEquals(1, flyway.migrate().migrationsExecuted);
+    flyway.validate();
+    assertEquals("2026110403", flyway.info().current().getVersion().toString());
+    assertEquals(
+        50,
+        database
+            .jdbc()
+            .queryForObject(
+                "select character_maximum_length from information_schema.columns where table_schema=current_schema() and table_name='documents' and column_name='display_name'",
+                Integer.class));
+    assertEquals(
+        history,
+        database
+            .jdbc()
+            .queryForList(
+                "select * from flyway_schema_history where version<>'2026110403' order by installed_rank"));
+    assertEquals(0, flyway.migrate().migrationsExecuted);
   }
 
   @Test
